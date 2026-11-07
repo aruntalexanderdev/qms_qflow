@@ -32,7 +32,7 @@ Company service mapping → Branch service mapping → Counter service mapping (
 ## 5. Coding standards
 - C#: .NET 10, nullable enabled, async all the way, `CancellationToken` on every async API, FluentValidation for every request, problem details (RFC 7807) for errors, no `DateTime.Now` (use an injected `TimeProvider`, store UTC).
 - Database: PostgreSQL, snake_case names, uuid keys, `created_at`/`updated_at`, `company_id` on tenant tables, `name_en` + `name_ar` for bilingual text.
-- Angular: standalone components, signals, typed reactive forms, ngx-translate keys (no hard-coded UI text), RTL-safe CSS (logical properties: `margin-inline-start`, not `margin-left`).
+- Angular: Angular 22 (latest stable; upgrade with `ng update` on each major), standalone components, signals, typed reactive forms, ngx-translate keys (no hard-coded UI text), RTL-safe CSS (logical properties: `margin-inline-start`, not `margin-left`).
 - Kotlin: Jetpack Compose, MVVM, coroutines + Flow, Retrofit/OkHttp, no blocking calls on the main thread, strings in `strings.xml` (en + ar).
 - Names: English, descriptive, no abbreviations except agreed ones (Qms, Api, Id, Dto).
 

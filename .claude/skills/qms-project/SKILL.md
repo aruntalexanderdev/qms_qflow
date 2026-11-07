@@ -47,4 +47,4 @@ Super Admin · Company Admin · Branch Manager / Supervisor · Counter Staff.
 Prefixes: Service 1 A, 2 B, 3 C, 4 D, 5 F, 6 G. Dispenser 1 → Zone 1: Service 1, 2. Dispenser 2 → Zone 1: Service 3; Zone 2: Service 4, 5. Branch 1: all pairs max 100/day; Service 2 VIP Not Available.
 
 ## Stack
-.NET 10 + EF Core + Npgsql + SignalR · PostgreSQL 16+ · Angular (standalone, signals, ngx-translate, RTL) · Kotlin + Compose + Retrofit + Sunmi printer SDK · Docker.
+.NET 10 + EF Core + Npgsql + SignalR · PostgreSQL 16+ · Angular 22 + TypeScript 6.0 + Node 24 LTS (standalone, signals, ngx-translate, RTL) · Kotlin + Compose + Retrofit + Sunmi printer SDK · Docker.

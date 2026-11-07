@@ -1,13 +1,13 @@
 ---
 name: frontend-angular
-description: Senior Angular method for the QMS web app — standalone components and signals, typed API services, mapping grids, counter console, dashboard, zone/counter displays, ngx-translate English/Arabic with RTL, SignalR client, and tests. Use in stage 4.
+description: Senior Angular 22 method for the QMS web app — standalone components and signals, typed API services, mapping grids, counter console, dashboard, zone/counter displays, ngx-translate English/Arabic with RTL, SignalR client, and tests. Use in stage 4.
 ---
 
 # Frontend (Angular) skill
 
 ## Structure
 ```
-web/src/app/
+frontend/src/app/
   core/        api/ (typed services per resource), auth/, signalr/, i18n/, guards/
   shared/      ui components, pipes (token number, masked phone), directives
   features/    admin/, counter/, dashboard/, reports/, display/
