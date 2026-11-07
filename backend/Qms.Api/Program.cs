@@ -5,10 +5,12 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// preserveStaticLogger: each host keeps its own logger, so several hosts in one process (tests) stay isolated.
 builder.Services.AddSerilog((services, configuration) => configuration
     .ReadFrom.Configuration(builder.Configuration)
     .ReadFrom.Services(services)
-    .Enrich.FromLogContext());
+    .Enrich.FromLogContext(),
+    preserveStaticLogger: true);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
