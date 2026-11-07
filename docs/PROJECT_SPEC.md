@@ -28,7 +28,7 @@ Three applications share one backend: the .NET API with PostgreSQL, the Angular 
 | Logging | Serilog to file and console | Correlation id per request |
 | API docs | OpenAPI / Swagger | Versioned routes `/api/v1/...` |
 | Testing | xUnit, FluentAssertions, Testcontainers for PostgreSQL | Queue engine fully unit-tested |
-| Web frontend | Angular 22 (latest stable), TypeScript 6.0, Node.js 24 LTS; standalone components, signals | Angular Material or PrimeNG |
+| Web frontend | Angular 22 (latest stable), TypeScript 6.0, Node.js 24 LTS; standalone components, signals | Angular Material (M3), themed from `docs/design/tokens.json` (ADR-001) |
 | Web i18n | ngx-translate, Arabic and English, RTL switch | Language per user and per display |
 | Web real-time | @microsoft/signalr client | Auto-reconnect |
 | Display voice | Pre-recorded Arabic and English audio clips | Joined as "Token" + letters + digits + "counter" + number; more reliable than browser speech |

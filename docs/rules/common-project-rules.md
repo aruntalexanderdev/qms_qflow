@@ -62,3 +62,12 @@ Every user-facing text exists in English and Arabic: web (ngx-translate), Androi
 - Tests added and passing; build green for backend, web and Android (whichever were touched).
 - Spec or ADR updated if behaviour changed.
 - Work item status = Done, with every stage's handoff filled in.
+
+## 11. UI design and theming
+- The design system in `docs/design/DESIGN_SYSTEM.md` and `docs/design/tokens.json` is the only source for colours, fonts, font sizes, spacing, radii, shadows and motion. Look up a token there before styling anything.
+- Web: style only with `var(--qms-*)` variables from `frontend/src/styles/_tokens.scss` and the Angular Material theme. No hex, `rgb()`, `hsl()` or named colours, and no raw `px` font sizes, in component styles or templates (Stylelint enforces this).
+- Android: colours, type and shapes come only from `ui/theme/` (`MaterialTheme.colorScheme`, `QmsColors`). No `Color(0x…)` outside `ui/theme/`.
+- Token state, priority and counter status use the badge colours from the design system, always with a text label. VIP also shows a ★.
+- Fonts (Instrument Sans, IBM Plex Sans Arabic) are bundled with the app. No Google Fonts or other CDN links.
+- WCAG 2.1 AA: text contrast at least 4.5:1, UI borders and large text at least 3:1, a visible focus ring, never colour alone.
+- A new colour, font or component style changes `docs/design/` first (with the user's approval), then the theme files, then the screens.

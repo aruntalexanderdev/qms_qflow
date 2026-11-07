@@ -29,6 +29,10 @@ android/
   app/src/main/res/values-ar/   Arabic strings
 ```
 
+## Design system
+
+Follow [`docs/design/DESIGN_SYSTEM.md`](../docs/design/DESIGN_SYSTEM.md). Mirror [`tokens.json`](../docs/design/tokens.json) in `ui/theme/` (`Color.kt`, `Type.kt`, `Shape.kt`, `Theme.kt`). Composables use only `MaterialTheme` and `QmsColors`, never `Color(0x…)` literals.
+
 ## Behaviour
 
 1. **Register:** enter the server URL and a one-time code; the device key is kept in encrypted storage.

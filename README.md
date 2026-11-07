@@ -24,7 +24,7 @@ It is a modular monolith: one API and one database, with clean-architecture laye
 | [`backend/`](backend/) | ASP.NET Core 10 Web API, SignalR, EF Core, PostgreSQL | [backend/README.md](backend/README.md) |
 | [`frontend/`](frontend/) | Angular 22 web app: admin, counter console, dashboard, displays | [frontend/README.md](frontend/README.md) |
 | [`android/`](android/) | Kotlin + Jetpack Compose token dispenser for Sunmi devices | [android/README.md](android/README.md) |
-| [`docs/`](docs/) | Spec, rules, ADRs, templates, stories, tasks, bugs | — |
+| [`docs/`](docs/) | Spec, design system, rules, ADRs, templates, stories, tasks, bugs | [docs/design/DESIGN_SYSTEM.md](docs/design/DESIGN_SYSTEM.md) |
 | `.claude/` | Claude Code agents and skills for the stage-by-stage workflow | [CLAUDE.md](CLAUDE.md) |
 
 ## Tech stack and versions
@@ -37,6 +37,7 @@ It is a modular monolith: one API and one database, with clean-architecture laye
 | Web | Angular / TypeScript / Node.js | **22.x** / 6.0 / 24 LTS |
 | Web i18n | ngx-translate (English + Arabic, RTL) | 18.x |
 | Mobile | Kotlin / Jetpack Compose / Retrofit | 2.4.x / latest stable BOM |
+| UI | Angular Material (M3), teal theme, Instrument Sans + IBM Plex Sans Arabic, see [design system](docs/design/DESIGN_SYSTEM.md) | — |
 | Hosting | Docker, Docker Compose, Nginx reverse proxy, HTTPS | — |
 
 ## Getting started

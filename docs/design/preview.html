@@ -1,0 +1,133 @@
+<!doctype html>
+<!--
+  Design preview for docs/design/DESIGN_SYSTEM.md. Open it in a browser.
+  Values mirror tokens.json. The Google Fonts link is for THIS PREVIEW ONLY:
+  the real apps bundle the fonts (rules section 11: no CDN).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QMS Design Preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap">
+<style>
+  :root {
+    --qms-brand-primary:#0D7E8F; --qms-brand-primary-hover:#0A6878; --qms-brand-primary-subtle:#E8F1F3;
+    --qms-brand-on-primary:#FFFFFF; --qms-brand-on-primary-subtle:#11676E; --qms-brand-focus-ring:rgba(13,126,143,.35);
+    --qms-nav-bg:#0F262A; --qms-nav-bg-hover:#163339; --qms-nav-border:#20363A; --qms-nav-text:#B8CFD0;
+    --qms-nav-text-section:#8AA3A7; --qms-nav-bullet:#3D5A5C;
+    --qms-neutral-bg:#F4F6F6; --qms-neutral-surface:#FFFFFF; --qms-neutral-surface-muted:#F9FAFA;
+    --qms-neutral-border:#E3E5E4; --qms-neutral-border-input:#8A9094; --qms-neutral-text:#111315;
+    --qms-neutral-text-label:#393F46; --qms-neutral-text-muted:#6B7174;
+    --qms-display-bg:#0F262A; --qms-display-panel:#163339; --qms-display-accent:#5FC9D6; --qms-display-calling:#FBBF24;
+    --qms-font: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:var(--qms-font); font-size:15px; color:var(--qms-neutral-text); background:var(--qms-neutral-bg); }
+  .shell { display:grid; grid-template-columns:280px 1fr; min-height:100vh; }
+  aside { background:var(--qms-nav-bg); color:var(--qms-nav-text); }
+  .brand { display:flex; gap:12px; align-items:center; padding:20px 16px; border-bottom:1px solid var(--qms-nav-border); }
+  .logo { width:36px; height:36px; border-radius:8px; background:var(--qms-brand-primary); color:#fff; display:grid; place-items:center; font-weight:700; }
+  .brand b { color:#fff; display:block; font-size:17px; } .brand small { color:var(--qms-nav-text-section); letter-spacing:.08em; font-size:12px; }
+  .section { font-size:12px; font-weight:600; letter-spacing:.08em; color:var(--qms-nav-text-section); padding:24px 16px 8px; }
+  nav a { display:flex; align-items:center; gap:12px; margin:2px 8px; padding:0 12px; height:44px; border-radius:8px; color:var(--qms-nav-text); text-decoration:none; font-weight:500; }
+  nav a::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--qms-nav-bullet); }
+  nav a:hover { background:var(--qms-nav-bg-hover); }
+  nav a.active { background:var(--qms-brand-primary); color:#fff; } nav a.active::before { background:#fff; }
+  header { height:64px; background:#fff; border-bottom:1px solid var(--qms-neutral-border); display:flex; align-items:center; justify-content:space-between; padding:0 32px; }
+  .icon-btn { width:40px; height:40px; border:1px solid var(--qms-neutral-border); border-radius:8px; background:#fff; font-size:20px; }
+  .user { display:flex; align-items:center; gap:12px; }
+  .avatar { width:36px; height:36px; border-radius:50%; background:var(--qms-brand-primary-subtle); color:var(--qms-brand-on-primary-subtle); display:grid; place-items:center; font-weight:700; font-size:13px; }
+  .user small { color:var(--qms-neutral-text-muted); display:block; }
+  main { padding:32px; max-width:1200px; }
+  h1 { font-size:28px; letter-spacing:-.01em; margin:0 0 6px; } .lead { color:var(--qms-neutral-text-muted); margin:0 0 24px; }
+  .card { background:#fff; border:1px solid var(--qms-neutral-border); border-radius:12px; padding:28px; max-width:848px; margin-bottom:24px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px 24px; }
+  label { display:block; font-size:14px; font-weight:600; color:var(--qms-neutral-text-label); margin-bottom:8px; }
+  input, select { width:100%; height:44px; border:1px solid var(--qms-neutral-border-input); border-radius:8px; padding:0 12px; font:inherit; background:#fff; }
+  input:focus, select:focus { outline:none; border-color:var(--qms-brand-primary); box-shadow:0 0 0 3px var(--qms-brand-focus-ring); }
+  .actions { display:flex; gap:16px; align-items:center; margin-top:24px; }
+  .btn { height:44px; padding:0 20px; border-radius:8px; border:0; font:inherit; font-weight:600; cursor:pointer; }
+  .btn-primary { background:var(--qms-brand-primary); color:#fff; } .btn-primary:hover { background:var(--qms-brand-primary-hover); }
+  .btn-text { background:none; color:var(--qms-neutral-text-muted); } .btn-outline { background:#fff; border:1px solid var(--qms-neutral-border); color:var(--qms-neutral-text-label); }
+  .badges { display:flex; flex-wrap:wrap; gap:8px; }
+  .badge { font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; }
+  .swatches { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:12px; }
+  .sw { border:1px solid var(--qms-neutral-border); border-radius:8px; overflow:hidden; font-size:12px; }
+  .sw div { height:48px; } .sw p { margin:0; padding:6px 8px; } .sw code { color:var(--qms-neutral-text-muted); }
+  h2 { font-size:20px; margin:0 0 16px; }
+  .display { background:var(--qms-display-bg); color:#fff; border-radius:12px; padding:24px; display:grid; grid-template-columns:2fr 1fr; gap:16px; max-width:848px; }
+  .latest { background:var(--qms-brand-primary); border-radius:12px; padding:24px; text-align:center; }
+  .latest .num { font-size:88px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; }
+  .latest .to { color:#FFFFFF; font-size:28px; font-weight:600; margin-top:8px; }
+  .list { background:var(--qms-display-panel); border-radius:12px; padding:16px; }
+  .list div { display:flex; justify-content:space-between; font-size:28px; font-weight:700; padding:6px 0; border-bottom:1px solid #20363A; }
+  .list span { color:var(--qms-display-accent); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand"><div class="logo">Q</div><div><b>QFlow</b><small>BANK QMS</small></div></div>
+    <div class="section">OVERVIEW</div>
+    <nav><a href="#">Dashboard</a></nav>
+    <div class="section">SETUP</div>
+    <nav><a href="#">Service types</a><a href="#">Priority types</a><a href="#">Branches</a><a class="active" href="#">Users</a><a href="#">Devices</a></nav>
+    <div class="section">OPERATIONS</div>
+    <nav><a href="#">Counter console</a><a href="#">Reports</a></nav>
+  </aside>
+  <div>
+    <header><button class="icon-btn" aria-label="Menu">☰</button>
+      <div class="user"><div class="avatar">AA</div><div><b>Arun Alexander</b><small>Company Admin</small></div><button class="btn btn-outline">Sign out</button></div>
+    </header>
+    <main>
+      <h1>Invite user</h1>
+      <p class="lead">Staff sign in with these credentials and get their role's permissions for the assigned branches.</p>
+      <div class="card">
+        <div class="grid">
+          <div><label for="f1">First name</label><input id="f1"></div>
+          <div><label for="f2">Last name</label><input id="f2"></div>
+          <div><label for="f3">Role</label><select id="f3"><option>Counter Staff</option><option>Branch Manager / Supervisor</option></select></div>
+          <div><label for="f4">Branch</label><select id="f4"><option>Branch 1</option></select></div>
+        </div>
+        <div class="actions"><button class="btn btn-primary">Save</button><button class="btn btn-text">Cancel</button></div>
+      </div>
+
+      <div class="card"><h2>Token state, priority and counter badges</h2>
+        <div class="badges">
+          <span class="badge" style="background:#F2F4F7;color:#475467">Waiting</span>
+          <span class="badge" style="background:#DBEAFE;color:#1E40AF">Called</span>
+          <span class="badge" style="background:#DCFCE7;color:#166534">Serving</span>
+          <span class="badge" style="background:#EDE9FE;color:#5B21B6">Held</span>
+          <span class="badge" style="background:#FEE4E2;color:#B42318">No-show</span>
+          <span class="badge" style="background:#E8F1F3;color:#11676E">Completed</span>
+          <span class="badge" style="background:#F2F4F7;color:#475467">Normal</span>
+          <span class="badge" style="background:#FEF9C3;color:#854D0E">★ VIP</span>
+          <span class="badge" style="background:#DCFCE7;color:#166534">Open</span>
+          <span class="badge" style="background:#FEF3C7;color:#92400E">Paused</span>
+        </div>
+      </div>
+
+      <div class="card"><h2>Core palette</h2>
+        <div class="swatches">
+          <div class="sw"><div style="background:#0D7E8F"></div><p>primary<br><code>#0D7E8F</code></p></div>
+          <div class="sw"><div style="background:#0A6878"></div><p>primary-hover<br><code>#0A6878</code></p></div>
+          <div class="sw"><div style="background:#E8F1F3"></div><p>primary-subtle<br><code>#E8F1F3</code></p></div>
+          <div class="sw"><div style="background:#0F262A"></div><p>nav.bg<br><code>#0F262A</code></p></div>
+          <div class="sw"><div style="background:#F4F6F6"></div><p>neutral.bg<br><code>#F4F6F6</code></p></div>
+          <div class="sw"><div style="background:#E3E5E4"></div><p>border<br><code>#E3E5E4</code></p></div>
+          <div class="sw"><div style="background:#111315"></div><p>text<br><code>#111315</code></p></div>
+          <div class="sw"><div style="background:#6B7174"></div><p>text-muted<br><code>#6B7174</code></p></div>
+        </div>
+      </div>
+
+      <h2>Zone display (dark theme)</h2>
+      <div class="display">
+        <div class="latest"><div style="color:#B8CFD0">Now calling · يرجى التوجه</div><div class="num">VB0001</div><div class="to">→ Counter 2</div></div>
+        <div class="list"><div>NA0014 <span>1</span></div><div>NC0007 <span>1</span></div><div>ND0021 <span>3</span></div><div>NF0005 <span>4</span></div></div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>
