@@ -1,0 +1,7 @@
+**/bin/
+**/obj/
+**/logs/
+**/TestResults/
+Qms.Tests/
+*.user
+.vs/
