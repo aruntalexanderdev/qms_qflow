@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Each job skips its build steps until that project exists (M1 creates them).
+
+jobs:
+  backend:
+    name: Backend (.NET 10)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check for solution
+        id: check
+        run: |
+          if [ -f backend/Qms.slnx ]; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "backend/Qms.slnx not found yet - skipping"; fi
+      - uses: actions/setup-dotnet@v5
+        if: steps.check.outputs.exists == 'true'
+        with:
+          global-json-file: backend/global.json
+      - name: Restore
+        if: steps.check.outputs.exists == 'true'
+        run: dotnet restore backend/Qms.slnx
+      - name: Build
+        if: steps.check.outputs.exists == 'true'
+        run: dotnet build backend/Qms.slnx --no-restore -c Release
+      - name: Test (Testcontainers uses the runner's Docker)
+        if: steps.check.outputs.exists == 'true'
+        run: dotnet test backend/Qms.slnx --no-build -c Release --logger trx --results-directory TestResults
+      - name: Upload test results
+        if: always() && steps.check.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: TestResults
+
+  frontend:
+    name: Frontend (Angular 22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check for package.json
+        id: check
+        run: |
+          if [ -f package.json ]; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "frontend/package.json not found yet - skipping"; fi
+      - uses: actions/setup-node@v5
+        if: steps.check.outputs.exists == 'true'
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        if: steps.check.outputs.exists == 'true'
+        run: npm ci
+      - name: Lint (ESLint + Stylelint design-token rule)
+        if: steps.check.outputs.exists == 'true'
+        run: npm run lint
+      - name: Test
+        if: steps.check.outputs.exists == 'true'
+        run: npm test -- --watch=false
+      - name: Build
+        if: steps.check.outputs.exists == 'true'
+        run: npm run build
+
+  android:
+    name: Android (Kotlin)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check for Gradle wrapper
+        id: check
+        run: |
+          if [ -f gradlew ]; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "android/gradlew not found yet - skipping"; fi
+      - uses: actions/setup-java@v5
+        if: steps.check.outputs.exists == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v5
+        if: steps.check.outputs.exists == 'true'
+      - name: Build and unit test
+        if: steps.check.outputs.exists == 'true'
+        run: ./gradlew assembleDebug testDebugUnitTest --no-daemon
+
+  design-tokens:
+    name: Design tokens JSON is valid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 -c "import json; json.load(open('docs/design/tokens.json')); print('tokens.json OK')"

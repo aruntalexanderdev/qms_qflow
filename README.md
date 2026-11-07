@@ -38,7 +38,7 @@ It is a modular monolith: one API and one database, with clean-architecture laye
 | Web i18n | ngx-translate (English + Arabic, RTL) | 18.x |
 | Mobile | Kotlin / Jetpack Compose / Retrofit | 2.4.x / latest stable BOM |
 | UI | Angular Material (M3), teal theme, Instrument Sans + IBM Plex Sans Arabic, see [design system](docs/design/DESIGN_SYSTEM.md) | — |
-| Hosting | Docker, Docker Compose, Nginx reverse proxy, HTTPS | — |
+| Hosting | Docker, Docker Compose; Azure Container Apps + PostgreSQL Flexible Server + Key Vault + ACR (ADR-006) | — |
 
 ## Getting started
 
@@ -51,6 +51,10 @@ docker compose up --build
 ```
 
 To build and run each project on its own, follow the README in its folder.
+
+## Plan
+
+The full plan, with every phase, milestone and story, is in [`docs/work/BACKLOG.md`](docs/work/BACKLOG.md). Phase 0 (readiness) is done; the next step is M1 with STORY-001.
 
 ## Milestones (phase 1)
 

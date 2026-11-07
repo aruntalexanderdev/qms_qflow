@@ -6,7 +6,7 @@ Bank queue management system: .NET 10 (LTS) + PostgreSQL backend, Angular 22 web
 - `docs/PROJECT_SPEC.md` — the full project specification (export of "Bank QMS – Project Specification" as Markdown). If code and spec disagree, the spec wins; if the spec is wrong, stop and raise it (see workflow rules).
 - `docs/design/` — design system: `DESIGN_SYSTEM.md` (how) and `tokens.json` (values) for colours, fonts and spacing. Every UI change follows it (rules section 11).
 - `docs/adr/` — architecture decisions taken after the spec.
-- `docs/work/` — stories, tasks and bugs. Every change belongs to one of them.
+- `docs/work/` — stories, tasks and bugs. Every change belongs to one of them. `docs/work/BACKLOG.md` lists every phase, milestone and story.
 
 ## Rules (always loaded)
 @docs/rules/common-project-rules.md
