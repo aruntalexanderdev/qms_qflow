@@ -1,6 +1,6 @@
 # Bank QMS — Claude Code project guide
 
-Bank queue management system: .NET 10 + PostgreSQL backend, Angular web app (admin, counter console, supervisor dashboard, zone/counter displays), Kotlin Android token dispenser on Sunmi POS devices. Phase 1 = printed tokens; phase 2 = SMS / WhatsApp.
+Bank queue management system: .NET 10 (LTS) + PostgreSQL backend, Angular 22 web app (admin, counter console, supervisor dashboard, zone/counter displays), Kotlin Android token dispenser on Sunmi POS devices. Phase 1 = printed tokens; phase 2 = SMS / WhatsApp.
 
 ## Source of truth
 - `docs/PROJECT_SPEC.md` — the full project specification (export of "Bank QMS – Project Specification" as Markdown). If code and spec disagree, the spec wins; if the spec is wrong, stop and raise it (see workflow rules).
@@ -28,7 +28,7 @@ Run a full story with the `run-feature` skill: `/run-feature STORY-001`.
 ## Repository layout
 ```
 backend/   Qms.Domain, Qms.Application, Qms.Infrastructure, Qms.Api, Qms.Tests
-web/       Angular app
+frontend/  Angular web app
 android/   Kotlin dispenser app
 docs/      PROJECT_SPEC.md, rules/, templates/, work/, adr/
 docker-compose.yml
@@ -36,8 +36,8 @@ docker-compose.yml
 
 ## Commands
 Fill these in during milestone M1 and keep them correct.
-- Backend build / test: `dotnet build backend/Qms.sln` · `dotnet test backend/Qms.sln`
+- Backend build / test: `dotnet build backend/Qms.slnx` · `dotnet test backend/Qms.slnx`
 - Migrations: `dotnet ef migrations add <Name> -p backend/Qms.Infrastructure -s backend/Qms.Api`
-- Web: `cd web && npm ci && npm run build && npm test -- --watch=false`
+- Web: `cd frontend && npm ci && npm run build && npm test -- --watch=false`
 - Android: `cd android && ./gradlew assembleDebug testDebugUnitTest`
 - Full stack: `docker compose up --build`

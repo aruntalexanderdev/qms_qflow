@@ -19,7 +19,7 @@ Three applications share one backend: the .NET API with PostgreSQL, the Angular 
 
 | Layer | Choice | Notes |
 | --- | --- | --- |
-| Backend framework | .NET 10 (LTS), ASP.NET Core Web API | Clean architecture: Domain, Application, Infrastructure, Api |
+| Backend framework | .NET 10 (LTS, SDK 10.0.x), ASP.NET Core 10 Web API, EF Core 10 | Clean architecture: Domain, Application, Infrastructure, Api |
 | Database | PostgreSQL 16 or later | EF Core with Npgsql, code-first migrations, snake\_case names |
 | Real-time | ASP.NET Core SignalR | Groups per branch, zone, counter and display |
 | Auth | ASP.NET Core Identity + JWT (access + refresh tokens) | Devices use a device key, not a user login |
@@ -28,7 +28,7 @@ Three applications share one backend: the .NET API with PostgreSQL, the Angular 
 | Logging | Serilog to file and console | Correlation id per request |
 | API docs | OpenAPI / Swagger | Versioned routes `/api/v1/...` |
 | Testing | xUnit, FluentAssertions, Testcontainers for PostgreSQL | Queue engine fully unit-tested |
-| Web frontend | Angular (current stable), standalone components, signals | Angular Material or PrimeNG |
+| Web frontend | Angular 22 (latest stable), TypeScript 6.0, Node.js 24 LTS; standalone components, signals | Angular Material or PrimeNG |
 | Web i18n | ngx-translate, Arabic and English, RTL switch | Language per user and per display |
 | Web real-time | @microsoft/signalr client | Auto-reconnect |
 | Display voice | Pre-recorded Arabic and English audio clips | Joined as "Token" + letters + digits + "counter" + number; more reliable than browser speech |
@@ -46,7 +46,7 @@ qms/
     Qms.Infrastructure/  EF Core DbContext, migrations, repositories, SMS/WhatsApp adapters
     Qms.Api/             controllers, SignalR hubs, auth, middleware
     Qms.Tests/
-  web/                   Angular app (admin, counter, supervisor, display routes)
+  frontend/              Angular app (admin, counter, supervisor, display routes)
   android/               Kotlin dispenser app
   docs/PROJECT_SPEC.md
   docker-compose.yml     api + web + postgres
