@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-001 |
-| Status | Code Review |
+| Status | Done |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2, 3, 3.1, 10 (conventions), 11, 12 (M1) |
@@ -250,4 +250,29 @@ Open questions: none
 Result: Done
 Changed: docker-compose.yml, .env.example, backend/README.md, backend/Qms.Api/Common/ErrorKeyNaming.cs (new), backend/Qms.Api/Common/ResultExtensions.cs, backend/Qms.Api/Program.cs, backend/Qms.Tests/Support/QmsApiFactory.cs, backend/Qms.Tests/Support/TestThings.cs, backend/Qms.Tests/Api/ProblemDetailsTests.cs, docs/work/tasks/TASK-006-story-001-review-follow-ups.md
 Notes for next stage: S1 api port bound to 127.0.0.1 (override documented in backend/README.md). S2 error keys are camelCase without `$.` prefix (`name`, `items[0].name`) for both FluentValidation and built-in model-binding errors; web and Android can map keys directly to JSON property names. S3 test host writes no log file. Build 0 warnings; 37 tests passed (run twice).
+Open questions: none
+
+### Stage 6 — Code review (TASK-006) — code-reviewer — 2026-11-07
+Result: Approved
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release`: 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release`: 37 passed, 0 failed, 0 skipped; no `logs/` folder under `Qms.Tests/bin` after the run) · web N/A · android N/A
+Scope: TASK-006 only (`git diff 7ba9f55 HEAD -- backend docker-compose.yml .env.example`).
+ACs checked: AC-1 ✅, AC-2 ✅, AC-3 ✅, AC-4 ✅ (keys now `name`, `quantity`, `parts[1].name`; still 400 problem details with `errors` per field and `code`), AC-5 ✅ (the in-memory sink is untouched; console sink 0 unchanged; correlation id tests green), AC-6 ✅, AC-7 ✅ (`docker compose --env-file .env.example config` shows `host_ip: 127.0.0.1` for api and postgres; `http://localhost:8080/health/live` still matches the AC), AC-8 ✅ (no CI change).
+Fixes verified:
+- S1 fixed: api is published on `127.0.0.1`; `.env.example` and `backend/README.md` explain that Development/Swagger is local-only and how to open the port for device testing (with Production).
+- S2 fixed: `ErrorKeyNaming.Normalize` is applied in `ResultExtensions.ToProblem` and in the wrapped `InvalidModelStateResponseFactory`. Probed cases: `""` → `""`, `$` → `""`, `$.a.b` → `a.b`, `Items[0].Name` → `items[0].name`, `Items[0][1].Name` → `items[0][1].name`, `name` → `name`, `ID` → `id`, `URL` → `url`, `DeviceID` → `deviceID`, `URLValue` → `urlValue`, `Dict[Key].Value` → `dict[Key].value`. It uses the same `JsonNamingPolicy.CamelCase` as the serializer, so keys match the JSON property names (acronyms included). That is acceptable. Built-in path probed in the test host with malformed JSON, an empty body, a root array and a wrong nested type: always 400 `application/problem+json` with `traceId`, `correlationId`, `code` (`request.invalid`) and camelCase keys. The FluentValidation path keeps `validation.failed` plus `detail`. The difference between the two codes existed before this change and is meaningful (body not bindable vs rule failed). The wrapper copies `ErrorMessage` only, which is safe: errors that carry only an exception still render the MVC default text.
+- S3 fixed: the test host rewrites `Serilog:WriteTo:1` (File) to a Console sink at Fatal. No file is written and the in-memory capture still works. (`backend/Qms.Api/logs/` holds an older manual Production run. It is git-ignored and was not created by tests.)
+AC-4 output changed only in key casing. TC-001-6's note ("Name", "Quantity") is superseded, and the exact keys are now asserted by `ProblemDetailsTests`, so no QA retest is needed.
+
+Must fix
+- none
+
+Should fix
+- none
+
+Nice to have
+- N8 backend/Qms.Api/Common/ErrorKeyNaming.cs:19-27 — whole-body errors (`$`) become the empty key `""` (the MVC model-level convention). A root-array path `$[0].Name` keeps its `$` (`$[0].name`). Both are acceptable. Document `""` = "whole request" in `backend/README.md` for the web and Android clients.
+- N9 backend/Qms.Tests/Support/QmsApiFactory.cs:29-39 — the override targets sink index 1, so it breaks silently if `appsettings.json` reorders or adds sinks. Add a test that the built host has no File sink or that no `logs/` file appears, or key the sinks by name.
+- N10 backend/Qms.Api/Program.cs:18 (built-in path, existing behaviour) — System.Text.Json formatter messages expose .NET type names and JSON paths (for example "could not be converted to Qms.Tests.Support.ThingPart. Path: $.parts[0].name"). Before public endpoints land (STORY-002+), consider `JsonOptions.AllowInputFormatterExceptionMessages = false` or a generic message.
+- N11 the extra `command: ["The command field is required."]` entry on binding failures names the C# parameter, not a JSON field. Consider `[FromBody(EmptyBodyBehavior = ...)]` or filtering the parameter-name key in the factory wrapper.
+Notes for next stage: none. QA already signed off STORY-001, and this follow-up does not change any AC enough to need a retest. Story status returned to Done. N8–N11 can be follow-ups with STORY-002.
 Open questions: none
