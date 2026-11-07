@@ -5,6 +5,10 @@ description: Senior Android method for the QMS token dispenser — Kotlin, Jetpa
 
 # Android (Kotlin) skill
 
+## Target devices
+- `minSdk` 25 (Android 7.1), `targetSdk` latest stable. Sunmi V2 / V2 Pro / V2s / V3 handhelds, T2s / K2 kiosks. Test layouts on the small V2 screen and the large T2s/K2 screens.
+- Sunmi printer SDK behind `TicketPrinter`; ESC/POS fallback.
+
 ## Structure
 ```
 android/app/src/main/java/.../qms/
@@ -25,7 +29,7 @@ android/app/src/main/java/.../qms/
 
 ## Screens
 1. **Setup** (first run): server URL + registration code → `POST /device/register` → device key stored encrypted.
-2. **Home** (one screen, spec 7): phone row by token mode (country code dropdown + mobile no, Optional/Required label); service buttons from config, grouped by zone; priority buttons only for the selected service's Available priority types (hidden if one); Print Token / Get Token button enabled only when valid.
+2. **Home** (one screen, spec 7): phone row by token mode (country code dropdown + mobile no, Optional/Required label); service buttons from config, grouped by zone; priority buttons only for the selected service's Available priority types (hidden if one); Print Token / Get Token button enabled only when valid. VIP shown only if "Show VIP" (default yes); a paid priority shows the fee notice from config, and the ticket prints the fee line.
 3. **Confirm:** large token number, service, zone, people ahead; auto-return after `confirm_seconds`.
 4. **Out of service:** no network, printer error, branch closed.
 

@@ -12,7 +12,7 @@ Argument: a work item ID (`STORY-###` or `BUG-###`) or a short feature descripti
    - ID given → open `docs/work/stories/STORY-###-*.md` (or `bugs/`).
    - Description given → create the next `STORY-###` from `docs/templates/feature-story.md` with the title, user-story line and status `New`.
 2. **Check prerequisites.** `docs/PROJECT_SPEC.md` must contain the real spec (not the placeholder). If not, stop and tell the user.
-3. **Run the stages in order**, one subagent call each, passing the work item path:
+3. **Run the stages in order**, one subagent call each, passing the work item path. Start at the stage that matches the work item's current status; stages that already have a handoff in the Stage log (e.g. stages 0–1 done in Phase 0) are not run again.
    | Order | Subagent | Skip when |
    |---|---|---|
    | 0 | `project-architect` | never |
