@@ -19,7 +19,7 @@ Status: ✅ done · 🟡 ready (stages 0–1 done) · ⬜ not started
 ### M1 Foundation (walking skeleton)
 | Story | Title | Stages | Status |
 | --- | --- | --- | --- |
-| STORY-001 | Backend solution, API host, logging, OpenAPI, health, Docker Compose | 3 | 🟡 |
+| STORY-001 | Backend solution, API host, logging, OpenAPI, health, Docker Compose | 3 | ✅ |
 | STORY-002 | Full database schema, migration and seed data (Company 1, Branch 1) | 2, 3 | 🟡 |
 | STORY-003 | Sign-in: Identity, JWT, refresh token rotation, roles, seeded admin | 3 | 🟡 |
 | STORY-004 | Angular shell: theme, fonts, English/Arabic + RTL, layout, login page, web container | 4 | 🟡 |

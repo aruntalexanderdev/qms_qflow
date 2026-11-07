@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Qms.Api/Qms.Api.csproj" />
+  <Project Path="Qms.Application/Qms.Application.csproj" />
+  <Project Path="Qms.Domain/Qms.Domain.csproj" />
+  <Project Path="Qms.Infrastructure/Qms.Infrastructure.csproj" />
+  <Project Path="Qms.Tests/Qms.Tests.csproj" />
+</Solution>
