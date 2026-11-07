@@ -80,7 +80,11 @@ dotnet run --project backend/Qms.Api
 cp .env.example .env && docker compose up --build
 ```
 
-The stack serves the API on `http://localhost:8080` (for example `/health/live`). Set `ASPNETCORE_ENVIRONMENT=Development` in `.env` for Swagger UI at `/swagger`.
+The stack serves the API on `http://localhost:8080` (for example `/health/live`). The API port is published on `127.0.0.1` only, like PostgreSQL, so the stack is not reachable from the LAN by default. `.env.example` sets `ASPNETCORE_ENVIRONMENT=Development`, which enables Swagger UI at `/swagger` and `/openapi/v1.json`; that is for the local stack only, and a deployed environment must use `Production`.
+
+To reach the local API from another device (for example a token dispenser on the same network), change the port mapping in `docker-compose.yml` to `"0.0.0.0:${API_PORT:-8080}:8080"` for that session and set `ASPNETCORE_ENVIRONMENT=Production` in `.env` so Swagger is not exposed.
+
+Validation errors (`errors` in problem details) use camelCase keys without a `$.` prefix, for example `name` or `items[0].name`, for both FluentValidation failures and model-binding failures.
 
 ```bash
 dotnet ef migrations add <Name> -p backend/Qms.Infrastructure -s backend/Qms.Api

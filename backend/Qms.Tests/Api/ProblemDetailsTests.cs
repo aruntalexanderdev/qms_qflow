@@ -65,8 +65,38 @@ public sealed class ProblemDetailsTests : IDisposable
         var body = await ReadAsync(response);
         body.GetProperty("code").GetString().ShouldBe("validation.failed");
         var errors = body.GetProperty("errors");
-        errors.TryGetProperty("Name", out _).ShouldBeTrue();
-        errors.TryGetProperty("Quantity", out _).ShouldBeTrue();
+        errors.EnumerateObject().Select(property => property.Name).OrderBy(name => name)
+            .ShouldBe(["name", "quantity"]);
+        body.GetProperty("correlationId").GetString().ShouldNotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Invalid_nested_request_returns_camel_case_indexed_keys()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/test/things",
+            new { name = "ok", quantity = 1, parts = new[] { new { name = "fine" }, new { name = "" } } },
+            CancellationToken.None);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var errors = (await ReadAsync(response)).GetProperty("errors");
+        errors.EnumerateObject().Select(property => property.Name).ShouldBe(["parts[1].name"]);
+    }
+
+    [Fact]
+    public async Task Model_binding_error_returns_camel_case_keys_without_json_path_prefix()
+    {
+        var response = await _client.PostAsync(
+            "/api/v1/test/things",
+            new StringContent("""{"name":"ok","quantity":"not-a-number"}""", System.Text.Encoding.UTF8, "application/json"),
+            CancellationToken.None);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        var body = await ReadAsync(response);
+        // "command" is the extra "field is required" entry MVC adds when the body cannot be bound.
+        body.GetProperty("errors").EnumerateObject().Select(property => property.Name).OrderBy(name => name)
+            .ShouldBe(["command", "quantity"]);
         body.GetProperty("correlationId").GetString().ShouldNotBeNullOrEmpty();
     }
 

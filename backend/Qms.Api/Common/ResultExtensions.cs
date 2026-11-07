@@ -35,7 +35,7 @@ public static class ResultExtensions
             {
                 foreach (var message in messages)
                 {
-                    modelState.AddModelError(field, message);
+                    modelState.AddModelError(ErrorKeyNaming.Normalize(field), message);
                 }
             }
 

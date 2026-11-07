@@ -7,7 +7,9 @@ namespace Qms.Tests.Support;
 
 // Test-only use case, endpoints and validator. They live in the test assembly and are only added to the test host.
 
-public sealed record CreateThingCommand(string? Name, int Quantity);
+public sealed record ThingPart(string? Name);
+
+public sealed record CreateThingCommand(string? Name, int Quantity, IReadOnlyList<ThingPart>? Parts = null);
 
 public sealed class CreateThingValidator : AbstractValidator<CreateThingCommand>
 {
@@ -15,6 +17,7 @@ public sealed class CreateThingValidator : AbstractValidator<CreateThingCommand>
     {
         RuleFor(command => command.Name).NotEmpty().MaximumLength(20);
         RuleFor(command => command.Quantity).GreaterThan(0);
+        RuleForEach(command => command.Parts).ChildRules(part => part.RuleFor(p => p.Name).NotEmpty());
     }
 }
 

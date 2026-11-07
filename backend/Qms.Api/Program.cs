@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Qms.Api.Common;
 using Qms.Application.Common;
 using Qms.Infrastructure;
@@ -14,7 +15,33 @@ builder.Services.AddSerilog((services, configuration) => configuration
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddControllers();
+builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
+{
+    var defaultFactory = options.InvalidModelStateResponseFactory;
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        // One key style for clients: camelCase, no "$." prefix (same as FluentValidation errors).
+        var normalized = new ModelStateDictionary();
+        foreach (var (key, entry) in context.ModelState)
+        {
+            foreach (var error in entry.Errors)
+            {
+                normalized.AddModelError(ErrorKeyNaming.Normalize(key), error.ErrorMessage);
+            }
+        }
+
+        context.ModelState.Clear();
+        foreach (var (key, entry) in normalized)
+        {
+            foreach (var error in entry.Errors)
+            {
+                context.ModelState.AddModelError(key, error.ErrorMessage);
+            }
+        }
+
+        return defaultFactory(context);
+    };
+});
 builder.Services.AddQmsProblemDetails();
 builder.Services.AddQmsHealthChecks();
 builder.Services.AddQmsOpenApi();

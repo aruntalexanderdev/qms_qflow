@@ -6,7 +6,7 @@
 | Story | STORY-001 |
 | Stage | 3 Backend |
 | Agent | backend-developer |
-| Status | To do |
+| Status | Done |
 | Estimate | S |
 | Created | 2026-11-07 |
 
@@ -26,12 +26,18 @@ Fix the three "Should fix" items from the STORY-001 code review (Stage log, stag
 - Provides to: STORY-002+ (error key convention).
 
 ## 5. Done checklist
-- [ ] Code follows common project rules
-- [ ] Tests added or updated and passing (list them below)
-- [ ] `dotnet build backend/Qms.slnx -c Release` has 0 warnings
-- [ ] Handoff written in the story's Stage log
+- [x] Code follows common project rules
+- [x] Tests added or updated and passing (list them below)
+- [x] `dotnet build backend/Qms.slnx -c Release` has 0 warnings
+- [x] Handoff written in the story's Stage log
 
 ## 6. Tests
-- …
+- `ProblemDetailsTests.Invalid_request_returns_400_with_field_errors_and_code`: exact keys `name`, `quantity` (FluentValidation path).
+- `ProblemDetailsTests.Invalid_nested_request_returns_camel_case_indexed_keys`: exact key `parts[1].name`.
+- `ProblemDetailsTests.Model_binding_error_returns_camel_case_keys_without_json_path_prefix`: `[ApiController]` path, exact keys `command`, `quantity` (no `$.`).
+- Suite: 37 passed, 0 failed, 0 skipped (run twice). No `logs/` folder under `Qms.Tests/bin` after the run.
 
 ## 7. Notes / result
+- S1: compose publishes the API on `127.0.0.1`; `.env.example` comment and `backend/README.md` explain Development vs Production and how to expose the port for device testing. `docker compose config` shows `host_ip: 127.0.0.1` for api.
+- S2: new `Qms.Api/Common/ErrorKeyNaming.Normalize` (camelCase per segment, strips `$.`, keeps `[n]`). Used by `ResultExtensions.ToProblem` (FluentValidation path) and by `InvalidModelStateResponseFactory` in `Program.cs` (built-in path). Application layer is unchanged. Built-in binding errors also carry MVC's extra `command` ("field is required") entry when a body cannot be bound; this is standard MVC behaviour.
+- S3: `QmsApiFactory` overrides Serilog sink 1 (File) to a Console sink restricted to Fatal, so no file is written; console and the in-memory sink still work.

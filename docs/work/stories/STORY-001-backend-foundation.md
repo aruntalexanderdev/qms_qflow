@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-001 |
-| Status | Done |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2, 3, 3.1, 10 (conventions), 11, 12 (M1) |
@@ -244,4 +244,10 @@ Bugs: none
 Changed: docs/work/stories/STORY-001-backend-foundation.md (QA section only)
 Manual device checks pending: none (no Android or display change). The first GitHub Actions run on a real PR still confirms AC-8.
 Notes for next stage: Sign-off given. Story status set to Done. Review S1-S3 should become follow-up tasks (S3 and S2 before STORY-002 and STORY-003).
+Open questions: none
+
+### Stage 3 — Backend (TASK-006 review follow-ups) — backend-developer — 2026-11-07
+Result: Done
+Changed: docker-compose.yml, .env.example, backend/README.md, backend/Qms.Api/Common/ErrorKeyNaming.cs (new), backend/Qms.Api/Common/ResultExtensions.cs, backend/Qms.Api/Program.cs, backend/Qms.Tests/Support/QmsApiFactory.cs, backend/Qms.Tests/Support/TestThings.cs, backend/Qms.Tests/Api/ProblemDetailsTests.cs, docs/work/tasks/TASK-006-story-001-review-follow-ups.md
+Notes for next stage: S1 api port bound to 127.0.0.1 (override documented in backend/README.md). S2 error keys are camelCase without `$.` prefix (`name`, `items[0].name`) for both FluentValidation and built-in model-binding errors; web and Android can map keys directly to JSON property names. S3 test host writes no log file. Build 0 warnings; 37 tests passed (run twice).
 Open questions: none
