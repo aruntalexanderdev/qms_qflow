@@ -16,6 +16,14 @@ frontend/src/app/
 - Lazy-loaded routes per feature; route guards by role.
 - Typed reactive forms; server validation errors (problem details) shown per field.
 
+## Design system (rules section 11)
+- Read `docs/design/DESIGN_SYSTEM.md` before building a screen; values are in `docs/design/tokens.json`.
+- Theme files: `src/styles/_tokens.scss` (`--qms-*` CSS variables, mirroring `tokens.json`), `src/styles/_material-theme.scss` (Angular Material M3 mapped to the variables), `src/styles/_typography.scss` (Instrument Sans + IBM Plex Sans Arabic from `@fontsource`).
+- Component SCSS uses only `var(--qms-*)`: no hex, rgb or named colours, no raw font sizes. `npm run lint` (Stylelint) must pass.
+- Shell: dark teal sidebar (`nav.*`), white 64px top bar, `neutral.bg` page, flat white cards with a 12px radius. Forms: two-column card, label above input, primary Save plus text-button Cancel.
+- Shared badges: `<qms-token-state-badge>`, `<qms-priority-badge>`, `<qms-counter-status-badge>`. Never restyle a state inline.
+- Displays: `data-theme="display"` on `<body>` (dark tokens, `display.*`).
+
 ## API and real-time
 - One typed service per resource, matching spec section 10 routes; DTO interfaces in `core/api/models`.
 - `QmsHubService` wraps `@microsoft/signalr`: auto-reconnect, joins groups, exposes events as signals/observables; on reconnect, components re-fetch their snapshot.

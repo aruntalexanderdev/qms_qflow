@@ -17,6 +17,12 @@ android/app/src/main/java/.../qms/
 - MVVM: Compose screens observe `StateFlow<UiState>` from ViewModels; Hilt for DI.
 - Retrofit + OkHttp interceptor adds `X-Device-Key`; timeouts 10 s; TLS only.
 
+## Design system (rules section 11)
+- Read `docs/design/DESIGN_SYSTEM.md`; mirror `docs/design/tokens.json` in `ui/theme/Color.kt`, `Type.kt`, `Shape.kt` and `Theme.kt` (Material 3 `lightColorScheme` with `primary = 0xFF0D7E8F` and so on, plus `QmsColors` for state and priority).
+- Fonts: Instrument Sans and IBM Plex Sans Arabic `.ttf` in `res/font/`. Token numbers use tabular figures.
+- Composables use `MaterialTheme.colorScheme` / `QmsColors` / `MaterialTheme.typography` only. No `Color(0x…)` or `sp` literals outside `ui/theme/`.
+- Kiosk sizing: touch targets of at least 72dp; service buttons are outlined in `primary` and filled when selected; Print Token is full-width `primary`.
+
 ## Screens
 1. **Setup** (first run): server URL + registration code → `POST /device/register` → device key stored encrypted.
 2. **Home** (one screen, spec 7): phone row by token mode (country code dropdown + mobile no, Optional/Required label); service buttons from config, grouped by zone; priority buttons only for the selected service's Available priority types (hidden if one); Print Token / Get Token button enabled only when valid.

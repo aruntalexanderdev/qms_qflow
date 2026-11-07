@@ -13,6 +13,9 @@ One Angular app for admin setup, the counter console, the supervisor dashboard, 
 | Node.js | **24 LTS**, pinned in [`.nvmrc`](.nvmrc) (Angular 22 needs Node `^22.22` or `^24.15`) |
 | @microsoft/signalr | 10.x (matches the .NET 10 server) |
 | @ngx-translate/core | 18.x |
+| @angular/material + CDK | 22.x (Material 3), see ADR-001 |
+| Fonts | `@fontsource-variable/instrument-sans`, `@fontsource/ibm-plex-sans-arabic` |
+| Stylelint | 18.x with `stylelint-config-standard-scss` |
 
 Upgrade one major at a time with `ng update @angular/core @angular/cli`. Angular ships a new major about every six months.
 
@@ -27,6 +30,20 @@ frontend/
   public/i18n/  en.json, ar.json
   public/audio/ pre-recorded Arabic and English voice clips
 ```
+
+## Design system
+
+Colours, fonts and spacing come from [`docs/design/DESIGN_SYSTEM.md`](../docs/design/DESIGN_SYSTEM.md) and [`tokens.json`](../docs/design/tokens.json): a dark teal sidebar, teal primary (`#0D7E8F`), a light grey page, white cards, and the Instrument Sans and IBM Plex Sans Arabic fonts.
+
+```
+src/styles/
+  _tokens.scss          --qms-* CSS variables (mirror of tokens.json)
+  _material-theme.scss  Angular Material M3 theme mapped to the tokens
+  _typography.scss      @fontsource fonts (bundled, no CDN)
+  styles.scss           imports the three files above
+```
+
+Component styles use only `var(--qms-*)`. Stylelint (`color-no-hex`, `color-named: never`) fails the build otherwise.
 
 ## Conventions
 
