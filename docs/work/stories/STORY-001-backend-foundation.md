@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-001 |
-| Status | QA |
+| Status | Done |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2, 3, 3.1, 10 (conventions), 11, 12 (M1) |
@@ -166,4 +166,82 @@ Nice to have
 - N6 backend/Qms.Tests/Api/CorrelationIdTests.cs:18 — the test asserts `CorrelationId` only on the "HTTP ..." request-completion lines and the exception line. A broader assertion (all events carrying `RequestPath`) would match AC-5's "every log line" more literally.
 - N7 backend/.dockerignore — add `**/secrets.json` and `**/appsettings.*.local.json` as a defensive measure.
 Notes for next stage: QA can run AC-1 through AC-6 with `dotnet test` and a local `dotnet run`. AC-7 needs a Docker host with normal registry and NuGet access. AC-8 needs a PR run of `.github/workflows/ci.yml`. Should fix and Nice to have items become follow-up tasks if they are not done.
+Open questions: none
+
+### Stage 7 — QA test cases and results — qa-tester — 2026-11-07
+Build under test: working tree on top of stage 6 approval; .NET SDK 10.0.114, Linux amd64, Docker 29.9.2.
+
+```
+TC-001-1 | AC-1 | Release build has zero warnings
+Steps: dotnet build backend/Qms.slnx -c Release
+Expected: success, 0 warnings, 0 errors
+Result: Pass (0 Warning(s), 0 Error(s))
+
+TC-001-2 | AC-1 | Tests run, at least one per layer, architecture test present
+Steps: dotnet test backend/Qms.slnx -c Release
+Expected: all pass, none skipped; tests for Domain/Application/Infrastructure/Api + ArchitectureTests
+Result: Pass (35 passed, 0 failed, 0 skipped). Folders: Application (Result, ValidationDecorator), Infrastructure (registration), Api (health, problem details, correlation id, hosting), Architecture. Domain is covered by the architecture tests (DomainAssembly marker; the layer has no logic yet).
+Note: ArchitectureTests assert (a) NetArchTest "Domain has no dependency on Application/Infrastructure/Api", Application not on Infrastructure/Api, Infrastructure not on Api, and (b) a csproj ProjectReference whitelist per project. A forbidden reference would fail (a) or (b). A throwaway reference was not tried: every upward reference between the layers is circular and MSBuild would reject it before the tests run, so the guard is verified by reading the code only.
+
+TC-001-3 | AC-2 | Live and ready, Development and Production
+Steps: run Qms.Api (ASPNETCORE_ENVIRONMENT=Development, then Production); GET /health/live, /health/ready
+Expected: 200, body Healthy
+Result: Pass (both environments, both endpoints: 200 text/plain "Healthy", no-cache headers)
+
+TC-001-4 | AC-3 | Unknown route is problem details
+Steps: GET /nope (with and without X-Correlation-Id), both environments
+Expected: 404 application/problem+json with status, title, traceId, correlationId, code, no stack
+Result: Pass ({"type":...,"title":"Not Found","status":404,"traceId":"...","correlationId":"abc-123","code":"resource.not_found"})
+
+TC-001-5 | AC-3 | Unhandled exception is a 500 problem without leaks
+Steps: ProblemDetailsTests (test-host endpoint throws InvalidOperationException with "secret internal detail")
+Expected: 500 problem+json, code server.unexpected_error; body lacks message, exception type, " at Qms."
+Result: Pass (test exists, passes; assertions check both the leak and the shape; host runs in Development, the stricter case)
+
+TC-001-6 | AC-4 | Validation errors map to 400
+Steps: ProblemDetailsTests invalid request through test endpoint
+Expected: 400 problem+json, code validation.failed, errors object per field, correlationId
+Result: Pass (errors keys "Name", "Quantity" asserted; casing known as review S2, not an AC failure)
+
+TC-001-7 | AC-5 | Correlation id echoed, generated, sanitised, logged
+Steps: curl with X-Correlation-Id: abc-123; without; with "bad id<script>"; with 200 chars; read console and logs/qms-*.log
+Expected: abc-123 echoed; new 32-hex id when absent; invalid/oversized replaced by a new id; log lines carry CorrelationId=<id>
+Result: Pass. Echo abc-123 OK; generated e.g. a15b6d9c...; invalid and oversized replaced. Log lines (console and file): "CorrelationId=abc-123 HTTP GET /health/live responded 200", "CorrelationId=abc-123 HTTP GET /nope responded 404"; query string (?x=secret) not logged. Startup lines outside a request show an empty CorrelationId= (expected, no request). CorrelationIdTests (4) also pass.
+
+TC-001-8 | AC-6 | Swagger in Development, absent in Production
+Steps: GET /swagger, /swagger/index.html, /openapi/v1.json in both environments
+Expected: Development 200 with API v1; Production 404
+Result: Pass (Dev: /swagger 301 -> index.html 200, swagger-ui 5.33.3, openapi info "Bank QMS API", version "v1"; Prod: /swagger/index.html and /openapi/v1.json 404 problem+json)
+
+TC-001-9 | AC-7 | Compose stack
+Steps: .env from .env.example; docker compose up -d --build (image built with a temporary CA-bundle copy of the Dockerfile and compose override kept in the scratchpad, outside the repo; ports remapped to 18080/15432 only in the override); GET /health/live; inspect user; down -v
+Expected: postgres healthy, api non-root, /health/live 200
+Result: Pass. postgres (healthy), api Up; GET http://localhost:18080/health/live -> 200; container user app uid/gid 1654 (PID 1 Uid 1654); /app/logs owned by app and the log file was written. The stack was removed with down -v. linux/arm64 was not run (amd64 host); the arm64 mapping was checked by reading (TARGETARCH amd64->x64, arm64 unchanged).
+Note: with .env.example (Development) the container logs Debug-level health-check lines; Swagger answered 200 inside the container (review S1 covers the exposure).
+
+TC-001-10 | AC-8 | CI backend job
+Steps: read .github/workflows/ci.yml; run the exact steps locally (restore, build --no-restore -c Release, test --no-build -c Release --logger trx)
+Expected: steps match the layout and pass
+Result: Pass (local simulation: 0 warnings, 35 passed). The workflow was not run on GitHub (no PR was created); the check is by reading plus local simulation. setup-dotnet uses backend/global.json; the artifact path TestResults is relative to the repo root and ignored by .gitignore.
+
+TC-001-11 | negative | HEAD, OPTIONS, POST on /health/live
+Result: Pass (all 200 on this endpoint, no crash, no body leak)
+TC-001-12 | negative | 9000-character URL
+Result: Pass (414 from Kestrel, no crash)
+TC-001-13 | negative | Accept: application/xml on /health/live
+Result: Pass (200 text/plain Healthy)
+TC-001-14 | negative | Unknown route with Accept text/html
+Result: Not tested separately; behaviour known as review N3.
+```
+
+AC results: AC-1 Pass, AC-2 Pass, AC-3 Pass, AC-4 Pass, AC-5 Pass, AC-6 Pass, AC-7 Pass, AC-8 Pass (by reading and local simulation)
+Bugs: none. Follow-ups (not bugs): review S1-S3 and N1-N7. Extra observations for the backlog: the "Healthy" body is plain text, not JSON; a Development container writes Debug-level lines (appsettings.Development.json); `dotnet run` must start from the project folder or `appsettings.json` is not found (normal .NET behaviour).
+
+### Stage 7 — QA — qa-tester — 2026-11-07
+Result: Done
+AC results: AC-1 Pass, AC-2 Pass, AC-3 Pass, AC-4 Pass, AC-5 Pass, AC-6 Pass, AC-7 Pass, AC-8 Pass
+Bugs: none
+Changed: docs/work/stories/STORY-001-backend-foundation.md (QA section only)
+Manual device checks pending: none (no Android or display change). The first GitHub Actions run on a real PR still confirms AC-8.
+Notes for next stage: Sign-off given. Story status set to Done. Review S1-S3 should become follow-up tasks (S3 and S2 before STORY-002 and STORY-003).
 Open questions: none
