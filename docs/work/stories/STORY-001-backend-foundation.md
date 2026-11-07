@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-001 |
-| Status | Code Review |
+| Status | QA |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2, 3, 3.1, 10 (conventions), 11, 12 (M1) |
@@ -140,4 +140,30 @@ Open questions: none
 Result: N/A — No dispenser change (stage plan)
 Changed: none
 Notes for next stage: Ready for code review (stage 6).
+Open questions: none
+
+### Stage 6 — Code review — code-reviewer — 2026-11-07
+Result: Approved
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release`: 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release`: 35 passed, 0 failed, 0 skipped) · web N/A · android N/A
+ACs checked: AC-1 ✅, AC-2 ✅, AC-3 ✅, AC-4 ✅, AC-5 ✅, AC-6 ✅, AC-7 ✅ (checked by reading the Dockerfile and compose file and running `docker compose config` with `.env.example`; the image cannot be built in the review sandbox because of the NuGet proxy CA, and stage 3 reports a successful run), AC-8 ✅ (checked by reading the workflow: `global-json-file: backend/global.json`, and restore/build/test of `backend/Qms.slnx` from the repo root with `--no-build -c Release` match the layout)
+Also checked: in a manual Production run, `/health/live` returned 200, the 404 problem details echoed `X-Correlation-Id: abc-123`, `/swagger` returned 404, and the log lines carried `CorrelationId`. The 500 response does not leak exception details (the test runs in Development, which is the stricter case). Correlation id input is validated (64 chars max, `[A-Za-z0-9-_.]`). Request logging records the method, path and status only, with no bodies or query strings. The Dockerfile is multi-stage, runs as non-root (`$APP_UID`), contains no secrets and maps `amd64`→`x64` correctly (`arm64` passes through). Compose has no secrets (`:?` guards, `.env` is git-ignored) and a `pg_isready` healthcheck. DI scanning works when one handler implements several interfaces (same scoped instance). NetArchTest's open-generic `ImplementInterface` match was confirmed to work, so the "no handlers in Api" test is meaningful.
+Stage 3 deviations: all accepted. xUnit v2.9.3: the reason is documented, and v3 can be reconsidered if `global.json` moves to the repo root. Shouldly: the licence reason matches the ADR-002 reasoning for dropping MediatR. No Testcontainers yet: there is no database until STORY-002, which must add it together with the readiness DB check. ADR-002's `[Audited]` decorator is deferred until `audit_log` exists (STORY-002 or later).
+
+Must fix
+- none
+
+Should fix
+- S1 [stage 3] docker-compose.yml:36 + .env.example:10 — `api` publishes on all interfaces (`${API_PORT:-8080}:8080`), and `.env.example` sets `ASPNETCORE_ENVIRONMENT=Development` by default. A fresh local stack therefore exposes Swagger UI and `/openapi/v1.json` to the LAN. Postgres, by contrast, is bound to `127.0.0.1`. → Bind to `127.0.0.1` by default and document how to override it for dispenser-device testing, or make `Production` the default in `.env.example`.
+- S2 [stage 3] backend/Qms.Application/Common/ValidationDecorator.cs:65 (+ Qms.Api/Common/ResultExtensions.cs:34) — `errors` keys are C# property names (`Name`, `Quantity`) but request JSON is camelCase (`name`, `quantity`). `[ApiController]` model-binding errors use yet another key style (`$.name`). Every later endpoint inherits this convention, and the web and Android apps need to map errors to fields. → Use camelCase keys (for example a FluentValidation `PropertyNameResolver`/`DisplayNameResolver`, or camel-case the keys in `ToProblem`) and assert them in `ProblemDetailsTests`.
+- S3 [stage 3] backend/Qms.Tests/Support/QmsApiFactory.cs:25 — test hosts inherit the `appsettings.json` File sink. Each `WebApplicationFactory` host opens its own non-shared sink on the same `logs/qms-<date>.log` under the test output. Interleaved, corrupted lines were seen in `Qms.Tests/bin/Release/net10.0/logs`. → Override `Serilog:WriteTo` in the test host (in-memory sink only, or console).
+
+Nice to have
+- N1 backend/Qms.Application/Common/DependencyInjection.cs:25-52 — open-generic handlers are skipped silently. Two handlers for the same interface resolve last-wins with no warning. `AddScoped(implementation)` runs once per interface; `TryAddScoped` would do. → Fail fast on duplicate handler interfaces and add a test for a handler that implements two interfaces.
+- N2 backend/Qms.Api/Common/ProblemDetailsSetup.cs:52 — client-aborted requests (`OperationCanceledException` with `RequestAborted` cancelled) are logged at Error and answered with 500. → Handle them separately (lower log level, status 499).
+- N3 backend/Qms.Api/Program.cs:27-28 — an unknown route requested with `Accept: text/html` gets `text/plain` "Status Code: 404; Not Found" instead of problem details, because the default writer honours `Accept`. This is acceptable for an API; document it or always write JSON under `/api`.
+- N4 backend/Qms.Api/Program.cs:30-34 — outside Development, `UseHttpsRedirection` will redirect HTTP health probes once an HTTPS port is set, and it needs forwarded headers behind a TLS-terminating ingress. Track this in STORY-039/040 (the stage 3 handoff already notes it).
+- N5 backend/global.json — the SDK pin only applies when commands run from `backend/`. The `CLAUDE.md` command and CI run from the repo root; CI is unaffected because `setup-dotnet` reads the file. Consider moving the file to the repo root, which would also allow xUnit v3 with Microsoft.Testing.Platform.
+- N6 backend/Qms.Tests/Api/CorrelationIdTests.cs:18 — the test asserts `CorrelationId` only on the "HTTP ..." request-completion lines and the exception line. A broader assertion (all events carrying `RequestPath`) would match AC-5's "every log line" more literally.
+- N7 backend/.dockerignore — add `**/secrets.json` and `**/appsettings.*.local.json` as a defensive measure.
+Notes for next stage: QA can run AC-1 through AC-6 with `dotnet test` and a local `dotnet run`. AC-7 needs a Docker host with normal registry and NuGet access. AC-8 needs a PR run of `.github/workflows/ci.yml`. Should fix and Nice to have items become follow-up tasks if they are not done.
 Open questions: none
