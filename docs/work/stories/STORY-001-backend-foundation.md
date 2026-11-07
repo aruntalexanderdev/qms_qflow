@@ -117,3 +117,9 @@ Result: Done
 Changed: this story (sections 1–6, 9–10), docs/work/tasks/TASK-001-backend-foundation.md
 Notes for next stage: Stage 2 is N/A; start at stage 3 with TASK-001. `run-feature` appends the stage 2 N/A handoff.
 Open questions: none
+
+### Stage 2 — Database — database-architect — 2026-11-07
+Result: N/A — No schema; DbContext arrives in STORY-002 (stage plan)
+Changed: none
+Notes for next stage: Start stage 3 with TASK-001.
+Open questions: none
