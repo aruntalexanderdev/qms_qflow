@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-001 |
-| Status | Backend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2, 3, 3.1, 10 (conventions), 11, 12 (M1) |
@@ -122,4 +122,22 @@ Open questions: none
 Result: N/A — No schema; DbContext arrives in STORY-002 (stage plan)
 Changed: none
 Notes for next stage: Start stage 3 with TASK-001.
+Open questions: none
+
+### Stage 3 — Backend — backend-developer — 2026-11-07
+Result: Done
+Changed: backend/Qms.slnx, backend/Directory.Packages.props, backend/.dockerignore, backend/README.md, backend/Qms.Domain/**, backend/Qms.Application/** (Common: Result, Error, handlers, validation decorators, AddApplication), backend/Qms.Infrastructure/** (AddInfrastructure, TimeProvider), backend/Qms.Api/** (Program, correlation id middleware, problem details, ResultExtensions, OpenAPI, health, appsettings, Dockerfile), backend/Qms.Tests/** (35 tests), docker-compose.yml, .env.example, CLAUDE.md (Full stack command), docs/work/tasks/TASK-001-backend-foundation.md
+Notes for next stage: Stages 4 and 5 are N/A for this story. Conventions for later stories: controllers derive from `QmsControllerBase` (`/api/v1/[controller]`), call `ICommandHandler`/`IQueryHandler` and return `result.ToActionResult(this)`; add handlers + validators under `Qms.Application/<Feature>/<UseCase>/` and they are picked up by `AddApplication()`; dependency health checks are added with tag `ready` (database check in STORY-002). Problem details carry `traceId`, `correlationId` and `code`. Tests: xUnit v2 + Shouldly; `QmsApiFactory` starts the host with test-only controllers. Swagger UI at `/swagger` and `/openapi/v1.json` only in Development (set `ASPNETCORE_ENVIRONMENT=Development` in `.env`). Outside Development the host logs a one-time warning "Failed to determine the https port" until an HTTPS port or forwarded headers are configured at deployment (STORY-039/040).
+Open questions: none
+
+### Stage 4 — Frontend — frontend-developer — 2026-11-07
+Result: N/A — Angular shell is STORY-004 (stage plan)
+Changed: none
+Notes for next stage: none
+Open questions: none
+
+### Stage 5 — Android — android-developer — 2026-11-07
+Result: N/A — No dispenser change (stage plan)
+Changed: none
+Notes for next stage: Ready for code review (stage 6).
 Open questions: none
