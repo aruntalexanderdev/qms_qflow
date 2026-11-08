@@ -29,7 +29,7 @@ public static class LocalizedText
     /// <see cref="DefaultLanguageKeyCode"/> (English lives in <c>name</c>), a language that is not enabled gets
     /// <see cref="LanguageNotEnabledCode"/>; each non-empty value is at most 200 characters after trimming.
     /// </summary>
-    public static IRuleBuilderInitial<T, IReadOnlyDictionary<string, string?>?> LocalizedTranslations<T>(
+    public static IRuleBuilderOptionsConditions<T, IReadOnlyDictionary<string, string?>?> LocalizedTranslations<T>(
         this IRuleBuilder<T, IReadOnlyDictionary<string, string?>?> rule) =>
         rule.Custom((translations, context) =>
         {

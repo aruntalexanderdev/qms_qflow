@@ -90,7 +90,7 @@ Test users (`SetupTestData`, ADR-008 §15): CA-C1 (Company Admin, Company 1), CA
 - Given Service 1 (A) is in the company service mapping (and has tokens, flows or a dispenser mapping in other cases), When CA-C1 calls `DELETE` on it, Then 409 `service_type.in_use`, the row remains, and no audit row is written. The same 409 is returned when the reference is only a dispenser mapping row, only a flow row, or only a token (one test per reference kind). If the pre-check is bypassed, the database foreign key error is mapped to 409 with a code (default `resource.in_use`).
 
 **AC-12: Not found and cross-company (service types)**
-- Given a Company 1 service type id, When CA-C2 calls `GET`, `PUT` or `DELETE` on it, Then each response is 404 `service_type.not_found` (identical to a random unknown GUID), nothing changes, and CA-C2's list contains only Company 2 rows.
+- Given a Company 1 service type id, When CA-C2 calls `GET`, `PUT` or `DELETE` on it, Then each response is 404 `service_type.not_found` (identical to a random unknown GUID), nothing changes, and CA-C2's list contains only Company 2 rows. The 404 comes before any body validation outcome that would reveal the row (a `PUT` with a valid body, `name` and `translations` as in AC-7, is used). (amended 2026-11-08)
 
 ### Priority types
 **AC-13: List priority types**
@@ -100,13 +100,13 @@ Test users (`SetupTestData`, ADR-008 §15): CA-C1 (Company Admin, Company 1), CA
 - Given VIP, When CA-C1 calls `GET /api/v1/priority-types/{VIP id}`, Then 200 with the DTO of AC-13; `feeAmount` is the JSON number 50.00 (not a string).
 
 **AC-15: Create an unpaid priority type**
-- Given Company 1 has no prefix S, When CA-C1 calls `POST /api/v1/priority-types` with `nameEn` "Senior", `nameAr` "كبار السن", `prefix` "S", `priorityLevel` 1, `isPaid` false, no `feeAmount`, `isActive` true, Then 201 with `Location`, `feeAmount` null, `currencyCode` "AED". A body with `isPaid` false and `feeAmount` 0 is rejected (AC-17).
+- Given Company 1 has no prefix S, When CA-C1 calls `POST /api/v1/priority-types` with `name` "Senior", `translations` `{ "ar": "كبار السن" }`, `prefix` "S", `priorityLevel` 1, `isPaid` false, no `feeAmount`, `isActive` true, Then 201 with `Location`, `translations` `{ "ar": "كبار السن" }`, `feeAmount` null, `currencyCode` "AED". A body without `translations` is also 201 with `translations` `{}`. A body with `isPaid` false and `feeAmount` 0 is rejected (AC-17). (amended 2026-11-08)
 
 **AC-16: Create a paid priority type**
-- Given Company 1 has no prefix P, When CA-C1 posts "Premium" / "مميز", prefix "P", `priorityLevel` 1, `isPaid` true, `feeAmount` 75.50, Then 201 and the DTO shows `isPaid` true and `feeAmount` 75.50. `feeAmount` 0 with `isPaid` true is accepted (free-of-charge paid type, `fee_amount >= 0`).
+- Given Company 1 has no prefix P, When CA-C1 posts `name` "Premium" with `translations` `{ "ar": "مميز" }`, prefix "P", `priorityLevel` 1, `isPaid` true, `feeAmount` 75.50, Then 201 and the DTO shows `isPaid` true and `feeAmount` 75.50. `feeAmount` 0 with `isPaid` true is accepted (free-of-charge paid type, `fee_amount >= 0`).
 
 **AC-17: Priority type validation**
-- Given CA-C1, When `POST /api/v1/priority-types` is sent with: (a) `nameEn` empty, (b) `nameAr` missing, (c) `prefix` "p", "PV", "7" or empty, (d) `priorityLevel` 0, (e) `priorityLevel` -1, (f) `isPaid` true and no `feeAmount`, (g) `isPaid` true and `feeAmount` 12.345, (h) `isPaid` true and `feeAmount` -1, (i) `isPaid` false and `feeAmount` 10, (j) `isPaid` true and `feeAmount` 10000000000, Then each response is 400 `validation.failed` with `errors` on the failing field (`nameEn`, `nameAr`, `prefix`, `priorityLevel`, `feeAmount`) and nothing is saved. The validator rejects (f) to (i) before the database check constraints are reached.
+- Given CA-C1, When `POST /api/v1/priority-types` is sent with: (a) `name` empty, (b) `name` missing, (c) `prefix` "p", "PV", "7" or empty, (d) `priorityLevel` 0, (e) `priorityLevel` -1, (f) `isPaid` true and no `feeAmount`, (g) `isPaid` true and `feeAmount` 12.345, (h) `isPaid` true and `feeAmount` -1, (i) `isPaid` false and `feeAmount` 10, (j) `isPaid` true and `feeAmount` 10000000000, (k) `translations` `{ "fr": "Senior" }`, (l) `translations` `{ "en": "Senior" }`, Then each response is 400 with `errors` on the failing field (`name`, `prefix`, `priorityLevel`, `feeAmount`, `translations.<code>`) and nothing is saved. Cases (a) to (j) return `validation.failed`; (k) returns `translation.language_not_enabled` (error keyed `translations.fr`); (l) returns `translation.default_language_key` (error keyed `translations.en`). A missing Arabic translation is not an error. (amended 2026-11-08) The validator rejects (f) to (i) before the database check constraints are reached.
 
 **AC-18: Priority type prefix unique per company**
 - Given Company 1 has Normal with prefix N and VIP with prefix V, When CA-C1 creates a priority type with prefix V, or `PUT`s Normal to prefix V, Then 409 `priority_type.prefix_taken`. A priority type and a service type may share a letter (prefix V on a priority type and a service type V are independent). CA-C2 may create prefix V in Company 2.
@@ -130,8 +130,8 @@ Test users (`SetupTestData`, ADR-008 §15): CA-C1 (Company Admin, Company 1), CA
 - Given a Company 1 priority type id, When CA-C2 calls `GET`, `PUT` or `DELETE`, Then each is 404 `priority_type.not_found`; the Company 1 row is unchanged; CA-C2's list shows only Company 2 rows.
 
 ### Roles and access
-**AC-25: Role matrix**
-- Given both resources, When each user calls `GET` list and `GET` item: CA-C1 and BM-B1 get 200. When BM-B1 calls `POST`, `PUT` or `DELETE`, Then 403 `auth.forbidden` and nothing changes. When CS or SA calls any of the ten endpoints (including `GET`), Then 403 `auth.forbidden`. When no token is sent, Then 401 `auth.unauthorized`. BM-B2 (another branch of Company 1) has the same read access as BM-B1, because these resources are company-wide.
+**AC-25: Permission matrix (amended 2026-11-08)**
+- Given the static permission map (ADR-009; resolved from the role until STORY-048): Company Admin holds `service-types.view|create|edit|delete` and `priority-types.view|create|edit|delete`; Branch Manager holds `service-types.view` and `priority-types.view` only; Counter Staff and Super Admin hold none. When CA-C1 calls any of the ten endpoints, Then it is allowed (GET list/item = view 200, POST = create 201, PUT = edit 200, DELETE = delete 204 or 409 in use). When BM-B1 calls `GET` list and `GET` item (view) on both resources, Then 200. When BM-B1 calls `POST` (create), `PUT` (edit) or `DELETE` (delete), Then 403 `auth.forbidden` and nothing changes. When CS or SA calls any of the ten endpoints (including `GET`), Then 403 `auth.forbidden`. When no token is sent, Then 401 `auth.unauthorized`. BM-B2 (another branch of Company 1) has the same view access as BM-B1, because these resources are company-wide. A unit test asserts the map entries for the eight permission names (`Permissions.All` lists them). The outcomes for each user are unchanged from the earlier role matrix.
 
 ### Audit
 **AC-26: Audit entry for every write**
@@ -173,9 +173,9 @@ Test users (`SetupTestData`, ADR-008 §15): CA-C1 (Company Admin, Company 1), CA
 
 ## 6. UI / UX
 No screen in this story; the screens `/admin/service-types` and `/admin/priority-types` are STORY-023 (M4). This section fixes the content for that story and for API consumers.
-- **Labels (English / Arabic, translated in M4):** Name (English) / الاسم (بالإنجليزية); Name (Arabic) / الاسم (بالعربية); Prefix / الرمز; Target minutes / الدقائق المستهدفة; Sort order / الترتيب; Active / نشط; Priority level (1 = highest) / مستوى الأولوية (1 = الأعلى); Paid / مدفوعة; Fee amount / مبلغ الرسوم; Currency (read only) / العملة. Final Arabic wording is for the M4 translator to confirm.
-- **Error codes the web app will translate (en + ar) in M4:** `service_type.prefix_taken`, `priority_type.prefix_taken`, `service_type.in_use`, `priority_type.in_use`, `service_type.not_found`, `priority_type.not_found`, `request.conflict`, `validation.failed`, `auth.forbidden`.
-- API text rules: names are stored and returned exactly as typed (trimmed), in both languages; Arabic text is not script-checked; API returns no display strings, only codes. A paid VIP type shows a ★ and a badge with a text label in later UI (rules 11).
+- **Labels (English / Arabic, translated in M4; amended 2026-11-08):** Name (default language, English) / الاسم (اللغة الافتراضية: الإنجليزية); Translations, one optional field per enabled language, phase 1 shows Arabic only (temporary until STORY-051) / الترجمات (اختياري)); Prefix / الرمز; Target minutes / الدقائق المستهدفة; Sort order / الترتيب; Active / نشط; Priority level (1 = highest) / مستوى الأولوية (1 = الأعلى); Paid / مدفوعة; Fee amount / مبلغ الرسوم; Currency (read only) / العملة. Final Arabic wording is for the M4 translator to confirm.
+- **Error codes the web app will translate (en + ar) in M4:** `service_type.prefix_taken`, `priority_type.prefix_taken`, `service_type.in_use`, `priority_type.in_use`, `service_type.not_found`, `priority_type.not_found`, `request.conflict`, `validation.failed`, `auth.forbidden`, `translation.language_not_enabled`, `translation.default_language_key`.
+- API text rules: names are stored and returned exactly as typed (trimmed), the default `name` and each translation; Arabic text is not script-checked; API returns no display strings, only codes. A paid VIP type shows a ★ and a badge with a text label in later UI (rules 11).
 - RTL: no layout in this story; the M4 form uses logical CSS properties.
 
 ## 7. Data and API impact
