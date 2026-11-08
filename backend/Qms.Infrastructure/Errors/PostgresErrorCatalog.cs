@@ -1,4 +1,5 @@
 using Qms.Application.Common;
+using Qms.Infrastructure.Persistence.Configurations;
 
 namespace Qms.Infrastructure.Errors;
 
@@ -27,12 +28,18 @@ public static class PostgresErrorCatalog
     private static readonly DatabaseError PriorityTypeInUse = new(ErrorType.Conflict, "priority_type.in_use");
     private static readonly DatabaseError UserNotFound = new(ErrorType.NotFound, "user.not_found");
     private static readonly DatabaseError LanguageNotEnabled = new(ErrorType.Validation, "language.not_enabled");
+    private static readonly DatabaseError RoleNameTaken = new(ErrorType.Conflict, "role.name_taken");
+    private static readonly DatabaseError RoleNotFound = new(ErrorType.NotFound, "role.not_found");
+    private static readonly DatabaseError RoleInUse = new(ErrorType.Conflict, "role.in_use");
     private static readonly DatabaseError ResourceNotFound = new(ErrorType.NotFound, ErrorCodes.ResourceNotFound);
 
     private static readonly Dictionary<string, DatabaseError> UniqueConstraints = new(StringComparer.Ordinal)
     {
         ["ix_service_type_company_id_prefix"] = new(ErrorType.Conflict, "service_type.prefix_taken"),
         ["ix_priority_type_company_id_prefix"] = new(ErrorType.Conflict, "priority_type.prefix_taken"),
+
+        // Roles (STORY-048): the name is unique per company ignoring case (an expression index created in the ConfigurableRoles migration).
+        [RoleConstraints.NameUnique] = RoleNameTaken,
     };
 
     // Foreign keys (23503 and 23001 share this table). Names are the ones PostgreSQL reports (63 characters at most).
@@ -60,10 +67,21 @@ public static class PostgresErrorCatalog
         ["fk_user_branch_branch_company_id_branch_id"] = ResourceNotFound,
         ["fk_user_counter_counter_company_id_counter_id"] = ResourceNotFound,
 
+        // Roles (STORY-048): a user_role row needs a user and a role of its own company. The role foreign key is also the restrict
+        // that stops deleting a role a user holds: that case is 23001 and answers role.in_use (see RestrictedForeignKeys).
+        [RoleConstraints.UserCompanyForeignKey] = UserNotFound,
+        [RoleConstraints.UserRoleRoleForeignKey] = RoleNotFound,
+
         // Languages (STORY-051). The Application checks these first; the database is the backstop. A user language outside the
         // registry is 400 language.not_enabled; a company default outside the registry is 400 request.invalid, not "in use".
         ["fk_asp_net_users_language_language_code"] = LanguageNotEnabled,
         ["fk_company_default_language_language_code"] = DefaultInvalid,
+    };
+
+    // Foreign keys whose violation by a restricted DELETE (23001) has another answer than the violation by an INSERT (23503).
+    private static readonly Dictionary<string, DatabaseError> RestrictedForeignKeys = new(StringComparer.Ordinal)
+    {
+        [RoleConstraints.UserRoleRoleForeignKey] = RoleInUse,
     };
 
     // Check constraints (23514) that have their own answer. Every check answers 400; these are listed so the catalog test proves
@@ -75,7 +93,7 @@ public static class PostgresErrorCatalog
 
     /// <summary>Every constraint or index name the catalog knows. A test checks each exists in the schema.</summary>
     public static IReadOnlyCollection<string> ConstraintNames { get; } =
-        [.. UniqueConstraints.Keys, .. ForeignKeys.Keys, .. CheckConstraints.Keys];
+        [.. UniqueConstraints.Keys, .. ForeignKeys.Keys, .. RestrictedForeignKeys.Keys, .. CheckConstraints.Keys];
 
     /// <summary>The answer for a database error, or null when the SQLSTATE is not one the catalog handles.</summary>
     public static DatabaseError? Map(string? sqlState, string? constraintName)
@@ -84,6 +102,8 @@ public static class PostgresErrorCatalog
         {
             case UniqueViolation:
                 return constraintName is not null && UniqueConstraints.TryGetValue(constraintName, out var duplicate) ? duplicate : DefaultDuplicate;
+            case RestrictViolation when constraintName is not null && RestrictedForeignKeys.TryGetValue(constraintName, out var restricted):
+                return restricted;
             case ForeignKeyViolation:
             case RestrictViolation:
                 return constraintName is not null && ForeignKeys.TryGetValue(constraintName, out var reference) ? reference : DefaultInUse;

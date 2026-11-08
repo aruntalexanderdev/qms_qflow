@@ -267,7 +267,7 @@ public sealed class UserAssignmentTests(PostgresFixture postgres)
         db.Database.HasPendingModelChanges().ShouldBeFalse();
 
         var constraints = await QueryAsync(connectionString, "SELECT conname || ' ' || contype::text FROM pg_constraint WHERE conname LIKE '%user_company%' OR conname = 'ux_asp_net_users_id_company_id'");
-        constraints.ShouldBe(["fk_user_branch_user_company f", "fk_user_counter_user_company f", "ux_asp_net_users_id_company_id u"], ignoreOrder: true);
+        constraints.ShouldBe(["fk_user_branch_user_company f", "fk_user_counter_user_company f", "fk_user_role_user_company f", "ux_asp_net_users_id_company_id u"], ignoreOrder: true);
 
         var definitions = await QueryAsync(connectionString, "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname LIKE 'fk_user_%_user_company'");
         definitions.ShouldAllBe(d => d.Contains("(user_id, company_id) REFERENCES asp_net_users(id, company_id) ON DELETE CASCADE"));

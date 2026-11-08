@@ -57,9 +57,24 @@ public sealed class UserAccounts(UserManager<AppUser> users, IPasswordHasher<App
     public Task<bool> IsInCompanyAsync(Guid userId, Guid companyId, CancellationToken cancellationToken) =>
         db.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.CompanyId == companyId, cancellationToken);
 
+    /// <summary>
+    /// TEMPORARY adapter (STORY-048 stage 2, removed by TASK-015): after the ConfigurableRoles migration only SuperAdmin is an
+    /// Identity role, so a company user's single <c>role</c> is the system code of their most privileged system role in
+    /// <c>user_role</c>. It keeps the static resolver and the scope check working until the database-backed resolver replaces them.
+    /// </summary>
+    private async Task<string?> SystemRoleCodeAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var code = await db.CompanyUserRoles.IgnoreQueryFilters().AsNoTracking()
+            .Where(userRole => userRole.UserId == userId && userRole.Role!.SystemCode != null && userRole.Role.IsActive)
+            .OrderBy(userRole => userRole.Role!.SortOrder)
+            .Select(userRole => userRole.Role!.SystemCode)
+            .FirstOrDefaultAsync(cancellationToken);
+        return code?.ToString();
+    }
+
     private async Task<CurrentUserDto?> ToDtoAsync(AppUser user, CancellationToken cancellationToken)
     {
-        var role = (await users.GetRolesAsync(user)).FirstOrDefault();
+        var role = (await users.GetRolesAsync(user)).FirstOrDefault() ?? await SystemRoleCodeAsync(user.Id, cancellationToken);
         if (role is null)
         {
             // A user without a role cannot be authorised for anything.

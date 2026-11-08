@@ -118,7 +118,10 @@ public sealed class SetupTestData
                 {
                     existing = new AppUser { UserName = userName, DisplayName = userName, CompanyId = company };
                     Check(await users.CreateAsync(existing, Password));
-                    Check(await users.AddToRoleAsync(existing, role));
+                    if (role == Roles.SuperAdmin)
+                    {
+                        Check(await users.AddToRoleAsync(existing, role));
+                    }
                 }
 
                 userIds[user] = existing.Id;
@@ -127,10 +130,20 @@ public sealed class SetupTestData
 
         await using (var db = host.OpenContext())
         {
+            // Company users hold their company's system role through user_role (ADR-009); only Super Admin is an Identity role.
+            await EnsureSystemRolesAsync(db, SeedIds.Company1);
+            await EnsureSystemRolesAsync(db, Company2);
             foreach (var (user, userId) in userIds)
             {
                 var (branches, counters) = Assignments(user);
                 var company = Definitions[user].Company;
+                if (company is { } roleCompany && Enum.Parse<SystemRoleCode>(Definitions[user].Role) is var code
+                    && !await db.CompanyUserRoles.IgnoreQueryFilters().AnyAsync(a => a.UserId == userId))
+                {
+                    var roleId = await db.CompanyRoles.IgnoreQueryFilters().Where(r => r.CompanyId == roleCompany && r.SystemCode == code).Select(r => r.Id).SingleAsync();
+                    db.CompanyUserRoles.Add(new UserRole { CompanyId = roleCompany, UserId = userId, RoleId = roleId });
+                }
+
                 foreach (var branchId in branches)
                 {
                     if (!await db.UserBranches.IgnoreQueryFilters().AnyAsync(a => a.UserId == userId && a.BranchId == branchId))
@@ -161,6 +174,19 @@ public sealed class SetupTestData
         SetupUser.CounterStaff => ([SeedIds.Branch1], [SeedIds.Counter(1)]),
         _ => ([], []),
     };
+
+    /// <summary>Adds the three system roles with their default grants when the company has none (TASK-015 adds the custom-role helpers).</summary>
+    private static async Task EnsureSystemRolesAsync(Qms.Infrastructure.Persistence.QmsDbContext db, Guid companyId)
+    {
+        var existing = await db.CompanyRoles.IgnoreQueryFilters().Where(r => r.CompanyId == companyId && r.SystemCode != null)
+            .Select(r => r.SystemCode!.Value).ToListAsync();
+        foreach (var role in DefaultRoles.CreateFor(companyId).Where(r => !existing.Contains(r.SystemCode!.Value)))
+        {
+            db.CompanyRoles.Add(role);
+        }
+
+        await db.SaveChangesAsync();
+    }
 
     private static async Task EnsureCompany2Async(Qms.Infrastructure.Persistence.QmsDbContext db)
     {

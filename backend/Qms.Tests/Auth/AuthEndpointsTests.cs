@@ -408,8 +408,11 @@ public sealed class AuthEndpointsTests(PostgresFixture postgres)
                 UserName = staffName, DisplayName = "Staff", CompanyId = AuthHost.Company1, Language = "ar",
             };
             (await users.CreateAsync(staff, staffPassword)).Succeeded.ShouldBeTrue();
-            (await users.AddToRoleAsync(staff, "CounterStaff")).Succeeded.ShouldBeTrue();
             await using var db = host.OpenContext();
+            // The company role comes from user_role (ADR-009); only Super Admin is an Identity role.
+            var staffRoleId = await db.CompanyRoles.IgnoreQueryFilters().Where(r => r.CompanyId == AuthHost.Company1 && r.SystemCode == Qms.Domain.Enums.SystemRoleCode.CounterStaff)
+                .Select(r => r.Id).SingleAsync();
+            db.CompanyUserRoles.Add(new Qms.Domain.Entities.UserRole { CompanyId = AuthHost.Company1, UserId = staff.Id, RoleId = staffRoleId });
             db.UserBranches.Add(new Qms.Domain.Entities.UserBranch
             {
                 CompanyId = AuthHost.Company1, UserId = staff.Id, BranchId = Qms.Infrastructure.Persistence.Seed.SeedIds.Branch1,
@@ -479,13 +482,14 @@ public sealed class AuthEndpointsTests(PostgresFixture postgres)
     // ---- seeding
 
     [Fact]
-    public async Task The_four_roles_and_the_two_admins_are_seeded_once()
+    public async Task Only_SuperAdmin_is_an_identity_role_and_the_two_admins_are_seeded_once()
     {
         using var host = await AuthHost.StartAsync(postgres);
 
         await using var db = host.OpenContext();
-        (await db.Roles.Select(r => r.Name).OrderBy(n => n).ToListAsync())
-            .ShouldBe(["BranchManager", "CompanyAdmin", "CounterStaff", "SuperAdmin"]);
+        // Since STORY-048 only SuperAdmin is an Identity role; the company roles are rows of `role` (the Company Admin holds one through user_role).
+        (await db.Roles.Select(r => r.Name).OrderBy(n => n).ToListAsync()).ShouldBe(["SuperAdmin"]);
+        (await db.CompanyRoles.IgnoreQueryFilters().CountAsync()).ShouldBe(3);
         var users = await db.Users.OrderBy(u => u.UserName).ToListAsync();
         users.Select(u => u.UserName).ShouldBe([TestAccounts.CompanyAdminUserName, TestAccounts.SuperAdminUserName]);
         users.Single(u => u.UserName == TestAccounts.SuperAdminUserName).CompanyId.ShouldBeNull();
@@ -499,7 +503,9 @@ public sealed class AuthEndpointsTests(PostgresFixture postgres)
         _ = second.Services;
         await using var again = host.OpenContext();
         (await again.Users.CountAsync()).ShouldBe(2);
-        (await again.Roles.CountAsync()).ShouldBe(4);
+        (await again.Roles.CountAsync()).ShouldBe(1);
+        (await again.CompanyRoles.IgnoreQueryFilters().CountAsync()).ShouldBe(3);
+        (await again.CompanyUserRoles.IgnoreQueryFilters().CountAsync()).ShouldBe(1);
     }
 
     [Fact]
@@ -517,7 +523,7 @@ public sealed class AuthEndpointsTests(PostgresFixture postgres)
 
         await using var db = PostgresFixture.CreateContext(connectionString);
         (await db.Users.CountAsync()).ShouldBe(0);
-        (await db.Roles.CountAsync()).ShouldBe(4);
+        (await db.Roles.CountAsync()).ShouldBe(1);
     }
 
     [Fact]

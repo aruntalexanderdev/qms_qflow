@@ -57,6 +57,13 @@ public interface IQmsDbContext
 
     DbSet<TokenSequence> TokenSequences { get; }
 
+    /// <summary>Company roles (<c>role</c>, ADR-009). Named so it does not clash with the Identity sets of the implementation.</summary>
+    DbSet<Role> CompanyRoles { get; }
+
+    DbSet<RolePermission> RolePermissions { get; }
+
+    DbSet<UserRole> CompanyUserRoles { get; }
+
     DbSet<AuditLog> AuditLogs { get; }
 
     DbSet<MessageLog> MessageLogs { get; }

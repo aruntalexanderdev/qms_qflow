@@ -1504,6 +1504,138 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.ToTable("refresh_token", (string)null);
                 });
 
+            modelBuilder.Entity("Qms.Domain.Entities.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BranchScope")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("branch_scope");
+
+                    b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_system");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameTranslations")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("name_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("SystemCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("system_code");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_role");
+
+                    b.HasAlternateKey("CompanyId", "Id")
+                        .HasName("ak_role_company_id_id");
+
+                    b.HasIndex("CompanyId", "SystemCode")
+                        .IsUnique()
+                        .HasDatabaseName("ux_role_company_id_system_code")
+                        .HasFilter("system_code IS NOT NULL");
+
+                    b.ToTable("role", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_role_branch_scope", "branch_scope IN ('Company', 'Assigned')");
+
+                            t.HasCheckConstraint("ck_role_is_system_matches_system_code", "is_system = (system_code IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_role_name_translations_object", "jsonb_typeof(name_translations) = 'object'");
+
+                            t.HasCheckConstraint("ck_role_system_code", "system_code IS NULL OR system_code IN ('CompanyAdmin', 'BranchManager', 'CounterStaff')");
+                        });
+                });
+
+            modelBuilder.Entity("Qms.Domain.Entities.RolePermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("permission");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_role_permission");
+
+                    b.HasIndex("CompanyId", "RoleId")
+                        .HasDatabaseName("ix_role_permission_company_id_role_id");
+
+                    b.HasIndex("RoleId", "Permission")
+                        .IsUnique()
+                        .HasDatabaseName("ux_role_permission_role_id_permission");
+
+                    b.ToTable("role_permission", (string)null);
+                });
+
             modelBuilder.Entity("Qms.Domain.Entities.ServiceFlow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2191,6 +2323,55 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.ToTable("user_counter", (string)null);
                 });
 
+            modelBuilder.Entity("Qms.Domain.Entities.UserRole", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_role");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_user_role_user_id");
+
+                    b.HasIndex("CompanyId", "RoleId")
+                        .HasDatabaseName("ix_user_role_company_id_role_id");
+
+                    b.HasIndex("UserId", "RoleId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_user_role_user_id_role_id");
+
+                    b.ToTable("user_role", (string)null);
+                });
+
             modelBuilder.Entity("Qms.Domain.Entities.Zone", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2876,6 +3057,34 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_refresh_token_asp_net_users_user_id");
                 });
 
+            modelBuilder.Entity("Qms.Domain.Entities.Role", b =>
+                {
+                    b.HasOne("Qms.Domain.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_company_company_id");
+                });
+
+            modelBuilder.Entity("Qms.Domain.Entities.RolePermission", b =>
+                {
+                    b.HasOne("Qms.Domain.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_permission_company_company_id");
+
+                    b.HasOne("Qms.Domain.Entities.Role", null)
+                        .WithMany("Permissions")
+                        .HasForeignKey("CompanyId", "RoleId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_permission_role_company_id_role_id");
+                });
+
             modelBuilder.Entity("Qms.Domain.Entities.ServiceFlow", b =>
                 {
                     b.HasOne("Qms.Domain.Entities.Company", null)
@@ -3176,6 +3385,33 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.Navigation("Counter");
                 });
 
+            modelBuilder.Entity("Qms.Domain.Entities.UserRole", b =>
+                {
+                    b.HasOne("Qms.Domain.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_role_company_company_id");
+
+                    b.HasOne("Qms.Infrastructure.Persistence.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_role_asp_net_users_user_id");
+
+                    b.HasOne("Qms.Domain.Entities.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "RoleId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_role_role_company_id_role_id");
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("Qms.Domain.Entities.Zone", b =>
                 {
                     b.HasOne("Qms.Domain.Entities.Company", null)
@@ -3211,6 +3447,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_asp_net_users_language_language_code");
+                });
+
+            modelBuilder.Entity("Qms.Domain.Entities.Role", b =>
+                {
+                    b.Navigation("Permissions");
                 });
 #pragma warning restore 612, 618
         }

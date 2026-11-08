@@ -39,6 +39,9 @@ public sealed class SchemaTests(PostgresFixture postgres, ITestOutputHelper outp
         ["refresh_token"] = ["id", "created_at", "updated_at", "user_id", "token_hash", "family_id", "expires_at", "revoked_at", "replaced_by_id", "created_ip"],
         ["user_branch"] = ["id", "created_at", "updated_at", "company_id", "user_id", "branch_id"],
         ["user_counter"] = ["id", "created_at", "updated_at", "company_id", "user_id", "counter_id"],
+        ["role"] = ["id", "created_at", "updated_at", "company_id", "name", "name_translations", "branch_scope", "is_system", "system_code", "is_active", "sort_order"],
+        ["role_permission"] = ["id", "created_at", "updated_at", "company_id", "role_id", "permission"],
+        ["user_role"] = ["id", "created_at", "updated_at", "company_id", "user_id", "role_id"],
     };
 
     private static readonly string[] IdentityTables =

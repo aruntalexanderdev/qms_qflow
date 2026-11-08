@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Qms.Application.Auth;
 using Qms.Domain.Entities;
 using Qms.Domain.Enums;
 
@@ -8,7 +9,7 @@ namespace Qms.Infrastructure.Persistence.Seed;
 /// <summary>
 /// Seeds Company 1 / Branch 1 exactly as spec section 4 (Development and test environments only; the API
 /// decides when to call it). Idempotent: a row is inserted only when its natural key is missing, so a second
-/// run changes nothing and edits made by an admin are never overwritten. Users and roles are STORY-003.
+/// run changes nothing and edits made by an admin are never overwritten. Users are created by the IdentitySeeder; the three system roles of Company 1 come from <see cref="DefaultRoles"/> (STORY-048).
 /// </summary>
 public sealed class DevSeeder(QmsDbContext db)
 {
@@ -47,6 +48,14 @@ public sealed class DevSeeder(QmsDbContext db)
         {
             Id = company, Name = "Company 1", NameTranslations = Arabic("الشركة 1"), DefaultLanguage = "en", EnabledLanguages = ["en"], Code = "C1", CurrencyCode = "AED",
         }, cancellationToken);
+
+        // The system roles with their default grants (ADR-009 section 4), one per system code, never overwritten once they exist.
+        var existingCodes = await db.CompanyRoles.IgnoreQueryFilters().Where(r => r.CompanyId == company && r.SystemCode != null)
+            .Select(r => r.SystemCode!.Value).ToListAsync(cancellationToken);
+        foreach (var role in DefaultRoles.CreateFor(company).Where(r => !existingCodes.Contains(r.SystemCode!.Value)))
+        {
+            db.CompanyRoles.Add(role);
+        }
 
         for (var number = 1; number <= ServicePrefixes.Length; number++)
         {

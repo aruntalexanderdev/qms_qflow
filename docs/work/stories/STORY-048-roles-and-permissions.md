@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-048 |
-| Status | Database |
+| Status | Backend |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 8 (roles and permissions, default roles, `/admin/roles`), 9 (`role`, `role_permission`, `user_role`, Identity roles), 10 (`/roles`, `/permissions`, `/auth/me`), 11 (Security, Audit), 12 (M2), 13 (roles and permissions resolved) |
@@ -302,3 +302,17 @@ Notes for next stage:
 - Counts to assert: Company Admin 60 permissions, Branch Manager 28, Counter Staff 0 (19 modules incl. `company-languages`).
 - Role `version` must change when only permissions change (touch the role row).
 Open questions: none blocking (see section 10: navigation codes for not-yet-live entries; no-role sign-in).
+
+### Stage 2 — Database — database-architect — 2026-11-08
+Result: Done
+Changed: `backend/Qms.Domain/Entities/Identity/{Role,RolePermission,UserRole}.cs`, `backend/Qms.Domain/Enums/{RoleBranchScope,SystemRoleCode}.cs`, `backend/Qms.Infrastructure/Persistence/Configurations/RoleConfigurations.cs`, `backend/Qms.Infrastructure/Persistence/QmsDbContext.cs`, `backend/Qms.Infrastructure/Persistence/Migrations/20261108101828_ConfigurableRoles*.cs` + snapshot, `backend/Qms.Infrastructure/Persistence/Seed/DevSeeder.cs`, `backend/Qms.Infrastructure/Identity/IdentitySeeder.cs`, `backend/Qms.Infrastructure/Identity/UserAccounts.cs` (temporary adapter), `backend/Qms.Infrastructure/Errors/PostgresErrorCatalog.cs`, `backend/Qms.Application/Auth/{Permissions,DefaultRoles}.cs`, `backend/Qms.Application/Common/IQmsDbContext.cs`, tests `Persistence/ConfigurableRolesTests.cs` (new), `SchemaTests`, `UserAssignmentTests`, `Auth/AuthEndpointsTests`, `Support/SetupTestData`; task [TASK-014](../tasks/TASK-014-roles-schema-migration-seed.md)
+Notes for next stage:
+- New tables: `role` (company_id, name, name_translations, branch_scope, is_system, system_code, is_active, sort_order), `role_permission` (company_id, role_id, permission), `user_role` (company_id, user_id, role_id). EF sets: `db.CompanyRoles`, `db.RolePermissions`, `db.CompanyUserRoles` (also on `IQmsDbContext`; `Roles` / `UserRoles` belong to Identity). `Role.Permissions` is the navigation to `role_permission` (cascade). `Role.BranchScope` is `RoleBranchScope`, `Role.SystemCode` is `SystemRoleCode?`.
+- Constraint names in `RoleConstraints` (Infrastructure): `ux_role_company_id_lower_name` (expression index, raw SQL, not in the EF model), `ux_role_company_id_system_code`, `ux_role_permission_role_id_permission`, `ux_user_role_user_id_role_id`, FKs `fk_role_permission_role_company_id_role_id` (cascade), `fk_user_role_role_company_id_role_id` (restrict), `fk_user_role_user_company` (raw SQL, cascade). `PostgresErrorCatalog` already maps them (`role.name_taken`, `user.not_found`, `role.not_found`; restrict delete 23001 -> `role.in_use`); AC-18 only needs a test over the existing entries.
+- Version: `role` has `xmin` like every entity. Updating only `role_permission` rows does not change the role's `xmin`: touch the role row (e.g. `UpdatedAt`) in the update handler (story section 9).
+- Catalog: `Permissions.All` has the 60 codes; TASK-015 adds the description (display order, view rule) and `GET /permissions`. `DefaultRoles.Definitions` / `CreateFor(companyId)` give the three system roles with grants (60 / 28 / 0) for STORY-047 and the tests; a test keeps it equal to the migration SQL.
+- TEMPORARY ADAPTER to remove in TASK-015: `UserAccounts.ToDtoAsync` (Infrastructure/Identity) falls back to the system code of the user's most privileged active system role in `user_role` when the user has no Identity role. It lets the `role` claim, `StaticRolePermissionResolver`, `BranchScope` (`IsInRole(CompanyAdmin)`) and all existing tests keep working. The full suite is green with it (505 passed, 0 failed, 0 skipped). Without it, every company-user login would return 401 (no role).
+- Tests changed because of the schema (not because of the adapter): `SchemaTests` (three new tables), `UserAssignmentTests` (raw constraint list), `AuthEndpointsTests` (Identity roles = only `SuperAdmin`; the counter-staff login test gets its role through `user_role`). `SetupTestData` now seeds the system roles of Company 1 and 2 and `user_role` rows for CA-C1, CA-C2, BM-B1, BM-B2, CS; only SA uses an Identity role. TASK-015 still adds the custom "Type Viewer" user CU-C1 and the grant/revoke helpers (AC-32) and moves the test host's `AuthHost.UserOf`/`CurrentUserDto.Role` to `IsSuperAdmin`.
+- `IdentitySeeder` now takes `QmsDbContext`; `Roles.All` still lists the four names (used for authorization policies in `AuthenticationSetup` and by tests); TASK-015 reduces it with the contract change.
+- Migration ids of rows it creates are `gen_random_uuid()` (v4); fine for lookups by `system_code`.
+Open questions: none

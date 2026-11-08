@@ -82,6 +82,12 @@ public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant
 
     public DbSet<UserCounter> UserCounters => Set<UserCounter>();
 
+    public DbSet<Role> CompanyRoles => Set<Role>();
+
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+
+    public DbSet<UserRole> CompanyUserRoles => Set<UserRole>();
+
     Task<IDbContextTransaction> IQmsDbContext.BeginTransactionAsync(CancellationToken cancellationToken) =>
         Database.BeginTransactionAsync(cancellationToken);
 
@@ -98,6 +104,8 @@ public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant
         configurationBuilder.Properties<FlowMode>().HaveConversion<string>().HaveMaxLength(32);
         configurationBuilder.Properties<MessageChannel>().HaveConversion<string>().HaveMaxLength(32);
         configurationBuilder.Properties<MessageStatus>().HaveConversion<string>().HaveMaxLength(32);
+        configurationBuilder.Properties<RoleBranchScope>().HaveConversion<string>().HaveMaxLength(32);
+        configurationBuilder.Properties<SystemRoleCode>().HaveConversion<string>().HaveMaxLength(32);
         configurationBuilder.Properties<PrinterStatus>().HaveConversion<string>().HaveMaxLength(32);
         configurationBuilder.Properties<SkipDefault>().HaveConversion<string>().HaveMaxLength(32);
         configurationBuilder.Properties<TokenMode>().HaveConversion<string>().HaveMaxLength(32);
