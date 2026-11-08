@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | QA |
+| Status | Frontend |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -517,3 +517,12 @@ Notes for next stage: QA (stage 7) runs AC-1 to AC-18 against the real stack (`d
 - AC-11 and AC-15 with two tabs.
 S7, N8 and N9 do not block. Raise them as follow-up tasks if stage 4 does not fix them before the first data-endpoint story.
 Open questions: none
+
+### Stage 7 — QA — qa-tester — 2026-11-08
+Result: Failed (one Minor bug; story returns to the owning stage)
+Test cases and results: [STORY-004-tests.md](STORY-004-tests.md) (TC-004-1 to TC-004-18).
+AC results: AC-1 Pass, AC-2 Pass, AC-3 Pass, AC-4 Pass, AC-5 Pass, AC-6 Pass, AC-7 Pass, AC-8 Pass, AC-9 Pass, AC-10 Pass, AC-11 Pass, AC-12 Pass, AC-13 Pass, AC-14 Pass, AC-15 Pass, AC-16 Fail (BUG-001), AC-17 Pass, AC-18 Pass
+Bugs: BUG-001 (Minor, stage 4): with the API stopped, the dev proxy and Nginx answer 502 and the app shows `errors.unknown` ("Something went wrong") instead of `errors.network` ("Cannot reach the server"). Session is kept and recovery works; only the text is wrong. Suggested fix: map status 0, 502, 503, 504 without a problem-details code to `network`.
+Checks run: `npm run lint`, `npm test -- --watch=false` (88 green), `npm run build`, backend `Auth` filter (94 green); Playwright on real API + postgres:18 via `ng serve` proxy and via the production build behind Nginx (en + ar); axe clean on login, shell, narrow shell and drawer; keyboard walkthrough; preview.html comparison (only trivial deviations).
+Manual device checks pending: none (web only). Not verifiable here: `docker compose up --build` image build (sandbox npm proxy); GitHub Actions run of AC-9.
+Next: stage 4 fixes BUG-001, then stage 6 re-review, then QA retests AC-16 (dev proxy and Nginx, en + ar) and signs off. Known follow-ups S7, N2, N4, N5, N7, N8, N9 stay open and are not blockers.
