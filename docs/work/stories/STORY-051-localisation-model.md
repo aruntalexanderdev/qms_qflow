@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-051 |
-| Status | Code Review |
+| Status | QA |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 2 (Web i18n, Display voice), 7 (dispenser languages), 8 (`/login` language choice, `/admin/languages`), 9 (translated text pattern, `language`, `company`, all former `*_en` / `*_ar` columns, user `language`, `dispenser_setting.languages`), 10 (`/languages`, `/company-languages`), 11 (Languages), 12 (M2), 13 (localisation resolved) |
@@ -475,3 +475,44 @@ Result: N/A — No Android code exists yet (stage plan)
 Changed: none
 Notes for next stage: Ready for code review (stage 6).
 Open questions: none
+
+### Stage 6 — Code review — code-reviewer — 2026-11-08
+Result: Approved
+Builds/tests: backend ✅ (`dotnet build -c Release` 0 warnings / 0 errors; `dotnet test -c Release` 489 passed, 0 failed, 0 skipped, 3 min 30 s) · web ✅ (`npm ci`; `npm run lint` clean (ng lint + stylelint); `npm test -- --watch=false` 13 files / 115 tests passed; `npm run build` green) · android N/A
+ACs checked: AC-1 ✅, AC-2 ✅, AC-3 ✅ (see S2), AC-4 ✅, AC-5 ✅, AC-6 ✅, AC-7 ✅, AC-8 ✅, AC-9 ✅, AC-10 ✅, AC-11 ✅, AC-12 ✅, AC-13 ✅, AC-14 ✅, AC-15 ✅, AC-16 ✅, AC-17 ✅, AC-18 ✅, AC-19 ✅, AC-20 ✅ (see S1), AC-21 ✅, AC-22 ✅, AC-23 ✅, AC-24 ✅, AC-25 ✅, AC-26 ✅, AC-27 ✅, AC-28 ✅, AC-29 ✅, AC-30 ✅, AC-31 ✅, AC-32 ✅, AC-33 ✅, AC-34 ✅, AC-35 ✅ (see S3), AC-36 ✅, AC-37 ✅, AC-38 ✅, AC-39 ✅, AC-40 ✅
+
+What was checked (summary):
+- Migration: the fill uses `btrim(x, E' \t\r\n')` and skips blank values and values equal to the English text. Ids, length and not-null survive the renames (`RenameColumn`). The PostgreSQL 18 `*_en_not_null` constraints are renamed in both directions, guarded by `pg_constraint`. No `xmin` DDL; `xmin` appears only in the model/snapshot as the row version. The Down migration documents its losses (non-`ar` keys, the dispenser fix not reverted, the user check needing en/ar only); its test re-applies Up. `HasPendingModelChanges` is green. The jsonb converter plus content comparer (copy snapshot, order-independent hash) tracks in-place add/edit/remove; a new dictionary with the same content and an unchanged load send no `UPDATE` (tests at LocalisationMigrationTests.cs:354, :402).
+- Tenant safety: `CompanyLanguages` joins the registry to `db.Companies`, and the `company.Id == CurrentCompanyId` query filter leaves only the caller's company. With no company, only the registry is read. `/languages` returns registry data only to anonymous callers and the Super Admin. An invalid token on `/languages` gives the anonymous answer, which is the same as calling without a token, so it cannot be used to probe anything (accepted). The 409 `devices` list comes from tenant-filtered `DispenserSettings`/`Device`, so devices of other companies cannot appear (see S1 for the test).
+- LocalizedTextRules: keys are matched case-insensitively against the enabled list, duplicates by case are refused, and `en` gives `translation.default_language_key`. Blank values are dropped before key checks (matches AC-27: `{"ar": ""}` gives 201 in phase 1). `Merge` keeps stored keys of languages that are not enabled. `ForAdmin` returns only enabled non-default keys. `Resolve`/`ResolveAll` fall back field by field. The negotiator handles q-values, `q=0`, `*`, invalid q, primary subtag and a 32-entry cap. `ICompanyLanguages` runs one query per request (AC-26 test).
+- PUT /company-languages: a full replacement (`Sent`, duplicates, blank code) → 404 → stale version 409 → not_available → default_required → in_use 409 → save with `xmin` original value. A no-op writes the audit row with no UPDATE, the version is unchanged and no notifier runs. The notifier runs once per branch, post-commit, only on a change. Permissions: Company Admin only; the catalog and reflection tests cover it.
+- STORY-005: only the agreed contract change; the C2 bodies in two isolation tests dropped `ar` (needed, because C2 has `{en}`); the assertions are unchanged.
+- Frontend: precedence matches ADR-007 A1 (stored value written only when signed in). One load runs per identity key, and an older answer is discarded when the key changed. On failure the UI falls back to English with no switch, and the key is cleared so a later load can retry. The switch is not rendered with one language (also at the call sites). `Accept-Language` is sent only on same-origin `/api/` calls. There is no circular DI (`LanguageState`). No `'en' | 'ar'` type or `SUPPORTED_LANGUAGES` remains (only test fakes use `ar`). The switch keeps `lang`, `aria-pressed`, the 44 px targets and the focus-ring test.
+
+Must fix
+- none
+
+Should fix
+- S1 [stage 3] backend/Qms.Tests/Setup/CompanyLanguagesApiTests.cs:283 — `Ac20_a_dispenser_of_another_company_does_not_block` would pass even without the tenant filter: no Company 2 dispenser setting lists `ar` (the comment says it has no settings row). → Insert or update a Company 2 dispenser setting with `{en, ar}` by SQL. Assert that C1's `PUT ["en"]` returns 200, and that the AC-20 409 `devices` list never contains the C2 device.
+- S2 [stage 2] backend/Qms.Tests/Persistence/LocalisationMigrationTests.cs:507 — the migration says it trims tab, CR and LF (`Localisation.cs:14`, `:26`), but the previous-schema data only has spaces (`"  "`, `" ... "`). → Add a row with tab/CR/LF padding and one that is only `\t\r\n`, expecting `{"ar": ...}` trimmed and `{}`.
+- S3 [stage 4] frontend/src/app/core/i18n/language.service.spec.ts — the logic that discards a superseded load (`language.service.ts:92` onwards) has no test. → Add two tests. (a) Sign in while the anonymous `/languages` request is still pending: the anonymous answer must not be applied after the user's answer. (b) Sign out while the user's request is pending: the user's list must not appear after sign-out.
+- S4 [stage 3, carry to STORY-012] backend/Qms.Application/Localisation/CompanyLanguages/UpdateCompanyLanguages.cs:70-79 — the in-use check and a dispenser-settings write are not serialised. Once STORY-012 lets dispenser languages be edited, a concurrent "add `ar` to a dispenser" and "disable `ar`" can both commit. No write path exists today, so this is not a defect now. → STORY-012 locks the company row (`SELECT … FOR UPDATE`) in both writes, or re-checks inside the same locked transaction. Record it in STORY-012.
+
+Nice to have
+- N1 backend/Qms.Tests/Setup/LanguagesApiTests.cs:192 — the test name says "does not touch the language tables" but it asserts one query. Rename it.
+- N2 UpdateCompanyLanguages.cs:108 — `DispensersListingAsync` runs one query per removed code. A single query (`setting.Languages.Any(code => removed.Contains(code))`) would do; it only matters once more languages exist.
+- N3 frontend/src/app/core/i18n/language.service.ts:110 — `resolve` reads `this.store.user()` instead of the identity the load was made for. This is harmless today (the effect starts a new load and that result wins). Passing the user of the load identity would make the rule clearer.
+- N4 frontend/src/app/core/i18n/translations.spec.ts:20, :55 — the "available" list for the parity check is a fixture, not tied to the registry. Add a comment: when a release makes a language available, its file goes into `FILES` and into the available list.
+- N5 AC-31 wording: every STORY-005 API test moved to the ar-enabled database, not only the ones that send or expect `ar`. The phase 1 path is covered by `LocalisedNamesApiTests` (AC-27/AC-28), so this is fine; noted for QA.
+- N6 CI time (3 min 30 s for 489 tests): every test class is in the single `PostgresCollection`, so xUnit runs everything one after another. Each test also starts a new `WebApplicationFactory` and clones a database. Steps to consider:
+  - (1) Split into 3–4 collections (Persistence, Auth, Setup, Application/unit), each with its own `PostgresFixture` container. Databases are already per test, so this is safe, and xUnit runs the collections in parallel (about 4 containers × 300 MB).
+  - (2) Or keep one container and share it through an assembly-level fixture (xUnit v3 `AssemblyFixture`) with several collections. Per-test template clones already isolate the data.
+  - (3) Move pure unit tests (LocalizedTextRules, negotiator, catalog) out of the collection so they run in parallel right away.
+  - (4) Later: share one `QmsApiFactory` per class for read-only tests.
+  - Expected: under 1.5 min. Not blocking.
+
+Notes for next stage (QA):
+- Run AC-32 to AC-39 on the phase 1 stack and on the ar-enabled stack. To enable: `UPDATE language SET is_available=true WHERE code='ar'; UPDATE company SET enabled_languages='{en,ar}' WHERE code='C1';`. To revert: `enabled_languages='{en}'`, `is_available=false`.
+- STORY-004 AC-3 and AC-17 are re-based by AC-38 (Arabic only when offered).
+- `/languages` answers an invalid or expired token as anonymous (200). This was accepted in review.
+Open questions: none (the two stage 3 deviations are accepted: `IRequestLanguage.GetCurrentAsync(ct)` is async, and a 200 PUT with an ignored `defaultLanguage` is audited, as ADR-008 Amendment 3 says).

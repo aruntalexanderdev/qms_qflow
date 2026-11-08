@@ -51,6 +51,8 @@ Product owner decisions of 2026-11-08 (companies story, configurable roles, pass
 
 STORY-004 follow-ups from localisation (STORY-004 is merged; built by STORY-051 stage 4): the hard-coded `en`/`ar` language list, `Language` type and `ar` → rtl check are replaced by `GET /languages` and the language direction; the switch is hidden when one language is offered; `ar.json` stays in the repository but is not offered and no longer has to receive new keys.
 
+Follow-ups from STORY-051 review (not blocking): S1 Company-2 dispenser test for `/company-languages` in-use; S2 migration test data with tab/CR/LF; S3 frontend test for discarded stale language loads; S4 lock the company row in both `/company-languages` and dispenser-settings writes (do in **STORY-012**). **Test-suite speed (N6)**: split the backend DB tests into 3–4 xUnit collections with their own PostgreSQL container and move pure unit tests out — target < 1.5 min; do as a small task before STORY-009.
+
 ### M3 Queue engine
 | Story | Title |
 | --- | --- |
