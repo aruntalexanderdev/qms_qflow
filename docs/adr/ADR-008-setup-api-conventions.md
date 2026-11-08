@@ -25,6 +25,7 @@ All under `/api/v1`. Collections keep the spec §10 shape (nested under their pa
 | Whole-set resource | `GET`, `PUT` | `/company-service-mapping`, `/branches/{id}/service-mapping`, `/counters/{id}/service-mapping`, `/devices/{id}/zone-service-mapping`, `/branches/{id}/priority-fees`, `/branches/{id}/hours` |
 | Singleton | `GET`, `PUT` | `/branches/{id}/settings`, `/devices/{id}/dispenser-settings` |
 | Action | `POST` | `/devices/{id}/registration-code`, `/users/{id}/password` |
+| Read-only view | `GET` | `/ticket-templates/{id}/preview` |
 
 - `PUT` replaces all editable fields (no PATCH). `POST` create → 201 with `Location` and the DTO; `PUT` → 200 with the DTO; `DELETE` → 204; whole-set `PUT` → 200 with the saved set.
 - `/branches/{id}/hours` is a whole-week set (spec says CRUD): a weekly schedule is edited and validated (no overlaps) as one unit.
@@ -115,7 +116,7 @@ Handlers that change what a dispenser or display shows (branch mapping, branch h
 
 ## Spec impact
 No business rule changes. Additions to section 10 (to be written into the spec after the product owner accepts this ADR):
-- Item routes `GET/PUT/DELETE` for `/service-types/{id}`, `/priority-types/{id}`, `/branches/{id}`, `/branches/{id}/calendar/{entryId}`, `/zones/{id}`, `/counters/{id}`, `/flows/{id}`, `/ticket-templates/{id}`, `/users/{id}`, `/devices/{id}`; `GET` for every resource that §10 lists only with `PUT` (`/devices/{id}/dispenser-settings`, `/devices/{id}/zone-service-mapping`), and `GET /branches/{id}/devices`.
+- Item routes `GET/PUT/DELETE` for `/service-types/{id}`, `/priority-types/{id}`, `/branches/{id}`, `/branches/{id}/calendar/{entryId}`, `/zones/{id}`, `/counters/{id}`, `/flows/{id}`, `/ticket-templates/{id}`, `/users/{id}`, `/devices/{id}`; `GET` for every resource that §10 lists only with `PUT` (`/devices/{id}/dispenser-settings`, `/devices/{id}/zone-service-mapping`), `GET /branches/{id}/devices` and `GET /branches/{id}/counters` (all counters of a branch, for assignments and counter displays).
 - `POST /devices/{id}/registration-code` (new code, revokes the device key; ADR-004 §7), `POST /users/{id}/password` (admin sets a password), `PUT /auth/me/language` (ADR-007 B.4), `GET /ticket-templates/{id}/preview` (STORY-013).
 - `/branches/{id}/hours` is a whole-week `GET`/`PUT` instead of per-row CRUD.
 Section 9 is not changed by this ADR (the row version is the system column `xmin`).

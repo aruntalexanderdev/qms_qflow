@@ -27,17 +27,22 @@ Status: ✅ done · 🟡 ready (stages 0–1 done) · ⬜ not started
 Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an admin signs in through the web app, and Swagger lists the auth endpoints.
 
 ### M2 Setup API
-| Story | Title |
-| --- | --- |
-| STORY-005 | Service types and priority types CRUD (incl. paid flag and fee) |
-| STORY-006 | Company service mapping grid API (4.1) |
-| STORY-007 | Branches: details, working hours, calendar, settings, VIP fee override |
-| STORY-008 | Branch service mapping grid API (4.2) |
-| STORY-009 | Zones, counters and counter service mapping (4.3), validation chain |
-| STORY-010 | Service flows (Auto / Ask / None) |
-| STORY-011 | Users, roles, branch and counter assignment (+ STORY-003 follow-ups: password policy, user-table company scope, assignment 23503 mapping; STORY-004 follow-up: endpoint to save a user's language) |
-| STORY-012 | Devices: create, registration code, dispenser settings (Show VIP default yes), zone + service mapping (4.4) |
-| STORY-013 | Ticket templates (incl. fee line) |
+Conventions for all M2 stories: [ADR-008](../adr/ADR-008-setup-api-conventions.md) (Proposed). Stage 0 done for all nine stories (2026-11-08); status `Analysis`.
+
+| Story | Title | Stages | Status |
+| --- | --- | --- | --- |
+| [STORY-005](stories/STORY-005-service-and-priority-types.md) | Service types and priority types CRUD (incl. paid flag and fee) + shared setup-API plumbing (ADR-008) | 2, 3 | ⬜ |
+| [STORY-006](stories/STORY-006-company-service-mapping.md) | Company service mapping grid API (4.1) | 3 | ⬜ |
+| [STORY-007](stories/STORY-007-branches.md) | Branches: details, working hours, calendar, settings, VIP fee override | 3 | ⬜ |
+| [STORY-008](stories/STORY-008-branch-service-mapping.md) | Branch service mapping grid API (4.2) | 3 | ⬜ |
+| [STORY-009](stories/STORY-009-zones-counters-counter-mapping.md) | Zones, counters and counter service mapping (4.3), validation chain | 3 | ⬜ |
+| [STORY-010](stories/STORY-010-service-flows.md) | Service flows (Auto / Ask / None) | 3 | ⬜ |
+| [STORY-011](stories/STORY-011-users-roles-assignments.md) | Users, roles, branch and counter assignment (+ STORY-003 follow-ups: password policy, user-table company scope, assignment 23503 mapping; STORY-004 follow-up: endpoint to save a user's language) | 3 | ⬜ |
+| [STORY-012](stories/STORY-012-devices-dispenser-settings-mapping.md) | Devices: create, registration code, dispenser settings (Show VIP default yes), zone + service mapping (4.4) (+ STORY-002 follow-ups: §4.4 "no counter serves this service" warning, N3 device type check) | 2, 3 | ⬜ |
+| [STORY-013](stories/STORY-013-ticket-templates.md) | Ticket templates (incl. fee line) | 3 (2 only if a `name` column is approved) | ⬜ |
+
+Order: 005 → (006 ∥ 007 ∥ 013) → 008 → (009 ∥ 010) → 012 → 011. Single track: 005 → 006 → 007 → 008 → 009 → 010 → 013 → 012 → 011. One branch and PR per story (rules §9).
+Open for the product owner: no story covers `CRUD /companies` and provisioning a new company's first Company Admin (spec §8, §10); proposal: add it to M2 (next free id STORY-047). See STORY-005 section 10.
 
 ### M3 Queue engine
 | Story | Title |
@@ -60,7 +65,7 @@ Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an
 | STORY-023 | Company setup screens: service types, priority types (fee), company mapping grid (**first**: STORY-004 review S7 — interceptor must fail the request when the pre-request refresh returns `signed-out`/`user-changed`; plus N8, N9) |
 | STORY-024 | Branch screens: details, hours, calendar, settings, fee override, branch mapping grid |
 | STORY-025 | Zones, counters, counter mapping grid, service flows |
-| STORY-026 | Devices screen with dispenser preview, ticket templates, users |
+| STORY-026 | Devices screen with dispenser preview, ticket templates, users (+ STORY-011 follow-up: the shell language switch saves through `PUT /auth/me/language`, ADR-007 B.4) |
 
 ### M5 Counter console
 | Story | Title |
