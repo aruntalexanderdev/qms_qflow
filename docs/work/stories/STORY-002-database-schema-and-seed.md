@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-002 |
-| Status | QA |
+| Status | Done |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 4 (4.1–4.4), 9, 11 (time, audit), 13 |
@@ -326,3 +326,48 @@ Nice to have
 
 Status: `QA` (Approved; review loop 3 of 3 closed with no open Must fix).
 Open questions: none
+
+
+### Stage 7 — QA — qa-tester — 2026-11-08
+Result: Done
+Test environment: `dotnet run -c Release` (Development) on `http://localhost:5099` against a throwaway `postgres:18` container (empty database, `ConnectionStrings__Qms`). The API Docker image could not be built in the sandbox (NuGet proxy CA); this is an environment limit, not a defect. Container and process were removed afterwards. The SQL was run by hand with `psql` inside the container, every negative test inside a transaction that was rolled back.
+
+Automated: `dotnet test backend/Qms.slnx -c Release` Passed 139, Failed 0, Skipped 0 (31 s). Tenant, tenant-integrity and hosting tests alone: 45 passed.
+
+Test cases
+| TC | AC | Title | Steps | Expected | Result |
+|---|---|---|---|---|---|
+| TC-002-1 | AC-1 | Migration on an empty database | Start the API (Development) against an empty postgres:18; read `__EFMigrationsHistory` and `information_schema.columns` | `20261108021220_InitialSchema` applied; every spec 9 table/column plus Phase 0 columns in snake_case | Pass |
+| TC-002-2 | AC-1 | Phase 0 columns and indexes | Look for `company.currency_code`, `priority_type.is_paid/fee_amount`, `branch_priority_fee`, `dispenser_setting.show_vip`, 5 token fee fields, `token_visit.is_front`, `refresh_token`; read `pg_indexes` | All present; `ux_token_branch_date_number`, `ux_token_sequence_branch_date_priority_service`, partial `ix_token_visit_queue ... WHERE ended_at IS NULL` | Pass |
+| TC-002-3 | AC-2 | Seed equals spec 4 | SQL joins over all mapping tables | 8 / 7 / 7 / 5 rows, exact pairs of spec 4.1–4.4 | Pass |
+| TC-002-4 | AC-2 | Seed values | Priority types, currency, branch, settings | Normal N/2 not paid; VIP V/1 paid 50.00; AED; Branch 1 Asia/Dubai; show_vip true | Pass |
+| TC-002-5 | AC-2 | Idempotent seed | Restart the API; count rows of all tables before and after | Counts identical, no migration re-applied | Pass |
+| TC-002-6 | AC-3 | Branch row not in company mapping | Insert branch mapping Service 4 VIP | 23503 | Pass |
+| TC-002-7 | AC-3 | Counter row not in branch mapping | Counter mapping Service 6 Normal on Counter 1; Service 4 VIP on Counter 3 | 23503 | Pass |
+| TC-002-8 | AC-4 | Not Available pair stays mappable | Set Branch 1 Service 2 VIP Not Available; Counter 2 row stays; add a second counter row for the pair | No error | Pass |
+| TC-002-9 | AC-5 | Duplicate token_sequence | Two rows Branch 1, date, VIP, Service 2 | 23505 on the second | Pass |
+| TC-002-10 | AC-5 | Duplicate prefixes | Second priority type with V; second service type with A | 23505 | Pass |
+| TC-002-11 | AC-6 | Paid without valid fee | VIP fee null (update), new paid type with null fee (insert), VIP fee -1 | 23514 | Pass |
+| TC-002-12 | AC-7 | Tenant filter | Run tenant tests; API default scope | Only current company rows; no company returns nothing | Pass |
+| TC-002-13 | AC-8 | Readiness up / down / recovery | `curl /health/ready` and `/health/live` with DB up, container stopped, container started | 200 / 503 (live stays 200) / 200 | Pass |
+| TC-002-14 | edge | Cross-company inserts (review rounds 1–2) | Company 2 with branch, zone, device in a transaction; counter with Company 1 id on Company 2 branch; zone same; Branch 1 counter in Company 2 zone; Company 1 branch mapping on Company 2 branch; dispenser_zone_service Company 1 on Company 2 branch; token_visit of Company 1 token in Company 2 zone | All rejected | Pass |
+| TC-002-15 | edge | Check constraints and restrict | Lower-case and 2-letter prefix, level 0, max tokens 0 and 10000, currency `aed`; delete a mapping row used by a lower level | Rejected; 9999 / 1 / fee 0 accepted | Pass |
+| TC-002-16 | edge | Valid control; token number uniqueness | Valid token_visit in own zone; second token `NA0001` same branch and date | Visit accepted; duplicate 23505 | Pass |
+
+Evidence (exact names)
+- AC-1: 34 tables plus `__EFMigrationsHistory`; columns compared with spec 9 table by table, none missing (documented additions: `device.registration_code_expires_at`, `token_visit.branch_id`, `company_id` on branch-level tables). No errors in the API log.
+- AC-2: company mapping Service 1 N, 2 N, 2 V, 3 N, 3 V, 4 N, 5 N, 6 N (all AED); branch mapping 7 rows, all `is_available` true, max 100; counter mapping Counter 1 -> S1, S2, S3 Normal, Counter 2 -> S2 VIP, S3 VIP, Counter 3 -> S4, Counter 4 -> S5; dispenser mapping D1 Zone 1 S1, S2, D2 Zone 1 S3, Zone 2 S4, S5; both dispensers PrintOnly, `show_vip` t, languages {en,ar}; ticket template EN + AR; hours Sun–Thu 08:00–15:00; recall limit 3, skip NoShow. Counts after restart equal counts before.
+- AC-3: `fk_branch_service_priority_company_service_priorities_company_` (23503); `fk_counter_service_priority_branch_service_priority_branch_id_` (23503) for Service 6 Normal and for Service 4 VIP.
+- AC-4: update and extra insert succeed.
+- AC-5: `ux_token_sequence_branch_date_priority_service`, `ix_priority_type_company_id_prefix`, `ix_service_type_company_id_prefix` (all 23505).
+- AC-6: `ck_priority_type_fee_required_when_paid` (null, update and insert) and `ck_priority_type_fee_not_negative` (-1), both 23514.
+- Edge: `ck_service_type_prefix`, `ck_priority_type_priority_level`, `ck_branch_service_priority_max_tokens` (0 and 10000), `ck_company_currency_code`, 22001 for a 2-letter prefix (char(1)), 23001 restrict on both delete cases. Cross-company: `fk_counter_branch_company_id_branch_id`, `fk_zone_branch_company_id_branch_id`, `fk_counter_zones_branch_id_zone_id`, `fk_branch_service_priority_company_service_priorities_company_`, `fk_dispenser_zone_service_branch_company_id_branch_id`, `fk_token_visit_zones_branch_id_zone_id`. Duplicate token number: `ux_token_branch_date_number`.
+- AC-7: `TenantAndAuditTests` (current company only; no company returns nothing; cross-company write, update, delete and move throw) and `TenantIntegrityTests` (forged detached update/remove throw `DbUpdateConcurrencyException`) pass. The API has no data endpoint yet and uses `NoCompanyCurrentTenant`, so the default scope is shown by the test `Without_a_company_queries_return_nothing...`, not over HTTP.
+- AC-8: `/health/ready` Healthy 200, Unhealthy 503 after `docker stop` (no exception text in the body), Healthy 200 after restart; `/health/live` 200 throughout.
+
+AC results: AC-1 Pass, AC-2 Pass, AC-3 Pass, AC-4 Pass, AC-5 Pass, AC-6 Pass, AC-7 Pass, AC-8 Pass
+Bugs: none
+Not tested: the Docker image (`docker compose up --build`), blocked by the sandbox NuGet proxy; the same API ran with `dotnet run`. Web and Android are N/A for this story.
+Manual device checks pending: none
+Follow-ups (not bugs): S2, S3, S4, S5, N1–N7, N9, N10 as listed in the review. Product owner question remains: Branch 1 sample working hours.
+Sign-off: all eight acceptance criteria pass, no open Critical or Major bugs. Status set to Done.
