@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-002 |
-| Status | Code Review |
+| Status | QA |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 4 (4.1–4.4), 9, 11 (time, audit), 13 |
@@ -287,3 +287,42 @@ Notes for next stage: stage 3 must treat `DbUpdateConcurrencyException` on tenan
 Verification (Release): `dotnet build backend/Qms.slnx -c Release --no-incremental` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` run twice: Passed 139, Failed 0, Skipped 0 (both runs; 129 before, 10 new).
 Open questions: none
 
+
+### Stage 6 — Code review (round 3) — code-reviewer — 2026-11-08
+Result: Approved
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release --no-incremental` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` Passed 139, Failed 0, Skipped 0, 45 s) · web N/A · android N/A
+ACs checked: AC-1 ✅ (no migration or snapshot change since 2c2002f; the model-drift test is green), AC-2 ✅ (seed code unchanged; seed tests green), AC-3 ✅, AC-4 ✅, AC-5 ✅, AC-6 ✅, AC-7 ✅ (query filter, plus the original-company check for tracked rows, plus the `company_id` concurrency predicate for detached rows), AC-8 ✅
+Reviewed: `git diff 2c2002f HEAD -- backend` (commit 2476486). Only two files changed: `EntityConfiguration.cs` (one line, `.IsConcurrencyToken()`) and `TenantIntegrityTests.cs` (10 tests).
+
+R2-M1 ✅ fixed.
+- Coverage: every tenant entity is covered. All 28 configurations derive from `EntityConfiguration<T>`. The only other configuration, `AppUserConfiguration`, is not a tenant entity. The token is set inside the `ITenantEntity` branch, so no tenant table can miss it. `AfterSaveBehavior = Throw` and `RejectCompanyChanges` are kept.
+- Exploit re-run: the round-2 exploit is now a test, run with Company 1 as the current tenant. Steps: load Company 2's row with `AsNoTracking`, set `CompanyId = Company1`, then `Update`/`Remove`, then SaveChanges. Every path throws `DbUpdateConcurrencyException`:
+  - `service_type` (company_id in a key) and `counter` (no company key), both update and remove;
+  - the stub `new Counter { Id = foreignId, CompanyId = current }` remove (IDOR pattern);
+  - `Attach` followed by a modify;
+  - `Entry(x).State = Modified`;
+  - a forged `device` remove with a cascading `dispenser_setting`.
+  Company 2's data is checked afterwards on a fresh context and is unchanged in every case.
+- Bulk paths: `ExecuteUpdate`/`ExecuteDelete` are scoped by the query filter. Foreign ids affect 0 rows, and an unfiltered bulk update touches exactly Company 1's 6 service types.
+- Tests bite: I removed `.IsConcurrencyToken()` in a scratch copy of HEAD and ran `TenantIntegrityTests`. Result: 8 failed / 16 passed, the same 8 tests stage 2 named. The repo was not touched and the scratch copy is deleted.
+- No regressions: legitimate own-company writes still work, tracked (existing tests) and detached (`Update` and stub `Remove`, new test). `CompanyId` never changes after insert, so the token cannot cause false conflicts on own rows. The seeder and all seed tests are green.
+
+Question: `DbUpdateConcurrencyException` not translated to `TenantViolationException`. I accept this for STORY-002. A 0-row result cannot be told apart from a genuine concurrent change of an own row, so a tenant error would be wrong for real conflicts. The behaviour fails closed: nothing is written. Today `GlobalExceptionHandler` (backend/Qms.Api/Common/ProblemDetailsSetup.cs) returns a generic 500 with no details, and this story has no write endpoints. The mapping belongs with the first write endpoints, so it is follow-up S5, not a Must fix.
+
+Must fix
+- none
+
+Should fix (follow-ups)
+- S2 [stage 2 + stage 3] → STORY-003: fail-closed tenant writes when there is no company (explicit cross-tenant flag). Unchanged from round 1.
+- S3 [stage 2 or Application] → STORY-003: `user_branch` / `user_counter` company consistency, plus Application validation of the FKs to `asp_net_users` (issuer, settler, server). Unchanged.
+- S4 [stage 2] → product owner: `close_time > open_time` (no overnight hours) is to be confirmed in the spec additions. Unchanged.
+- S5 [stage 3] → STORY-003 (first write endpoints): map `DbUpdateConcurrencyException` to problem details with 409 `request.conflict`, or 404 when the handler re-reads through the filtered DbSet and finds no row. Do the same for `TenantViolationException`, which is also a generic 500 today. Add an integration test per mapping.
+
+Nice to have
+- N9 [stage 2] Add a model test asserting that every `ITenantEntity` has `CompanyId` with `IsConcurrencyToken` and `AfterSaveBehavior = Throw`. Then a future configuration that bypasses `EntityConfiguration<T>` cannot silently drop the guard.
+- N10 [stage 2] backend/Qms.Tests/Persistence/TenantIntegrityTests.cs, `A_detached_row_of_the_current_company_can_still_be_updated_and_removed`: `db.ChangeTracker.Clear()` does nothing, because the stub is removed through the separate `other` context. Remove it, or use one context.
+- N8 ✅ done (TASK-002 note corrected).
+- N1–N7 from round 1 are still open → N1 and the raw-SQL `company_id` / `branch_id` predicates go to the M3 Call Next / Issue stories (STORY-016, STORY-018); N7 goes to STORY-003; N2–N6 go to a stage 2 follow-up task.
+
+Status: `QA` (Approved; review loop 3 of 3 closed with no open Must fix).
+Open questions: none
