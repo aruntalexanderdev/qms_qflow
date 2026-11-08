@@ -25,6 +25,11 @@ export type RefreshOutcome = 'refreshed' | 'adopted' | 'signed-out';
 
 export const REFRESH_REUSED_CODE = 'auth.refresh_reused';
 
+/** Waiting longer than this for the lock means another tab held it. */
+const WAITED_THRESHOLD_MS = 3;
+/** How long a tab that waited listens for the other tab's broadcast before refreshing itself. */
+const BROADCAST_GRACE_MS = 150;
+
 /**
  * The only code that calls login, refresh and logout (ADR-007 A). Each runs inside the Web Lock `qms-auth-session`,
  * so the browser runs at most one of them at a time across all tabs; the tab that did the work broadcasts the result.
@@ -65,24 +70,26 @@ export class SessionCoordinator {
     if (this.store.isFresh(this.now())) {
       return 'fresh';
     }
-    return this.refresh(this.store.accessToken());
+    return this.refresh(this.store.snapshot()?.validUntil ?? null);
   }
 
   /**
-   * Refreshes the session. `staleToken` is the token that needed refreshing (null at start-up): if a newer one reached
-   * this tab meanwhile, it is used and no request is sent. A refresh 401 ends the session in all tabs.
+   * Refreshes the session. `staleValidUntil` identifies the session that needed refreshing by its expiry (null at
+   * start-up); if a newer one reached this tab meanwhile, it is used and no request is sent. (Tokens are not
+   * compared: two tokens issued in the same second are identical.) A refresh 401 ends the session in all tabs.
    * `navigate: false` is for the app initialiser, where the router has not started yet.
    */
-  refresh(staleToken: string | null, options: { navigate?: boolean } = {}): Promise<RefreshOutcome> {
+  refresh(staleValidUntil: number | null, options: { navigate?: boolean } = {}): Promise<RefreshOutcome> {
     if (this.inFlight) {
       return this.inFlight;
     }
-    if (this.hasNewerSession(staleToken)) {
+    if (this.hasNewerSession(staleValidUntil)) {
       return Promise.resolve('adopted');
     }
     const navigate = options.navigate ?? true;
+    const requestedAt = performance.now();
     const flight: Promise<RefreshOutcome> = this.withLock(() =>
-      this.refreshInsideLock(staleToken, navigate),
+      this.refreshInsideLock(staleValidUntil, navigate, performance.now() - requestedAt),
     ).finally(() => {
       if (this.inFlight === flight) {
         this.inFlight = null;
@@ -99,14 +106,19 @@ export class SessionCoordinator {
   }
 
   private async refreshInsideLock(
-    staleToken: string | null,
+    staleValidUntil: number | null,
     navigate: boolean,
+    waitedMs: number,
   ): Promise<RefreshOutcome> {
-    // A tab that waited for the lock gives the previous holder's broadcast a moment to arrive.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    if (this.hasNewerSession(staleToken)) {
-      return 'adopted';
-    }
+    // A tab that had to wait for the lock gives the previous holder's broadcast time to arrive (it travels between
+    // browser processes and can be a few milliseconds behind the lock release), so one refresh serves both tabs.
+    const deadline = performance.now() + (waitedMs > WAITED_THRESHOLD_MS ? BROADCAST_GRACE_MS : 0);
+    do {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (this.hasNewerSession(staleValidUntil)) {
+        return 'adopted';
+      }
+    } while (performance.now() < deadline);
     try {
       const response = await firstValueFrom(this.api.refresh());
       this.adoptAndBroadcast(response);
@@ -123,8 +135,13 @@ export class SessionCoordinator {
   }
 
   /** A session newer than the one that needed refreshing reached this tab (broadcast), and it is still fresh. */
-  private hasNewerSession(staleToken: string | null): boolean {
-    return this.store.accessToken() !== staleToken && this.store.isFresh(this.now());
+  private hasNewerSession(staleValidUntil: number | null): boolean {
+    const current = this.store.snapshot();
+    return (
+      current !== null &&
+      (staleValidUntil === null || current.validUntil > staleValidUntil) &&
+      this.store.isFresh(this.now())
+    );
   }
 
   private adoptAndBroadcast(response: AuthResponse): void {

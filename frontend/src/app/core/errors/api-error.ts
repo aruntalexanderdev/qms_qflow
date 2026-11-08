@@ -52,7 +52,8 @@ export function mapHttpError(error: unknown): ApiError {
   const problem = isProblemDetails(error.error) ? error.error : null;
   const code = problem?.code ?? 'unknown';
   const result = build(code, error.status);
-  result.correlationId = problem?.correlationId ?? null;
+  // The reference helps support find a server fault; other errors are the user's to fix.
+  result.correlationId = code === 'server.unexpected_error' ? (problem?.correlationId ?? null) : null;
   result.fieldErrors = problem?.errors ?? {};
   if (code === 'request.rate_limited') {
     const minutes = retryAfterMinutes(error.headers.get('Retry-After'));

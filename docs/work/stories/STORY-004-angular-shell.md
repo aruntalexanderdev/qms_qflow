@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | Frontend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -349,3 +349,20 @@ Changed: none
 Notes for next stage: Start stage 4 with TASK-005. Language-save endpoint added to BACKLOG (STORY-011).
 Open questions: none
 
+### Stage 4 — Frontend — frontend-developer — 2026-11-08
+Result: Done
+Changed: frontend/** (new Angular 22.2 workspace: `src/styles/`, `src/app/core/{api,auth,errors,i18n,navigation,notifications}`, `src/app/layout/`, `src/app/features/{auth/login,home}`, `public/i18n/{en,ar}.json`, specs, `proxy.conf.json`, `Dockerfile`, `nginx.conf`, `security-headers.conf`, ESLint + Stylelint config, `package-lock.json`, README), `docker-compose.yml` (`web` service), `.env.example` (`WEB_PORT`), `CLAUDE.md` (web commands), docs/work/tasks/TASK-005-angular-shell.md
+Notes for next stage:
+- Routes: `/login`, `/home` (every role), `**` to `/home`. No `/dashboard`. Nav entries other than Home are in `core/navigation/navigation.ts` with `live: false`; a later story flips the flag and adds its route with `roleGuard([...])`.
+- Verified: `npm run lint` clean, `npm test -- --watch=false` 78 tests green, `npm run build` green (442 kB initial raw). Playwright e2e against the real API + postgres:18: AC-1 to AC-5, AC-7, AC-10 to AC-17 pass (one refresh for two expired tabs; sign-out in one tab signs out the other; network/500 keep the session; refresh_reused ends both tabs with the message). Production build behind Nginx: same-origin only, CSP present, `/swagger` 404, login and reload work.
+- ADR-007 refinements made in code (see TASK-005 section 7): newer-session detection by `validUntil` (tokens issued in the same second are identical), 150 ms wait for the broadcast after waiting for the lock, login under the lock, `authGuard` renews on each navigation. Consider recording these in ADR-007.
+- Not done / for review and QA: axe or Lighthouse (AC-8) not run; Arabic wording review; Docker image build not possible in the sandbox (`npm ci` behind the proxy), Nginx verified with the stock image instead; `stylelint` 17 (config peer range).
+- Stage 5 (Android) is N/A.
+Open questions: none
+
+
+### Stage 5 — Android — android-developer — 2026-11-08
+Result: N/A — No dispenser change (stage plan)
+Changed: none
+Notes for next stage: Ready for code review (stage 6).
+Open questions: none

@@ -18,13 +18,15 @@ export const LOGIN_ROUTE = '/login';
 export const authGuard: CanActivateFn & CanActivateChildFn = async () => {
   const store = inject(SessionStore);
   const router = inject(Router);
+  const coordinator = inject(SessionCoordinator);
+  const notifications = inject(NotificationService);
   if (!store.isAuthenticated()) {
     return router.parseUrl(LOGIN_ROUTE);
   }
   try {
-    await inject(SessionCoordinator).ensureFresh();
+    await coordinator.ensureFresh();
   } catch (error) {
-    inject(NotificationService).error(mapHttpError(error));
+    notifications.error(mapHttpError(error));
     return false;
   }
   return store.isAuthenticated() ? true : router.parseUrl(LOGIN_ROUTE);

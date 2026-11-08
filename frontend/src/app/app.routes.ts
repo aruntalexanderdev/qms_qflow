@@ -14,6 +14,8 @@ export const routes: Routes = [
     component: ShellComponent,
     canActivate: [authGuard],
     canActivateChild: [authGuard],
+    // Run the guard on every navigation, so an expiring token is renewed before the next page.
+    runGuardsAndResolvers: 'always',
     children: [
       {
         path: 'home',

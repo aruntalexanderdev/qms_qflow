@@ -5,9 +5,7 @@ const tseslint = require('typescript-eslint');
 const angular = require('angular-eslint');
 
 module.exports = defineConfig([
-  {
-    ignores: ['dist/**', '.angular/**', 'node_modules/**', 'coverage/**'],
-  },
+  { ignores: ['dist/**', '.angular/**', 'node_modules/**', 'coverage/**'] },
   {
     files: ['**/*.ts'],
     extends: [
@@ -18,16 +16,23 @@ module.exports = defineConfig([
     ],
     processor: angular.processInlineTemplates,
     rules: {
+      '@angular-eslint/prefer-on-push-component-change-detection': 'error',
       '@angular-eslint/directive-selector': [
         'error',
-        { type: 'attribute', prefix: 'qms', style: 'camelCase' },
+        {
+          type: 'attribute',
+          prefix: 'qms',
+          style: 'camelCase',
+        },
       ],
       '@angular-eslint/component-selector': [
         'error',
-        { type: 'element', prefix: 'qms', style: 'kebab-case' },
+        {
+          type: 'element',
+          prefix: 'qms',
+          style: 'kebab-case',
+        },
       ],
-      '@angular-eslint/prefer-on-push-component-change-detection': 'error',
-      '@angular-eslint/prefer-inject': 'error',
     },
   },
   {

@@ -6,7 +6,7 @@
 | Story | STORY-004 |
 | Stage | 4 Frontend |
 | Agent | frontend-developer |
-| Status | To do |
+| Status | Done |
 | Estimate | L |
 | Created | 2026-11-07 |
 
@@ -43,15 +43,40 @@ Create the Angular 22 app in `frontend/` with the design-system theme, English/A
 - Provides to: M4–M6 screens (shell, auth, i18n, theme).
 
 ## 5. Done checklist
-- [ ] Code follows common project rules (sections 5, 7, 11)
-- [ ] Tests added and passing (list them below)
-- [ ] Bilingual text added (en + ar)
-- [ ] No business logic in components
-- [ ] Lint (ESLint + Stylelint) clean
-- [ ] Spec / ADR updated if behaviour changed
-- [ ] Handoff written in the story's Stage log
+- [x] Code follows common project rules (sections 5, 7, 11)
+- [x] Tests added and passing (list below)
+- [x] Bilingual text added (en + ar)
+- [x] No business logic in components
+- [x] Lint (ESLint + Stylelint) clean
+- [x] Spec / ADR updated if behaviour changed (none: no spec change; ADR-007 followed, see notes for two small refinements)
+- [x] Handoff written in the story's Stage log
 
 ## 6. Tests
-- …
+`npm test -- --watch=false`: 12 files, 78 tests, all green (Vitest 5 + jsdom, the Angular 22 default runner).
+- `session-coordinator.spec.ts` (14): two tabs sharing a fake lock and channel give exactly one refresh; a tab that heard no broadcast refreshes only after the first (never overlapping); single flight; newer session adopted without a request; 30 s margin; logout broadcast clears the other tab; refresh 401 / `auth.refresh_reused` end the session everywhere; network error and 5xx keep the session; different `user.id` resets to `/`; no Web Locks fallback; no storage writes.
+- `auth.interceptor.spec.ts` (11): bearer; 401, one refresh, retry once with the new token; second 401 reaches the caller; proactive refresh within 30 s; network error on an expired token keeps the session; no bearer and no refresh for `/auth/login|refresh|logout`; non-API calls untouched.
+- `auth.guards.spec.ts` (10): `authGuard` (signed out, signed in, renew on navigation, refresh 401, network failure stays and shows `errors.network`), `guestGuard`, `roleGuard` (allowed, other role to `/home`, signed out).
+- `auth.service.spec.ts` (5): store facade, restore (one refresh, no navigation, swallows network error), login/logout, initialiser order.
+- `language.service.spec.ts` (5): default en/ltr, switch to ar sets `lang`/`dir=rtl` and stores, `user.language` applied and stored, `qms.lang` wins, invalid stored value ignored.
+- `api-error.spec.ts` (9): `auth.invalid_credentials`, `auth.locked_out`, 429 with `Retry-After` minutes (rounded up) and without, status 0, 500 with `correlationId` (only there), field errors, unknown code fallback.
+- `login.component.spec.ts` (10): labels, request body, empty form, wrong credentials (password cleared), locked out, 429 minutes, network, `validation.failed` field marking, `auth.refresh_reused` message, language switch labels.
+- `shell.component.spec.ts` (6): Company Admin initials, name and role label; Super Admin shell (only Home, no company or other roles' entries); Arabic role label; Sign out; failed sign-out keeps the session; menu toggle.
+- `navigation.spec.ts` (3), `translations.spec.ts` (2, en and ar have identical keys; every error code, role and nav label translated), `home.component.spec.ts` (2), `initials.spec.ts` (2).
+- Lint: `npm run lint` clean; Stylelint rejects `color: #ff0000` and `background: red` (AC-6, checked by hand).
+- Build: `npm run build` green, initial 442 kB raw / 112 kB transfer, no warnings.
+- End-to-end (Playwright + Chromium against the real API and `postgres:18`, dev server with the proxy; two more runs against the production build served by Nginx): 25 checks + 5 more all passed. Covers AC-1 to AC-5, AC-7, AC-10 to AC-17 (see the Stage log).
 
 ## 7. Notes / result
+Delivered as specified. Refinements and deviations:
+- **ADR-007 A, refinements** (no behaviour change for the ADR's goals):
+  1. A session is identified as "newer" by its `validUntil` (local expiry), not by comparing token strings: two tokens issued in the same second are byte-identical, so a string comparison missed the other tab's refresh and sent a second request. The `session` broadcast carries `validUntil` (local epoch ms; all tabs share the PC clock) next to `accessToken`, `expiresAt`, `user`.
+  2. A tab that had to wait for the lock listens up to 150 ms for the other tab's broadcast before refreshing itself (the message crosses browser processes and can trail the lock release by a few ms). Without it the e2e run sent two sequential refreshes; with it, one.
+  3. Login also runs under the lock (so another tab cannot refresh with the old cookie while a new family is set).
+- `authGuard` (and the shell route with `runGuardsAndResolvers: 'always'`) renews a token that expires within 30 s on every navigation. This is what makes AC-4/AC-11/AC-16 observable now, when the only live page makes no API call. Failed renewal: 401 goes to `/login`, network/5xx stays on the page with a toast.
+- Sign out: if `POST /auth/logout` fails (network/5xx) the user stays signed in and sees the error, because signing out locally would leave a valid refresh cookie behind.
+- Sidebar toggle: above 1024 px it hides and shows the sidebar (no 72 px icon rail: the nav has no icons yet); below 1024 px it is a drawer on the start side (right in RTL).
+- `stylelint` is 17.16 (not 18): `stylelint-config-standard-scss` 17 does not accept 18 as a peer yet. Angular Material components are used for buttons and toasts; text inputs are native styled controls (label above input, per the design system). No icon font: icons are inline SVG.
+- Fonts: `@fontsource-variable/instrument-sans` registers `Instrument Sans Variable`; the stack in `--qms-font-active` names it first. `inlineCritical` is off in the production build so the CSP can forbid inline scripts (`style-src` keeps `'unsafe-inline'` for Angular/Material component styles).
+- Arabic wording of the new texts needs native review (non-blocking, story open question).
+- Docker: `docker build ./frontend` fails in this sandbox at `npm ci` (proxy CA), the known sandbox limit; `npm ci` from the committed lockfile works locally. Nginx config verified by running `nginxinc/nginx-unprivileged` with the production `dist/` mounted.
+- Not covered by automated tests: axe/Lighthouse (AC-8) was not run; inputs have labels, focus ring is global, contrast follows the design tokens. QA to run axe.

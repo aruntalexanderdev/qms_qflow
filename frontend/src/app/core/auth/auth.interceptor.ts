@@ -51,7 +51,7 @@ export const authInterceptor: HttpInterceptorFn = (
   const store = inject(SessionStore);
   const now = inject(CLOCK);
 
-  const prepare = async (): Promise<string | null> => {
+  const prepare = async () => {
     if (store.accessToken() && !store.isFresh(now())) {
       try {
         await coordinator.ensureFresh();
@@ -62,17 +62,17 @@ export const authInterceptor: HttpInterceptorFn = (
         }
       }
     }
-    return store.accessToken();
+    return store.snapshot();
   };
 
   return from(prepare()).pipe(
-    switchMap((token) =>
-      next(withBearer(request, token)).pipe(
+    switchMap((session) =>
+      next(withBearer(request, session?.accessToken ?? null)).pipe(
         catchError((error: unknown) => {
           if (!(error instanceof HttpErrorResponse) || error.status !== 401) {
             return throwError(() => error);
           }
-          return from(coordinator.refresh(token)).pipe(
+          return from(coordinator.refresh(session?.validUntil ?? null)).pipe(
             switchMap((outcome) =>
               outcome === 'signed-out'
                 ? throwError(() => error)
