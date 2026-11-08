@@ -1,0 +1,16 @@
+{
+  "extends": ["stylelint-config-standard-scss"],
+  "ignoreFiles": ["src/styles/_tokens.scss", "dist/**", "node_modules/**", ".angular/**"],
+  "rules": {
+    "color-no-hex": true,
+    "color-named": "never",
+    "function-disallowed-list": ["rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch"],
+    "declaration-property-unit-disallowed-list": {
+      "/^font(-size)?$/": ["px"]
+    },
+    "selector-class-pattern": null,
+    "scss/dollar-variable-pattern": null,
+    "custom-property-pattern": null,
+    "scss/at-extend-no-missing-placeholder": null
+  }
+}

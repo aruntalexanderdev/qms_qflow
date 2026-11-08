@@ -1,0 +1,61 @@
+// Form controls from DESIGN_SYSTEM.md section 6: label above, 44px input, 8px radius, focus ring.
+.qms-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qms-space-2);
+}
+
+.qms-label {
+  font-size: var(--qms-font-size-sm);
+  font-weight: var(--qms-font-weight-semibold);
+  color: var(--qms-neutral-text-label);
+}
+
+.qms-input {
+  inline-size: 100%;
+  block-size: var(--qms-size-control-height);
+  padding-inline: var(--qms-space-3);
+  border: 1px solid var(--qms-neutral-border-input);
+  border-radius: var(--qms-radius-md);
+  background: var(--qms-neutral-surface);
+  color: var(--qms-neutral-text);
+  font: inherit;
+
+  &::placeholder {
+    color: var(--qms-neutral-text-placeholder);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--qms-brand-primary);
+    box-shadow: 0 0 0 3px var(--qms-brand-focus-ring);
+  }
+
+  &[aria-invalid='true'] {
+    border-color: var(--qms-status-error-fg);
+  }
+}
+
+.qms-field-error {
+  margin: 0;
+  font-size: var(--qms-font-size-sm);
+  color: var(--qms-status-error-fg);
+}
+
+// Form-level alert (login errors, server messages): text plus icon-free border, never colour alone.
+.qms-alert {
+  padding: var(--qms-space-3) var(--qms-space-4);
+  border: 1px solid var(--qms-status-error-fg);
+  border-radius: var(--qms-radius-md);
+  background: var(--qms-status-error-bg);
+  color: var(--qms-status-error-on-bg);
+  font-size: var(--qms-font-size-sm);
+  font-weight: var(--qms-font-weight-medium);
+}
+
+.qms-card {
+  padding: 28px;
+  border: 1px solid var(--qms-neutral-border);
+  border-radius: var(--qms-radius-lg);
+  background: var(--qms-neutral-surface);
+}

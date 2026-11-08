@@ -1,0 +1,167 @@
+// Design tokens as CSS custom properties.
+// Mirror of docs/design/tokens.json (version 1.0.0). Do not edit values here: change tokens.json and
+// docs/design/DESIGN_SYSTEM.md first, then this file (rules section 11). Naming: --qms-<group>-<name>.
+// This is the only file in src/ allowed to hold hex or rgba colours (Stylelint ignores it).
+
+:root {
+  // color
+  --qms-brand-primary: #0D7E8F;
+  --qms-brand-primary-hover: #0A6878;
+  --qms-brand-primary-pressed: #085663;
+  --qms-brand-primary-subtle: #E8F1F3;
+  --qms-brand-on-primary: #FFFFFF;
+  --qms-brand-on-primary-subtle: #11676E;
+  --qms-brand-focus-ring: rgba(13, 126, 143, 0.35);
+  --qms-nav-bg: #0F262A;
+  --qms-nav-bg-hover: #163339;
+  --qms-nav-border: #20363A;
+  --qms-nav-text: #B8CFD0;
+  --qms-nav-text-section: #8AA3A7;
+  --qms-nav-bullet: #3D5A5C;
+  --qms-nav-active-bg: #0D7E8F;
+  --qms-nav-active-text: #FFFFFF;
+  --qms-nav-brand-title: #FFFFFF;
+  --qms-nav-brand-sub: #8AA3A7;
+  --qms-neutral-bg: #F4F6F6;
+  --qms-neutral-surface: #FFFFFF;
+  --qms-neutral-surface-muted: #F9FAFA;
+  --qms-neutral-border: #E3E5E4;
+  --qms-neutral-border-input: #8A9094;
+  --qms-neutral-text: #111315;
+  --qms-neutral-text-label: #393F46;
+  --qms-neutral-text-muted: #6B7174;
+  --qms-neutral-text-placeholder: #828689;
+  --qms-neutral-text-disabled: #9AA0A4;
+  --qms-neutral-overlay: rgba(15, 38, 42, 0.48);
+  --qms-status-success-fg: #15803D;
+  --qms-status-success-bg: #DCFCE7;
+  --qms-status-success-on-bg: #166534;
+  --qms-status-warning-fg: #B45309;
+  --qms-status-warning-bg: #FEF3C7;
+  --qms-status-warning-on-bg: #92400E;
+  --qms-status-error-fg: #B42318;
+  --qms-status-error-bg: #FEE4E2;
+  --qms-status-error-on-bg: #B42318;
+  --qms-status-info-fg: #1D4ED8;
+  --qms-status-info-bg: #DBEAFE;
+  --qms-status-info-on-bg: #1E40AF;
+  --qms-token-state-waiting-bg: #F2F4F7;
+  --qms-token-state-waiting-fg: #475467;
+  --qms-token-state-called-bg: #DBEAFE;
+  --qms-token-state-called-fg: #1E40AF;
+  --qms-token-state-serving-bg: #DCFCE7;
+  --qms-token-state-serving-fg: #166534;
+  --qms-token-state-held-bg: #EDE9FE;
+  --qms-token-state-held-fg: #5B21B6;
+  --qms-token-state-no-show-bg: #FEE4E2;
+  --qms-token-state-no-show-fg: #B42318;
+  --qms-token-state-completed-bg: #E8F1F3;
+  --qms-token-state-completed-fg: #11676E;
+  --qms-token-state-cancelled-bg: #F2F4F7;
+  --qms-token-state-cancelled-fg: #475467;
+  --qms-priority-normal-bg: #F2F4F7;
+  --qms-priority-normal-fg: #475467;
+  --qms-priority-vip-bg: #FEF9C3;
+  --qms-priority-vip-fg: #854D0E;
+  --qms-counter-status-open-bg: #DCFCE7;
+  --qms-counter-status-open-fg: #166534;
+  --qms-counter-status-paused-bg: #FEF3C7;
+  --qms-counter-status-paused-fg: #92400E;
+  --qms-counter-status-closed-bg: #F2F4F7;
+  --qms-counter-status-closed-fg: #475467;
+  --qms-display-bg: #0F262A;
+  --qms-display-panel: #163339;
+  --qms-display-border: #20363A;
+  --qms-display-text: #FFFFFF;
+  --qms-display-text-muted: #B8CFD0;
+  --qms-display-accent: #5FC9D6;
+  --qms-display-latest-call-bg: #0D7E8F;
+  --qms-display-latest-call-fg: #FFFFFF;
+  --qms-display-calling: #FBBF24;
+
+  // font
+  --qms-font-family-latin: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --qms-font-family-arabic: 'IBM Plex Sans Arabic', 'Instrument Sans', system-ui, sans-serif;
+  --qms-font-family-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --qms-font-weight-regular: 400;
+  --qms-font-weight-medium: 500;
+  --qms-font-weight-semibold: 600;
+  --qms-font-weight-bold: 700;
+  --qms-font-size-xs: 12px;
+  --qms-font-size-sm: 14px;
+  --qms-font-size-md: 15px;
+  --qms-font-size-lg: 16px;
+  --qms-font-size-xl: 20px;
+  --qms-font-size-2xl: 24px;
+  --qms-font-size-3xl: 28px;
+  --qms-font-size-4xl: 36px;
+  --qms-font-line-height-tight: 1.2;
+  --qms-font-line-height-normal: 1.5;
+  --qms-font-letter-spacing-section-label: 0.08em;
+  --qms-font-letter-spacing-heading: -0.01em;
+  --qms-font-display-token-latest: clamp(96px, 14vw, 200px);
+  --qms-font-display-token-list: clamp(40px, 5vw, 72px);
+  --qms-font-display-counter-label: clamp(28px, 3vw, 48px);
+
+  // space
+  --qms-space-0: 0;
+  --qms-space-1: 4px;
+  --qms-space-2: 8px;
+  --qms-space-3: 12px;
+  --qms-space-4: 16px;
+  --qms-space-5: 20px;
+  --qms-space-6: 24px;
+  --qms-space-8: 32px;
+  --qms-space-10: 40px;
+  --qms-space-12: 48px;
+  --qms-space-16: 64px;
+
+  // radius
+  --qms-radius-sm: 6px;
+  --qms-radius-md: 8px;
+  --qms-radius-lg: 12px;
+  --qms-radius-xl: 16px;
+  --qms-radius-full: 9999px;
+
+  // shadow
+  --qms-shadow-none: none;
+  --qms-shadow-sm: 0 1px 2px rgba(16, 18, 17, 0.05);
+  --qms-shadow-md: 0 4px 12px rgba(16, 18, 17, 0.08);
+  --qms-shadow-lg: 0 12px 32px rgba(16, 18, 17, 0.12);
+
+  // size
+  --qms-size-sidebar-width: 280px;
+  --qms-size-sidebar-width-collapsed: 72px;
+  --qms-size-topbar-height: 64px;
+  --qms-size-control-height: 44px;
+  --qms-size-control-height-sm: 36px;
+  --qms-size-content-max-width: 1200px;
+  --qms-size-form-max-width: 848px;
+  --qms-size-kiosk-touch-target: 72px;
+
+  // motion
+  --qms-motion-fast: 120ms;
+  --qms-motion-normal: 200ms;
+  --qms-motion-slow: 320ms;
+  --qms-motion-easing: cubic-bezier(0.2, 0, 0, 1);
+
+  // breakpoint
+  --qms-breakpoint-sm: 640px;
+  --qms-breakpoint-md: 768px;
+  --qms-breakpoint-lg: 1024px;
+  --qms-breakpoint-xl: 1280px;
+}
+
+// Zone and counter displays (TVs): set data-theme="display" on <body>. The neutral, brand and nav roles are
+// remapped to the display tokens, so shared components render in the dark display theme.
+[data-theme='display'] {
+  --qms-neutral-bg: var(--qms-display-bg);
+  --qms-neutral-surface: var(--qms-display-panel);
+  --qms-neutral-surface-muted: var(--qms-display-panel);
+  --qms-neutral-border: var(--qms-display-border);
+  --qms-neutral-text: var(--qms-display-text);
+  --qms-neutral-text-label: var(--qms-display-text-muted);
+  --qms-neutral-text-muted: var(--qms-display-text-muted);
+  --qms-brand-primary: var(--qms-display-latest-call-bg);
+  --qms-brand-on-primary: var(--qms-display-latest-call-fg);
+}

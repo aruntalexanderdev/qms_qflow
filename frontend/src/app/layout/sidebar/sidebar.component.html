@@ -1,0 +1,28 @@
+<div class="brand">
+  <div class="brand__logo" aria-hidden="true">Q</div>
+  <div class="brand__text">
+    <span class="brand__title">{{ 'app.name' | translate }}</span>
+    <span class="brand__subtitle">{{ 'shell.brandSubtitle' | translate }}</span>
+  </div>
+</div>
+
+<nav [attr.aria-label]="'shell.mainNavigation' | translate">
+  @for (section of sections(); track section.id) {
+    <div class="section" [id]="'nav-section-' + section.id">{{ section.labelKey | translate }}</div>
+    <ul class="items" [attr.aria-labelledby]="'nav-section-' + section.id">
+      @for (item of section.items; track item.id) {
+        <li>
+          <a
+            class="item"
+            [routerLink]="item.route"
+            routerLinkActive="item--active"
+            ariaCurrentWhenActive="page"
+            (click)="navigated.emit()"
+          >
+            {{ item.labelKey | translate }}
+          </a>
+        </li>
+      }
+    </ul>
+  }
+</nav>

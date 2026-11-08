@@ -1,0 +1,19 @@
+<a class="skip-link" href="#qms-main">{{ 'shell.skipToContent' | translate }}</a>
+
+<div
+  class="shell"
+  [class.shell--collapsed]="collapsed()"
+  [class.shell--drawer-open]="drawerVisible()"
+>
+  <qms-sidebar id="qms-sidebar" class="shell__sidebar" [role]="role()" (navigated)="closeDrawer()" />
+  <div class="shell__backdrop" aria-hidden="true" (click)="closeDrawer()"></div>
+
+  <div class="shell__column">
+    <qms-topbar [navExpanded]="navExpanded()" (menuToggle)="toggleNav()" />
+    <main id="qms-main" class="shell__main" tabindex="-1">
+      <div class="shell__content">
+        <router-outlet />
+      </div>
+    </main>
+  </div>
+</div>

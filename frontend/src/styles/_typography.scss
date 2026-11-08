@@ -1,0 +1,38 @@
+// Fonts are bundled from npm (rules section 11: no CDN). The fonts are emitted into the build output and served
+// from the same origin; font-display: swap is set by the packages.
+@use '@fontsource-variable/instrument-sans/wght.css';
+@use '@fontsource/ibm-plex-sans-arabic/latin-400.css';
+@use '@fontsource/ibm-plex-sans-arabic/latin-500.css';
+@use '@fontsource/ibm-plex-sans-arabic/latin-600.css';
+@use '@fontsource/ibm-plex-sans-arabic/latin-700.css';
+@use '@fontsource/ibm-plex-sans-arabic/arabic-400.css';
+@use '@fontsource/ibm-plex-sans-arabic/arabic-500.css';
+@use '@fontsource/ibm-plex-sans-arabic/arabic-600.css';
+@use '@fontsource/ibm-plex-sans-arabic/arabic-700.css';
+
+// The variable package registers the family as 'Instrument Sans Variable'; the token stack
+// (--qms-font-family-latin) names 'Instrument Sans', which is kept as the fallback.
+:root {
+  --qms-font-active: 'Instrument Sans Variable', var(--qms-font-family-latin);
+}
+
+// DESIGN_SYSTEM.md section 3: with dir="rtl" IBM Plex Sans Arabic comes first.
+:root[dir='rtl'] {
+  --qms-font-active: var(--qms-font-family-arabic);
+}
+
+html {
+  font-family: var(--qms-font-active);
+  font-size: var(--qms-font-size-md);
+  line-height: var(--qms-font-line-height-normal);
+  color: var(--qms-neutral-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+// Token numbers (VB0001) always use Instrument Sans, tabular figures, and keep left-to-right order.
+.qms-token-number {
+  font-family: 'Instrument Sans Variable', var(--qms-font-family-latin);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+}

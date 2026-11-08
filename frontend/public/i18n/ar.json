@@ -1,0 +1,85 @@
+{
+  "app": {
+    "name": "QFlow",
+    "title": "QFlow – نظام إدارة الطوابير المصرفي"
+  },
+  "language": {
+    "label": "اللغة"
+  },
+  "auth": {
+    "title": "تسجيل الدخول",
+    "subtitle": "سجّل الدخول لإدارة الطوابير والشبابيك والفروع.",
+    "userName": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "signIn": "تسجيل الدخول",
+    "signingIn": "جارٍ تسجيل الدخول…",
+    "userNameRequired": "أدخل اسم المستخدم",
+    "passwordRequired": "أدخل كلمة المرور",
+    "tooLong": "الحد الأقصى 256 حرفًا"
+  },
+  "shell": {
+    "brandSubtitle": "نظام إدارة الطوابير",
+    "menu": "القائمة",
+    "mainNavigation": "التنقل الرئيسي",
+    "skipToContent": "انتقل إلى المحتوى",
+    "signOut": "تسجيل الخروج",
+    "close": "إغلاق",
+    "accountOf": "تم تسجيل الدخول باسم {{name}}"
+  },
+  "nav": {
+    "sections": {
+      "overview": "نظرة عامة",
+      "setup": "الإعداد",
+      "operations": "العمليات"
+    },
+    "home": "الرئيسية",
+    "dashboard": "لوحة المتابعة",
+    "companies": "الشركات",
+    "serviceTypes": "أنواع الخدمات",
+    "priorityTypes": "أنواع الأولوية",
+    "serviceMapping": "ربط الخدمات",
+    "branches": "الفروع",
+    "users": "المستخدمون",
+    "templates": "قوالب التذاكر",
+    "counterConsole": "وحدة تحكم الشباك",
+    "reports": "التقارير"
+  },
+  "roles": {
+    "SuperAdmin": "مدير النظام",
+    "CompanyAdmin": "مدير الشركة",
+    "BranchManager": "مدير الفرع / المشرف",
+    "CounterStaff": "موظف الشباك"
+  },
+  "home": {
+    "welcome": "مرحبًا، {{name}}",
+    "description": "لقد سجّلت الدخول إلى QFlow. تعرض القائمة المجالات المتاحة لدورك."
+  },
+  "errors": {
+    "network": "تعذّر الاتصال بالخادم",
+    "unknown": "حدث خطأ ما. حاول مرة أخرى.",
+    "reference": "المرجع",
+    "auth": {
+      "invalid_credentials": "اسم المستخدم أو كلمة المرور غير صحيحة",
+      "locked_out": "تم قفل هذا الحساب بعد محاولات فاشلة كثيرة. حاول مرة أخرى لاحقًا.",
+      "refresh_reused": "انتهت جلستك. سجّل الدخول مرة أخرى.",
+      "unauthorized": "انتهت صلاحية جلستك. سجّل الدخول مرة أخرى.",
+      "forbidden": "ليس لديك صلاحية لتنفيذ هذا الإجراء"
+    },
+    "request": {
+      "rate_limited": "محاولات كثيرة جدًا. حاول مرة أخرى بعد {{minutes}} دقيقة.",
+      "rate_limited_generic": "محاولات كثيرة جدًا. حاول مرة أخرى لاحقًا.",
+      "invalid": "الطلب غير صالح",
+      "conflict": "تم تغيير البيانات من قبل مستخدم آخر. أعد التحميل وحاول مرة أخرى."
+    },
+    "resource": {
+      "not_found": "العنصر المطلوب غير موجود"
+    },
+    "validation": {
+      "failed": "تحقق من الحقول المحددة وحاول مرة أخرى",
+      "field_invalid": "تحقق من هذا الحقل"
+    },
+    "server": {
+      "unexpected_error": "حدث خطأ غير متوقع. حاول مرة أخرى."
+    }
+  }
+}
