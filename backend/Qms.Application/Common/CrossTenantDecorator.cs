@@ -22,7 +22,7 @@ public sealed class CrossTenantDecorator<TCommand, TResult> : ICommandHandler<TC
 
     public async Task<Result<TResult>> HandleAsync(TCommand command, CancellationToken cancellationToken)
     {
-        if (!_currentUser.IsInRole(Roles.SuperAdmin))
+        if (!_currentUser.IsSuperAdmin)
         {
             return Result<TResult>.Failure(AuthErrors.Forbidden);
         }
@@ -50,7 +50,7 @@ public sealed class CrossTenantQueryDecorator<TQuery, TResult> : IQueryHandler<T
 
     public async Task<Result<TResult>> HandleAsync(TQuery query, CancellationToken cancellationToken)
     {
-        if (!_currentUser.IsInRole(Roles.SuperAdmin))
+        if (!_currentUser.IsSuperAdmin)
         {
             return Result<TResult>.Failure(AuthErrors.Forbidden);
         }

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Qms.Application.Auth;
 using Qms.Application.Common;
 
 namespace Qms.Api.Auth;
@@ -17,11 +18,10 @@ public sealed class HttpContextCurrentUser(IHttpContextAccessor accessor) : ICur
 
     public Guid? CompanyId => ReadGuid("company_id");
 
-    public string? Role => IsAuthenticated ? Principal!.FindFirst("role")?.Value : null;
+    // Only a Super Admin token carries a role claim; company roles are resolved per request from the database (ADR-009 section 6).
+    public bool IsSuperAdmin => IsAuthenticated && string.Equals(Principal!.FindFirst("role")?.Value, Roles.SuperAdmin, StringComparison.Ordinal);
 
     public string? Language => IsAuthenticated ? Principal!.FindFirst("lang")?.Value : null;
-
-    public bool IsInRole(string role) => Role is { } current && string.Equals(current, role, StringComparison.Ordinal);
 
     private Guid? ReadGuid(string claim) =>
         IsAuthenticated && Guid.TryParse(Principal!.FindFirst(claim)?.Value, out var value) ? value : null;

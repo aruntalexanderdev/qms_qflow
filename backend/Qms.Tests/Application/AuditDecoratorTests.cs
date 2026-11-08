@@ -48,11 +48,11 @@ namespace Qms.Tests.Application
             public async ValueTask DisposeAsync() => await Provider.DisposeAsync();
         }
 
-        private async Task<Harness> StartAsync(string role = Roles.CompanyAdmin, bool withoutCompany = false)
+        private async Task<Harness> StartAsync(bool superAdmin = false, bool withoutCompany = false)
         {
             var connectionString = await postgres.NewDatabaseAsync(seeded: true);
             var log = new EventLog();
-            var user = new FakeUser(withoutCompany ? null : SeedIds.Company1, role);
+            var user = new FakeUser(withoutCompany ? null : SeedIds.Company1, superAdmin);
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton(log);
@@ -76,7 +76,7 @@ namespace Qms.Tests.Application
         [Fact]
         public async Task Ac31_the_order_is_validation_cross_tenant_audit_then_handler()
         {
-            await using var harness = await StartAsync(Roles.SuperAdmin);
+            await using var harness = await StartAsync(superAdmin: true);
             using var scope = harness.Provider.CreateScope();
 
             var result = await scope.ServiceProvider.GetRequiredService<ICommandHandler<CrossTenantAuditedCommand, TestDto>>()
@@ -89,7 +89,7 @@ namespace Qms.Tests.Application
         [Fact]
         public async Task Ac31_a_non_super_admin_is_refused_before_any_transaction_opens()
         {
-            await using var harness = await StartAsync(Roles.CompanyAdmin);
+            await using var harness = await StartAsync();
             using var scope = harness.Provider.CreateScope();
 
             var result = await scope.ServiceProvider.GetRequiredService<ICommandHandler<CrossTenantAuditedCommand, TestDto>>()
@@ -212,7 +212,7 @@ namespace Qms.Tests.Application
         [Fact]
         public async Task A_cross_tenant_command_names_the_company_of_its_audit_row()
         {
-            await using var harness = await StartAsync(Roles.SuperAdmin, withoutCompany: true);
+            await using var harness = await StartAsync(superAdmin: true, withoutCompany: true);
             using var scope = harness.Provider.CreateScope();
 
             var result = await scope.ServiceProvider.GetRequiredService<ICommandHandler<TargetedCommand, TestDto>>()
@@ -227,7 +227,7 @@ namespace Qms.Tests.Application
         [Fact]
         public async Task A_command_with_no_company_and_no_target_fails_loudly_and_writes_nothing()
         {
-            await using var harness = await StartAsync(Roles.SuperAdmin, withoutCompany: true);
+            await using var harness = await StartAsync(superAdmin: true, withoutCompany: true);
             using var scope = harness.Provider.CreateScope();
 
             await Should.ThrowAsync<InvalidOperationException>(() => scope.ServiceProvider.GetRequiredService<ICommandHandler<CrossTenantAuditedCommand, TestDto>>()

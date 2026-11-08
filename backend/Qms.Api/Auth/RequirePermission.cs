@@ -22,6 +22,20 @@ public sealed class RequirePermissionAttribute(string permission) : AuthorizeAtt
     }
 }
 
+/// <summary>
+/// Protects an endpoint that only a Super Admin may use (companies, later licences and global settings; ADR-009 section 1). It checks
+/// the <c>role</c> claim, never a permission: a company role can never grant cross-company rights. Anonymous callers get 401, other
+/// signed-in users 403.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
+public sealed class RequireSuperAdminAttribute : AuthorizeAttribute
+{
+    public RequireSuperAdminAttribute()
+    {
+        Roles = Qms.Application.Auth.Roles.SuperAdmin;
+    }
+}
+
 public sealed record PermissionRequirement(string Permission) : IAuthorizationRequirement;
 
 public sealed class PermissionAuthorizationHandler(IPermissionResolver resolver, ICurrentUser currentUser, IHttpContextAccessor httpContextAccessor)

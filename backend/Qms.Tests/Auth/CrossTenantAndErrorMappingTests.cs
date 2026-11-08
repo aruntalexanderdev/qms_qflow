@@ -56,7 +56,7 @@ public sealed class CrossTenantAndErrorMappingTests(PostgresFixture postgres)
     public async Task Ac11_a_Branch_Manager_is_refused_too()
     {
         using var host = await AuthHost.StartAsync(postgres);
-        var token = host.MintToken(AuthHost.UserOf(AuthHost.Company1, Qms.Application.Auth.Roles.BranchManager));
+        var token = host.MintToken(AuthHost.UserOf(AuthHost.Company1));
 
         (await host.SendAsync(HttpMethod.Get, Base + "/all-branches", bearer: token)).Status.ShouldBe(403);
     }

@@ -7,7 +7,9 @@ namespace Qms.Tests.Auth;
 // Handler rules with hand-written fakes: no database, no HTTP.
 public sealed class HandlerUnitTests
 {
-    private static readonly CurrentUserDto Ada = new(Guid.NewGuid(), "ada", "Ada", Roles.CompanyAdmin, Guid.NewGuid(), "en", [], []);
+    private static readonly CurrentUserDto Ada = new(
+        Guid.NewGuid(), "ada", "Ada", Guid.NewGuid(), "en", false, [new CurrentUserRoleDto(Guid.NewGuid(), "Company Admin")], ["service-types.view"],
+        Qms.Domain.Enums.RoleBranchScope.Company, [], []);
 
     private sealed class FakeAccounts : IUserAccounts
     {
@@ -163,7 +165,7 @@ public sealed class HandlerUnitTests
         store.Revoked.ShouldBe(["refresh-1"]);
     }
 
-    private sealed class FakeCurrentUser(Guid? userId, string? role = null) : ICurrentUser
+    private sealed class FakeCurrentUser(Guid? userId, bool isSuperAdmin = false) : ICurrentUser
     {
         public bool IsAuthenticated => userId is not null;
 
@@ -171,11 +173,9 @@ public sealed class HandlerUnitTests
 
         public Guid? CompanyId => null;
 
-        public string? Role => role;
+        public bool IsSuperAdmin => isSuperAdmin;
 
         public string? Language => "en";
-
-        public bool IsInRole(string value) => role == value;
     }
 
     [Fact]
@@ -230,15 +230,13 @@ public sealed class HandlerUnitTests
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData(Roles.CompanyAdmin)]
-    [InlineData(Roles.BranchManager)]
-    [InlineData(Roles.CounterStaff)]
-    public async Task The_decorator_refuses_everyone_but_a_Super_Admin_without_running_the_handler(string? role)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_decorator_refuses_everyone_but_a_Super_Admin_without_running_the_handler(bool signedIn)
     {
         var scope = new RecordingScope();
         var probe = new ProbeHandler(scope);
-        var decorator = new CrossTenantDecorator<string, bool>(probe, new FakeCurrentUser(role is null ? null : Guid.NewGuid(), role), scope);
+        var decorator = new CrossTenantDecorator<string, bool>(probe, new FakeCurrentUser(signedIn ? Guid.NewGuid() : null), scope);
 
         var result = await decorator.HandleAsync("go", CancellationToken.None);
 
@@ -255,7 +253,7 @@ public sealed class HandlerUnitTests
     {
         var scope = new RecordingScope();
         var probe = new ProbeHandler(scope);
-        var decorator = new CrossTenantDecorator<string, bool>(probe, new FakeCurrentUser(Guid.NewGuid(), Roles.SuperAdmin), scope);
+        var decorator = new CrossTenantDecorator<string, bool>(probe, new FakeCurrentUser(Guid.NewGuid(), isSuperAdmin: true), scope);
 
         await decorator.HandleAsync(command, CancellationToken.None);
 
@@ -274,7 +272,7 @@ public sealed class HandlerUnitTests
     public async Task The_section_is_closed_even_when_the_handler_throws()
     {
         var scope = new RecordingScope();
-        var decorator = new CrossTenantDecorator<string, bool>(new ThrowingHandler(), new FakeCurrentUser(Guid.NewGuid(), Roles.SuperAdmin), scope);
+        var decorator = new CrossTenantDecorator<string, bool>(new ThrowingHandler(), new FakeCurrentUser(Guid.NewGuid(), isSuperAdmin: true), scope);
 
         await Should.ThrowAsync<InvalidOperationException>(() => decorator.HandleAsync("go", CancellationToken.None));
 
@@ -305,7 +303,7 @@ public sealed class HandlerUnitTests
         services.AddHandlersAndValidators(typeof(HandlerUnitTests).Assembly, type => type.DeclaringType == typeof(HandlerUnitTests));
         var scope = new RecordingScope();
         services.AddSingleton<ITenantScope>(scope);
-        services.AddSingleton<ICurrentUser>(new FakeCurrentUser(Guid.NewGuid(), Roles.CompanyAdmin));
+        services.AddSingleton<ICurrentUser>(new FakeCurrentUser(Guid.NewGuid()));
         await using var provider = services.BuildServiceProvider();
         using var requestScope = provider.CreateScope();
 

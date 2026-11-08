@@ -53,6 +53,12 @@ public interface ICompanyLanguages
 public interface IRequestLanguage
 {
     Task<string> GetCurrentAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The language of this request's <c>Accept-Language</c> header among <paramref name="company"/>'s enabled languages, else its
+    /// default. Used where the company is not the request's tenant yet (sign-in and refresh, ADR-010 section 7).
+    /// </summary>
+    string Negotiate(CompanyLanguageSettings company);
 }
 
 public static class CompanyLanguagesExtensions

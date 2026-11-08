@@ -23,13 +23,14 @@ public sealed class TokenAndScopeUnitTests
         return new JwtTokenService(Options.Create(options), new FixedTimeProvider(now ?? Now));
     }
 
-    private static CurrentUserDto User(Guid? companyId, string role = Roles.CompanyAdmin) =>
-        new(Guid.Parse("11111111-1111-7111-8111-111111111111"), "admin", "Ada Admin", role, companyId, "ar", [], []);
+    private static CurrentUserDto User(Guid? companyId, bool isSuperAdmin = false) =>
+        new(Guid.Parse("11111111-1111-7111-8111-111111111111"), "admin", "Ada Admin", companyId, "ar", isSuperAdmin,
+            [], ["service-types.view"], isSuperAdmin ? null : Qms.Domain.Enums.RoleBranchScope.Company, [], []);
 
     // ---- access token
 
     [Fact]
-    public void The_access_token_carries_sub_company_id_role_name_and_lang_and_expires_in_15_minutes()
+    public void The_access_token_carries_sub_company_id_name_and_lang_and_no_role_or_permission_and_expires_in_15_minutes()
     {
         var company = Guid.NewGuid();
 
@@ -38,7 +39,8 @@ public sealed class TokenAndScopeUnitTests
         var jwt = new JsonWebTokenHandler().ReadJsonWebToken(token.Value);
         jwt.Subject.ShouldBe("11111111-1111-7111-8111-111111111111");
         jwt.GetClaim("company_id").Value.ShouldBe(company.ToString());
-        jwt.GetClaim("role").Value.ShouldBe("CompanyAdmin");
+        jwt.Claims.Any(claim => claim.Type == "role").ShouldBeFalse();
+        jwt.Claims.Any(claim => claim.Type is "permissions" or "permission" or "roles").ShouldBeFalse();
         jwt.GetClaim("name").Value.ShouldBe("Ada Admin");
         jwt.GetClaim("lang").Value.ShouldBe("ar");
         jwt.Issuer.ShouldBe("qms-test");
@@ -52,7 +54,7 @@ public sealed class TokenAndScopeUnitTests
     [Fact]
     public void A_Super_Admin_token_has_no_company_id_claim()
     {
-        var token = NewService().CreateAccessToken(User(null, Roles.SuperAdmin));
+        var token = NewService().CreateAccessToken(User(null, isSuperAdmin: true));
 
         var jwt = new JsonWebTokenHandler().ReadJsonWebToken(token.Value);
         jwt.Claims.Any(claim => claim.Type == "company_id").ShouldBeFalse();
@@ -79,8 +81,8 @@ public sealed class TokenAndScopeUnitTests
     [Fact]
     public void Two_tokens_for_the_same_user_are_different_strings_only_by_time_not_by_secret_state()
     {
-        var first = NewService(Now).CreateAccessToken(User(null, Roles.SuperAdmin)).Value;
-        var later = NewService(Now.AddSeconds(1)).CreateAccessToken(User(null, Roles.SuperAdmin)).Value;
+        var first = NewService(Now).CreateAccessToken(User(null, isSuperAdmin: true)).Value;
+        var later = NewService(Now.AddSeconds(1)).CreateAccessToken(User(null, isSuperAdmin: true)).Value;
 
         first.ShouldNotBe(later);
     }
@@ -166,10 +168,17 @@ public sealed class TokenAndScopeUnitTests
         user.IsAuthenticated.ShouldBeTrue();
         user.UserId.ShouldBe(id);
         user.CompanyId.ShouldBe(company);
-        user.Role.ShouldBe("CounterStaff");
+        user.IsSuperAdmin.ShouldBeFalse();
         user.Language.ShouldBe("ar");
-        user.IsInRole("CounterStaff").ShouldBeTrue();
-        user.IsInRole("SuperAdmin").ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Only_the_SuperAdmin_role_claim_makes_a_Super_Admin()
+    {
+        UserFrom(new Claim("sub", Guid.NewGuid().ToString()), new Claim("role", "SuperAdmin")).IsSuperAdmin.ShouldBeTrue();
+        UserFrom(new Claim("sub", Guid.NewGuid().ToString()), new Claim("role", "superadmin")).IsSuperAdmin.ShouldBeFalse();
+        UserFrom(new Claim("sub", Guid.NewGuid().ToString()), new Claim("role", "CompanyAdmin")).IsSuperAdmin.ShouldBeFalse();
+        UserFrom(new Claim("sub", Guid.NewGuid().ToString())).IsSuperAdmin.ShouldBeFalse();
     }
 
     [Fact]
@@ -183,15 +192,14 @@ public sealed class TokenAndScopeUnitTests
             user.IsAuthenticated.ShouldBeFalse();
             user.UserId.ShouldBeNull();
             user.CompanyId.ShouldBeNull();
-            user.Role.ShouldBeNull();
-            user.IsInRole("SuperAdmin").ShouldBeFalse();
+            user.IsSuperAdmin.ShouldBeFalse();
         }
     }
 
     [Fact]
     public void A_malformed_company_id_claim_means_no_company_so_the_tenant_fails_closed()
     {
-        UserFrom(new Claim("sub", Guid.NewGuid().ToString()), new Claim("company_id", "not-a-guid"), new Claim("role", "CompanyAdmin"))
+        UserFrom(new Claim("sub", Guid.NewGuid().ToString()), new Claim("company_id", "not-a-guid"))
             .CompanyId.ShouldBeNull();
     }
 
@@ -222,7 +230,7 @@ public sealed class TokenAndScopeUnitTests
     {
         var company = Guid.NewGuid();
 
-        new RequestTenantContext(UserFrom(new Claim("sub", Guid.NewGuid().ToString()), new Claim("company_id", company.ToString()), new Claim("role", "CompanyAdmin")))
+        new RequestTenantContext(UserFrom(new Claim("sub", Guid.NewGuid().ToString()), new Claim("company_id", company.ToString())))
             .CompanyId.ShouldBe(company);
         new RequestTenantContext(UserFrom(new Claim("sub", Guid.NewGuid().ToString()), new Claim("role", "SuperAdmin")))
             .CompanyId.ShouldBeNull();

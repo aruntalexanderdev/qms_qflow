@@ -9,7 +9,7 @@ using Qms.Infrastructure.Persistence.Seed;
 
 namespace Qms.Tests.Support;
 
-/// <summary>The six test users of the M2 setup API tests (ADR-008 section 15).</summary>
+/// <summary>The seven test users of the M2 setup API tests (ADR-008 section 15, STORY-048 AC-32).</summary>
 public enum SetupUser
 {
     /// <summary>Company Admin of Company 1.</summary>
@@ -29,14 +29,18 @@ public enum SetupUser
 
     /// <summary>Super Admin (no company).</summary>
     SuperAdmin,
+
+    /// <summary>CU-C1: a Company 1 user holding only the custom role "Type Viewer" (<c>Assigned</c>, <c>service-types.view</c>).</summary>
+    CustomRoleC1,
 }
 
 /// <summary>
 /// The shared integration-test data of the M2 setup stories (ADR-008 section 15), added to the Company 1 / Branch 1 seed:
 /// Company 2 with its own service type (prefix A), priority type (N), branch, zone, counter and dispenser; Branch 2 in
 /// Company 1 with a zone, counter and dispenser; and one user per <see cref="SetupUser"/>. Fixed ids, so <see cref="EnsureAsync"/>
-/// can run any number of times and changes nothing after the first. Use after <see cref="AuthHost.StartAsync"/>
-/// (the host has created the roles by then). Do not combine with <see cref="AuthHost.AddCompany2Async"/> (same company code).
+/// can run any number of times and changes nothing after the first. Company users hold roles through <c>user_role</c> (the system
+/// roles come from <see cref="DefaultRoles"/>; CU-C1 holds the custom role "Type Viewer"); only Super Admin is an Identity role.
+/// Use after <see cref="AuthHost.StartAsync"/>. Do not combine with <see cref="AuthHost.AddCompany2Async"/> (same company code).
 /// </summary>
 public sealed class SetupTestData
 {
@@ -67,14 +71,21 @@ public sealed class SetupTestData
 
     public static Guid Company2PriorityType { get; } = Make(0x000b);
 
-    private static readonly Dictionary<SetupUser, (string UserName, string Role, Guid? Company)> Definitions = new()
+    /// <summary>The custom role "Type Viewer" of Company 1 (<c>Assigned</c>, <c>service-types.view</c>), held by CU-C1.</summary>
+    public static Guid TypeViewerRole { get; } = Make(0x000c);
+
+    public const string TypeViewerName = "Type Viewer";
+
+    /// <summary>The role each user holds: a system role code, the custom "Type Viewer" (null code, <see cref="SetupUser.CustomRoleC1"/>), or none (Super Admin).</summary>
+    private static readonly Dictionary<SetupUser, (string UserName, SystemRoleCode? SystemRole, Guid? Company)> Definitions = new()
     {
-        [SetupUser.CompanyAdminC1] = ("setup.ca.c1", Roles.CompanyAdmin, SeedIds.Company1),
-        [SetupUser.CompanyAdminC2] = ("setup.ca.c2", Roles.CompanyAdmin, Company2),
-        [SetupUser.BranchManagerB1] = ("setup.bm.b1", Roles.BranchManager, SeedIds.Company1),
-        [SetupUser.BranchManagerB2] = ("setup.bm.b2", Roles.BranchManager, SeedIds.Company1),
-        [SetupUser.CounterStaff] = ("setup.cs", Roles.CounterStaff, SeedIds.Company1),
-        [SetupUser.SuperAdmin] = ("setup.sa", Roles.SuperAdmin, null),
+        [SetupUser.CompanyAdminC1] = ("setup.ca.c1", SystemRoleCode.CompanyAdmin, SeedIds.Company1),
+        [SetupUser.CompanyAdminC2] = ("setup.ca.c2", SystemRoleCode.CompanyAdmin, Company2),
+        [SetupUser.BranchManagerB1] = ("setup.bm.b1", SystemRoleCode.BranchManager, SeedIds.Company1),
+        [SetupUser.BranchManagerB2] = ("setup.bm.b2", SystemRoleCode.BranchManager, SeedIds.Company1),
+        [SetupUser.CounterStaff] = ("setup.cs", SystemRoleCode.CounterStaff, SeedIds.Company1),
+        [SetupUser.SuperAdmin] = ("setup.sa", null, null),
+        [SetupUser.CustomRoleC1] = ("setup.cu.c1", null, SeedIds.Company1),
     };
 
     private readonly AuthHost _host;
@@ -93,9 +104,11 @@ public sealed class SetupTestData
     /// <summary>A valid bearer token for the user (signed with the test key; the user need not log in).</summary>
     public string Token(SetupUser user)
     {
-        var (userName, role, company) = Definitions[user];
+        // The token holds identity only; the server resolves roles and permissions from the database on every request (ADR-009 section 6).
+        var (userName, _, company) = Definitions[user];
         var (branches, counters) = Assignments(user);
-        return _host.MintToken(new CurrentUserDto(_userIds[user], userName, userName, role, company, "en", branches, counters));
+        return _host.MintToken(new CurrentUserDto(
+            _userIds[user], userName, userName, company, "en", user == SetupUser.SuperAdmin, [], [], null, branches, counters));
     }
 
     /// <summary>Adds what is missing; running it again changes nothing.</summary>
@@ -111,16 +124,16 @@ public sealed class SetupTestData
         using (var scope = host.Factory.Services.CreateScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
-            foreach (var (user, (userName, role, company)) in Definitions)
+            foreach (var (user, (userName, _, company)) in Definitions)
             {
                 var existing = await users.FindByNameAsync(userName);
                 if (existing is null)
                 {
                     existing = new AppUser { UserName = userName, DisplayName = userName, CompanyId = company };
                     Check(await users.CreateAsync(existing, Password));
-                    if (role == Roles.SuperAdmin)
+                    if (user == SetupUser.SuperAdmin)
                     {
-                        Check(await users.AddToRoleAsync(existing, role));
+                        Check(await users.AddToRoleAsync(existing, Roles.SuperAdmin));
                     }
                 }
 
@@ -133,14 +146,16 @@ public sealed class SetupTestData
             // Company users hold their company's system role through user_role (ADR-009); only Super Admin is an Identity role.
             await EnsureSystemRolesAsync(db, SeedIds.Company1);
             await EnsureSystemRolesAsync(db, Company2);
+            await EnsureTypeViewerAsync(db);
             foreach (var (user, userId) in userIds)
             {
                 var (branches, counters) = Assignments(user);
                 var company = Definitions[user].Company;
-                if (company is { } roleCompany && Enum.Parse<SystemRoleCode>(Definitions[user].Role) is var code
-                    && !await db.CompanyUserRoles.IgnoreQueryFilters().AnyAsync(a => a.UserId == userId))
+                if (company is { } roleCompany && !await db.CompanyUserRoles.IgnoreQueryFilters().AnyAsync(a => a.UserId == userId))
                 {
-                    var roleId = await db.CompanyRoles.IgnoreQueryFilters().Where(r => r.CompanyId == roleCompany && r.SystemCode == code).Select(r => r.Id).SingleAsync();
+                    var roleId = Definitions[user].SystemRole is { } code
+                        ? await db.CompanyRoles.IgnoreQueryFilters().Where(r => r.CompanyId == roleCompany && r.SystemCode == code).Select(r => r.Id).SingleAsync()
+                        : TypeViewerRole;
                     db.CompanyUserRoles.Add(new UserRole { CompanyId = roleCompany, UserId = userId, RoleId = roleId });
                 }
 
@@ -175,7 +190,27 @@ public sealed class SetupTestData
         _ => ([], []),
     };
 
-    /// <summary>Adds the three system roles with their default grants when the company has none (TASK-015 adds the custom-role helpers).</summary>
+    /// <summary>The custom role "Type Viewer" of Company 1 (<c>Assigned</c>, <c>service-types.view</c>, sort order 4, after the three system roles).</summary>
+    private static async Task EnsureTypeViewerAsync(Qms.Infrastructure.Persistence.QmsDbContext db)
+    {
+        if (await db.CompanyRoles.IgnoreQueryFilters().AnyAsync(r => r.Id == TypeViewerRole))
+        {
+            return;
+        }
+
+        db.CompanyRoles.Add(new Role
+        {
+            Id = TypeViewerRole,
+            CompanyId = SeedIds.Company1,
+            Name = TypeViewerName,
+            BranchScope = RoleBranchScope.Assigned,
+            SortOrder = 4,
+            Permissions = [new RolePermission { CompanyId = SeedIds.Company1, Permission = Permissions.ServiceTypes.View }],
+        });
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Adds the three system roles with their default grants when the company has none.</summary>
     private static async Task EnsureSystemRolesAsync(Qms.Infrastructure.Persistence.QmsDbContext db, Guid companyId)
     {
         var existing = await db.CompanyRoles.IgnoreQueryFilters().Where(r => r.CompanyId == companyId && r.SystemCode != null)

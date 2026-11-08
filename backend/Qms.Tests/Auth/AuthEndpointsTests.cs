@@ -33,7 +33,7 @@ public sealed class AuthEndpointsTests(PostgresFixture postgres)
         var token = new JsonWebTokenHandler().ReadJsonWebToken(reply.Json.GetProperty("accessToken").GetString());
         token.Subject.ShouldBe((await host.SeededUserIdAsync(TestAccounts.CompanyAdminUserName)).ToString());
         token.GetClaim("company_id").Value.ShouldBe(SeedCompany1());
-        token.GetClaim("role").Value.ShouldBe("CompanyAdmin");
+        token.Claims.Any(c => c.Type == "role").ShouldBeFalse();
         token.GetClaim("lang").Value.ShouldBe("en");
         token.GetClaim("name").Value.ShouldNotBeNullOrEmpty();
         (token.ValidTo - token.ValidFrom).ShouldBe(TimeSpan.FromMinutes(15));
@@ -385,7 +385,8 @@ public sealed class AuthEndpointsTests(PostgresFixture postgres)
 
         me.Status.ShouldBe(200);
         me.Json.GetProperty("companyId").GetString().ShouldBe(SeedCompany1());
-        me.Json.GetProperty("role").GetString().ShouldBe("CompanyAdmin");
+        me.Json.TryGetProperty("role", out _).ShouldBeFalse();
+        me.Json.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("name").GetString()).ShouldBe(["Company Admin"]);
         me.Json.GetProperty("language").GetString().ShouldBe("en");
         me.Json.GetProperty("userName").GetString().ShouldBe(TestAccounts.CompanyAdminUserName);
         me.Json.GetProperty("branchIds").GetArrayLength().ShouldBe(0);
@@ -429,7 +430,9 @@ public sealed class AuthEndpointsTests(PostgresFixture postgres)
 
         foreach (var user in new[] { login.Json.GetProperty("user"), me.Json })
         {
-            user.GetProperty("role").GetString().ShouldBe("CounterStaff");
+            user.TryGetProperty("role", out _).ShouldBeFalse();
+            user.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("name").GetString()).ShouldBe(["Counter Staff"]);
+            user.GetProperty("permissions").GetArrayLength().ShouldBe(0);
             user.GetProperty("language").GetString().ShouldBe("ar");
             user.GetProperty("branchIds").EnumerateArray().Select(e => e.GetGuid()).ShouldBe([Qms.Infrastructure.Persistence.Seed.SeedIds.Branch1]);
             user.GetProperty("counterIds").EnumerateArray().Select(e => e.GetGuid()).ShouldBe([Qms.Infrastructure.Persistence.Seed.SeedIds.Counter(2)]);

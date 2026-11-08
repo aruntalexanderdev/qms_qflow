@@ -30,20 +30,31 @@ public sealed class BranchScopeTests(PostgresFixture postgres)
         return (connectionString, branch2.Id, manager.Id);
     }
 
-    private static (BranchScope Scope, SqlCommandLog Log, QmsDbContext Db) Create(string connectionString, FakeUser user)
+    /// <summary>A resolver that answers a fixed branch scope (the roles side is tested with the real resolver in the roles tests).</summary>
+    private sealed class FixedScopeResolver(Qms.Domain.Enums.RoleBranchScope scope) : IPermissionResolver
+    {
+        public Task<EffectiveAccess> GetEffectiveAccessAsync(Qms.Application.Common.ICurrentUser user, CancellationToken cancellationToken) =>
+            Task.FromResult(new EffectiveAccess(new HashSet<string>(), scope, []));
+
+        public Task<bool> HasPermissionAsync(Qms.Application.Common.ICurrentUser user, string permission, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+    }
+
+    private static (BranchScope Scope, SqlCommandLog Log, QmsDbContext Db) Create(
+        string connectionString, FakeUser user, Qms.Domain.Enums.RoleBranchScope scope = Qms.Domain.Enums.RoleBranchScope.Assigned)
     {
         var log = new SqlCommandLog();
         var options = new DbContextOptionsBuilder<QmsDbContext>();
         options.UseQmsPostgres(connectionString).AddInterceptors(log);
         var db = new QmsDbContext(options.Options, new SettableCurrentTenant(user.CompanyId));
-        return (new BranchScope(db, user), log, db);
+        return (new BranchScope(db, user, new FixedScopeResolver(scope)), log, db);
     }
 
     [Fact]
-    public async Task A_company_admin_passes_every_branch_of_its_company_and_needs_no_assignments()
+    public async Task A_user_with_company_scope_passes_every_branch_of_its_company_and_needs_no_assignments()
     {
         var (connectionString, branch2, _) = await StartAsync();
-        var (scope, log, db) = Create(connectionString, new FakeUser(SeedIds.Company1, Roles.CompanyAdmin));
+        var (scope, log, db) = Create(connectionString, new FakeUser(SeedIds.Company1), Qms.Domain.Enums.RoleBranchScope.Company);
         await using var _ = db;
 
         (await scope.EnsureAccessAsync(SeedIds.Branch1, default)).IsSuccess.ShouldBeTrue();
@@ -56,7 +67,7 @@ public sealed class BranchScopeTests(PostgresFixture postgres)
     public async Task A_branch_manager_passes_assigned_branches_only_and_reads_the_assignments_once()
     {
         var (connectionString, branch2, manager) = await StartAsync();
-        var (scope, log, db) = Create(connectionString, new FakeUser(SeedIds.Company1, Roles.BranchManager, id: manager));
+        var (scope, log, db) = Create(connectionString, new FakeUser(SeedIds.Company1, id: manager));
         await using var _ = db;
 
         (await scope.EnsureAccessAsync(SeedIds.Branch1, default)).IsSuccess.ShouldBeTrue();
@@ -84,9 +95,9 @@ public sealed class BranchScopeTests(PostgresFixture postgres)
             otherCompanyBranch = branch.Id;
         }
 
-        foreach (var (role, id) in new[] { (Roles.CompanyAdmin, Guid.NewGuid()), (Roles.BranchManager, manager) })
+        foreach (var (roleScope, id) in new[] { (Qms.Domain.Enums.RoleBranchScope.Company, Guid.NewGuid()), (Qms.Domain.Enums.RoleBranchScope.Assigned, manager) })
         {
-            var (scope, _, db) = Create(connectionString, new FakeUser(SeedIds.Company1, role, id: id));
+            var (scope, _, db) = Create(connectionString, new FakeUser(SeedIds.Company1, id: id), roleScope);
             await using var _ = db;
 
             var foreign = await scope.EnsureAccessAsync(otherCompanyBranch, default);
@@ -102,7 +113,7 @@ public sealed class BranchScopeTests(PostgresFixture postgres)
     public async Task A_user_without_a_company_is_forbidden_and_has_no_branches()
     {
         var (connectionString, _, _) = await StartAsync();
-        var (scope, _, db) = Create(connectionString, new FakeUser(null, Roles.SuperAdmin));
+        var (scope, _, db) = Create(connectionString, new FakeUser(null, superAdmin: true), Qms.Domain.Enums.RoleBranchScope.Company);
         await using var _ = db;
 
         (await scope.EnsureAccessAsync(SeedIds.Branch1, default)).Error!.Code.ShouldBe("auth.forbidden");

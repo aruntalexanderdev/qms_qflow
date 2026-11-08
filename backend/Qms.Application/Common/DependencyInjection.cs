@@ -8,8 +8,11 @@ namespace Qms.Application.Common;
 public static class DependencyInjection
 {
     /// <summary>Registers every handler and validator of the Application assembly (ADR-002).</summary>
-    public static IServiceCollection AddApplication(this IServiceCollection services) =>
-        services.AddHandlersAndValidators(typeof(DependencyInjection).Assembly);
+    public static IServiceCollection AddApplication(this IServiceCollection services)
+    {
+        services.TryAddScoped<Auth.IAdminContinuityGuard, Auth.AdminContinuityGuard>();
+        return services.AddHandlersAndValidators(typeof(DependencyInjection).Assembly);
+    }
 
     /// <summary>
     /// Scans <paramref name="assembly"/> for <see cref="ICommandHandler{TCommand, TResult}"/> /

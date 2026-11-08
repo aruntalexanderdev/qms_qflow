@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Qms.Application.Auth;
+using Qms.Application.Common;
+using Qms.Application.Localisation;
 using Qms.Infrastructure.Persistence;
 using Qms.Infrastructure.Persistence.Identity;
 
@@ -10,7 +12,8 @@ namespace Qms.Infrastructure.Identity;
 /// ASP.NET Core Identity behind <see cref="IUserAccounts"/> (sign-in, lockout) and <see cref="IUserDirectory"/>.
 /// The user tables are not tenant-filtered: sign-in looks a user up before any company is known.
 /// </summary>
-public sealed class UserAccounts(UserManager<AppUser> users, IPasswordHasher<AppUser> hasher, QmsDbContext db)
+public sealed class UserAccounts(
+    UserManager<AppUser> users, IPasswordHasher<AppUser> hasher, QmsDbContext db, IEffectiveAccessReader accessReader, IRequestLanguage requestLanguage)
     : IUserAccounts, IUserDirectory
 {
     // A real hash, built once, so an unknown user costs the same password verification as a known one.
@@ -58,28 +61,21 @@ public sealed class UserAccounts(UserManager<AppUser> users, IPasswordHasher<App
         db.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.CompanyId == companyId, cancellationToken);
 
     /// <summary>
-    /// TEMPORARY adapter (STORY-048 stage 2, removed by TASK-015): after the ConfigurableRoles migration only SuperAdmin is an
-    /// Identity role, so a company user's single <c>role</c> is the system code of their most privileged system role in
-    /// <c>user_role</c>. It keeps the static resolver and the scope check working until the database-backed resolver replaces them.
+    /// The user as the auth endpoints return it (ADR-009 section 6): effective access from the user's active roles (one query),
+    /// role names resolved for the request's <c>Accept-Language</c> among the company's enabled languages (ADR-010 section 7), and
+    /// the branch and counter assignments. A company user with no active role still gets a user, with empty permissions.
     /// </summary>
-    private async Task<string?> SystemRoleCodeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var code = await db.CompanyUserRoles.IgnoreQueryFilters().AsNoTracking()
-            .Where(userRole => userRole.UserId == userId && userRole.Role!.SystemCode != null && userRole.Role.IsActive)
-            .OrderBy(userRole => userRole.Role!.SortOrder)
-            .Select(userRole => userRole.Role!.SystemCode)
-            .FirstOrDefaultAsync(cancellationToken);
-        return code?.ToString();
-    }
-
     private async Task<CurrentUserDto?> ToDtoAsync(AppUser user, CancellationToken cancellationToken)
     {
-        var role = (await users.GetRolesAsync(user)).FirstOrDefault() ?? await SystemRoleCodeAsync(user.Id, cancellationToken);
-        if (role is null)
+        var isSuperAdmin = (await users.GetRolesAsync(user)).Contains(Roles.SuperAdmin);
+        if (!isSuperAdmin && user.CompanyId is null)
         {
-            // A user without a role cannot be authorised for anything.
+            // Neither a Super Admin nor a company user: cannot be authorised for anything.
             return null;
         }
+
+        var access = isSuperAdmin ? EffectiveAccess.None : await accessReader.ReadAsync(user.Id, cancellationToken);
+        var roles = isSuperAdmin ? [] : await RoleNamesAsync(user.CompanyId!.Value, access, cancellationToken);
 
         // Assignments are tenant rows, and at sign-in there is no company yet: the filter would return nothing.
         // IgnoreQueryFilters is safe because the lookup is by the user's own id (ADR-003 Amendment 1).
@@ -95,6 +91,32 @@ public sealed class UserAccounts(UserManager<AppUser> users, IPasswordHasher<App
             .ToListAsync(cancellationToken);
 
         return new CurrentUserDto(
-            user.Id, user.UserName ?? string.Empty, user.DisplayName, role, user.CompanyId, user.Language, branchIds, counterIds);
+            user.Id,
+            user.UserName ?? string.Empty,
+            user.DisplayName,
+            user.CompanyId,
+            user.Language,
+            isSuperAdmin,
+            roles,
+            [.. access.Permissions.Order(StringComparer.Ordinal)],
+            isSuperAdmin ? null : access.BranchScope,
+            branchIds,
+            counterIds);
+    }
+
+    private async Task<List<CurrentUserRoleDto>> RoleNamesAsync(Guid companyId, EffectiveAccess access, CancellationToken cancellationToken)
+    {
+        if (access.Roles.Count == 0)
+        {
+            return [];
+        }
+
+        var company = await db.Companies.IgnoreQueryFilters().AsNoTracking()
+            .Where(row => row.Id == companyId)
+            .Select(row => new { row.DefaultLanguage, row.EnabledLanguages })
+            .FirstOrDefaultAsync(cancellationToken);
+        var languages = company is null ? CompanyLanguageSettings.English : new CompanyLanguageSettings(company.DefaultLanguage.Trim(), [.. company.EnabledLanguages]);
+        var language = requestLanguage.Negotiate(languages);
+        return [.. access.Roles.Select(role => new CurrentUserRoleDto(role.Id, LocalizedTextRules.Resolve(role.Name, role.NameTranslations, language, languages)))];
     }
 }

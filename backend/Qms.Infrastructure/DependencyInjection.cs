@@ -54,7 +54,11 @@ public static class DependencyInjection
         services.AddScoped<IBranchScope, BranchScope>();
         // One query per request for the registry and the company languages (ADR-010, AC-26).
         services.AddScoped<ICompanyLanguages, CompanyLanguages>();
-        services.AddSingleton<IPermissionResolver, StaticRolePermissionResolver>();
+        // Permissions and branch scope come from the user's active roles, read once per request (STORY-048, ADR-009 section 6).
+        services.AddScoped<EffectiveAccessReader>();
+        services.AddScoped<IEffectiveAccessReader>(provider => provider.GetRequiredService<EffectiveAccessReader>());
+        services.AddScoped<IPermissionResolver, DatabaseRolePermissionResolver>();
+        services.AddScoped<IAdminContinuityStore, AdminContinuityStore>();
         // No-op until STORY-021 (SignalR DeviceConfigChanged); a host or test may register its own before or after.
         services.TryAddSingleton<IDeviceConfigNotifier, NoOpDeviceConfigNotifier>();
         services.AddScoped<DevSeeder>();

@@ -7,7 +7,8 @@ namespace Qms.Infrastructure.Identity;
 
 /// <summary>
 /// Access token: JWT, HMAC-SHA256, 15 minutes, claims <c>sub</c>, <c>company_id</c> (absent for a Super Admin),
-/// <c>role</c>, <c>name</c>, <c>lang</c> (ADR-004). Time comes from <see cref="TimeProvider"/>.
+/// <c>name</c>, <c>lang</c> and, for a Super Admin only, <c>role</c> (ADR-004, ADR-009 section 6): no permissions and no company
+/// roles are in the token, the server resolves them per request. Time comes from <see cref="TimeProvider"/>.
 /// </summary>
 public sealed class JwtTokenService(IOptions<JwtOptions> options, TimeProvider timeProvider) : ITokenService
 {
@@ -32,10 +33,14 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options, TimeProvider t
         var claims = new Dictionary<string, object>
         {
             [ClaimNames.Subject] = user.Id.ToString(),
-            [ClaimNames.Role] = user.Role,
             [ClaimNames.Name] = user.Name,
             [ClaimNames.Language] = user.Language,
         };
+        if (user.IsSuperAdmin)
+        {
+            claims[ClaimNames.Role] = Roles.SuperAdmin;
+        }
+
         if (user.CompanyId is { } companyId)
         {
             claims[ClaimNames.CompanyId] = companyId.ToString();

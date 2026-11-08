@@ -125,35 +125,95 @@ public sealed class ArchitectureTests
             {
                 var protectedByPermission = action.IsDefined(typeof(Qms.Api.Auth.RequirePermissionAttribute), inherit: true)
                     || controller.IsDefined(typeof(Qms.Api.Auth.RequirePermissionAttribute), inherit: true);
+                var superAdminOnly = action.IsDefined(typeof(Qms.Api.Auth.RequireSuperAdminAttribute), inherit: true)
+                    || controller.IsDefined(typeof(Qms.Api.Auth.RequireSuperAdminAttribute), inherit: true);
                 var anonymous = action.IsDefined(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), inherit: true)
                     || controller.IsDefined(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), inherit: true);
-                (protectedByPermission || anonymous).ShouldBeTrue($"{controller.Name}.{action.Name} needs [RequirePermission] or [AllowAnonymous]");
+                (protectedByPermission || superAdminOnly || anonymous).ShouldBeTrue($"{controller.Name}.{action.Name} needs [RequirePermission], [RequireSuperAdmin] or [AllowAnonymous]");
+            }
+        }
+    }
+
+    // ---- STORY-048 AC-7: catalog invariants (ADR-008 Amendment 3 F, kept for database roles)
+
+    [Fact]
+    public void Every_RequirePermission_code_on_any_controller_is_in_the_catalog()
+    {
+        var codes = typeof(Program).Assembly.GetTypes()
+            .Where(type => typeof(Microsoft.AspNetCore.Mvc.ControllerBase).IsAssignableFrom(type))
+            .SelectMany(type => type.GetCustomAttributes(typeof(Qms.Api.Auth.RequirePermissionAttribute), true)
+                .Concat(type.GetMethods().SelectMany(method => method.GetCustomAttributes(typeof(Qms.Api.Auth.RequirePermissionAttribute), true))))
+            .Cast<Qms.Api.Auth.RequirePermissionAttribute>()
+            .Select(attribute => attribute.Permission)
+            .Distinct()
+            .ToList();
+
+        codes.ShouldNotBeEmpty();
+        foreach (var code in codes)
+        {
+            Qms.Application.Auth.PermissionCatalog.Contains(code).ShouldBeTrue(code);
+        }
+    }
+
+    [Fact]
+    public void The_catalog_has_19_modules_and_60_unique_codes_and_every_action_needs_its_module_view()
+    {
+        var catalog = Qms.Application.Auth.PermissionCatalog.Modules;
+        var codes = catalog.SelectMany(module => module.Actions.Select(action => action.Permission)).ToList();
+
+        catalog.Count.ShouldBe(19);
+        codes.Count.ShouldBe(60);
+        codes.Distinct(StringComparer.Ordinal).Count().ShouldBe(codes.Count);
+        codes.ShouldBe(Qms.Application.Auth.Permissions.All);
+        foreach (var module in catalog)
+        {
+            module.Actions[0].Action.ShouldBe("view", module.Module);
+            module.Actions.ShouldAllBe(action => action.Permission == module.Module + "." + action.Action);
+            module.Actions.Select(action => action.Action).Distinct().Count().ShouldBe(module.Actions.Count, module.Module);
+        }
+    }
+
+    [Fact]
+    public void The_default_roles_grant_the_module_view_whenever_they_grant_any_other_action_and_only_catalog_codes()
+    {
+        foreach (var definition in Qms.Application.Auth.DefaultRoles.Definitions)
+        {
+            foreach (var permission in definition.Permissions)
+            {
+                Qms.Application.Auth.PermissionCatalog.Contains(permission).ShouldBeTrue($"{definition.Name} holds {permission}");
+                definition.Permissions.ShouldContain(Qms.Application.Auth.PermissionCatalog.ViewOf(permission), $"{definition.Name} holds {permission}");
             }
         }
     }
 
     [Fact]
-    public void The_role_map_grants_the_module_view_whenever_it_grants_any_other_action_of_the_module()
+    public void Every_catalog_code_is_granted_to_the_default_company_admin()
     {
-        foreach (var role in Qms.Application.Auth.Roles.All)
-        {
-            var granted = Qms.Application.Auth.RolePermissionMap.For(role);
-            foreach (var permission in granted)
-            {
-                var module = permission[..permission.LastIndexOf('.')];
-                granted.ShouldContain(module + ".view", $"{role} holds {permission}");
-            }
-        }
+        Qms.Application.Auth.DefaultRoles.For(Qms.Domain.Enums.SystemRoleCode.CompanyAdmin).Permissions
+            .ShouldBe(Qms.Application.Auth.Permissions.All, ignoreOrder: true);
     }
 
     [Fact]
-    public void Every_granted_permission_is_in_the_catalog()
+    public void The_static_role_map_and_resolver_no_longer_exist()
     {
-        foreach (var role in Qms.Application.Auth.Roles.All)
+        typeof(Qms.Application.Auth.Permissions).Assembly.GetTypes().ShouldNotContain(type => type.Name == "RolePermissionMap");
+        typeof(Qms.Infrastructure.DependencyInjection).Assembly.GetTypes().ShouldNotContain(type => type.Name == "StaticRolePermissionResolver");
+        Qms.Application.Auth.Roles.All.ShouldBe(["SuperAdmin"]);
+    }
+
+    [Fact]
+    public void The_code_no_longer_checks_the_identity_role_CompanyAdmin()
+    {
+        foreach (var directory in new[] { "Qms.Application", "Qms.Infrastructure", "Qms.Api" })
         {
-            foreach (var permission in Qms.Application.Auth.RolePermissionMap.For(role))
+            var sources = Directory.EnumerateFiles(Path.Combine(FindBackendDirectory(), directory), "*.cs", SearchOption.AllDirectories)
+                .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                    && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                    && !path.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}"));
+            foreach (var path in sources)
             {
-                Qms.Application.Auth.Permissions.All.ShouldContain(permission);
+                File.ReadAllText(path).ShouldNotContain("IsInRole", customMessage: path);
+                File.ReadAllText(path).ShouldNotContain("Roles.CompanyAdmin", customMessage: path);
             }
         }
     }
@@ -185,13 +245,11 @@ public sealed class ArchitectureTests
 
         Qms.Application.Auth.Permissions.All.ShouldContain(module[0]);
         Qms.Application.Auth.Permissions.All.ShouldContain(module[1]);
-        Qms.Application.Auth.RolePermissionMap.For(Qms.Application.Auth.Roles.CompanyAdmin).ShouldBeSubsetOf(Qms.Application.Auth.Permissions.All);
-        Qms.Application.Auth.RolePermissionMap.For(Qms.Application.Auth.Roles.CompanyAdmin).ShouldContain(module[0]);
-        Qms.Application.Auth.RolePermissionMap.For(Qms.Application.Auth.Roles.CompanyAdmin).ShouldContain(module[1]);
-        foreach (var role in Qms.Application.Auth.Roles.All.Where(role => role != Qms.Application.Auth.Roles.CompanyAdmin))
+        foreach (var definition in Qms.Application.Auth.DefaultRoles.Definitions)
         {
-            Qms.Application.Auth.RolePermissionMap.For(role).ShouldNotContain(module[0], role);
-            Qms.Application.Auth.RolePermissionMap.For(role).ShouldNotContain(module[1], role);
+            var isCompanyAdmin = definition.Code == Qms.Domain.Enums.SystemRoleCode.CompanyAdmin;
+            definition.Permissions.Contains(module[0]).ShouldBe(isCompanyAdmin, definition.Name);
+            definition.Permissions.Contains(module[1]).ShouldBe(isCompanyAdmin, definition.Name);
         }
     }
 

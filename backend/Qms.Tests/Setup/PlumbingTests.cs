@@ -30,7 +30,7 @@ public sealed class PlumbingTests(PostgresFixture postgres)
         post.Body.ShouldContain("\"status\":\"Called\"");
         post.Json.GetProperty("isWaiting").GetBoolean().ShouldBeFalse();
         login.Status.ShouldBe(200);
-        login.Json.GetProperty("user").GetProperty("role").GetString().ShouldBe("CompanyAdmin");
+        login.Json.GetProperty("user").GetProperty("roles")[0].GetProperty("name").GetString().ShouldBe("Company Admin");
     }
 
     // ---- AC-29
@@ -273,18 +273,19 @@ public sealed class PlumbingTests(PostgresFixture postgres)
     public async Task Ac35_every_test_user_has_a_working_token_and_can_log_in()
     {
         using var setup = await SetupHost.StartAsync(postgres);
-        var roles = new Dictionary<SetupUser, string>
+        var roles = new Dictionary<SetupUser, string?>
         {
-            [SetupUser.CompanyAdminC1] = Roles.CompanyAdmin, [SetupUser.CompanyAdminC2] = Roles.CompanyAdmin,
-            [SetupUser.BranchManagerB1] = Roles.BranchManager, [SetupUser.BranchManagerB2] = Roles.BranchManager,
-            [SetupUser.CounterStaff] = Roles.CounterStaff, [SetupUser.SuperAdmin] = Roles.SuperAdmin,
+            [SetupUser.CompanyAdminC1] = "Company Admin", [SetupUser.CompanyAdminC2] = "Company Admin",
+            [SetupUser.BranchManagerB1] = "Branch Manager / Supervisor", [SetupUser.BranchManagerB2] = "Branch Manager / Supervisor",
+            [SetupUser.CounterStaff] = "Counter Staff", [SetupUser.SuperAdmin] = null, [SetupUser.CustomRoleC1] = SetupTestData.TypeViewerName,
         };
 
         foreach (var (user, role) in roles)
         {
             var me = await setup.GetAsync(user, "/api/v1/auth/me");
             me.Status.ShouldBe(200, user.ToString());
-            me.Json.GetProperty("role").GetString().ShouldBe(role);
+            me.Json.GetProperty("isSuperAdmin").GetBoolean().ShouldBe(user == SetupUser.SuperAdmin);
+            me.Json.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("name").GetString()).ShouldBe(role is null ? [] : [role]);
             (await setup.Host.LoginAsync(setup.Data.UserName(user), SetupTestData.Password)).Status.ShouldBe(200, user.ToString());
         }
 

@@ -123,8 +123,9 @@ public sealed class AuthHost : IDisposable
         return new Qms.Infrastructure.Identity.JwtTokenService(options, clock ?? TimeProvider.System).CreateAccessToken(user).Value;
     }
 
-    public static CurrentUserDto UserOf(Guid? companyId, string role = Roles.CompanyAdmin, Guid? id = null) =>
-        new(id ?? Guid.NewGuid(), "minted", "Minted User", role, companyId, "en", [], []);
+    /// <summary>A user object for <see cref="MintToken"/>. Only identity matters for the token; permissions are never in it (ADR-009 section 6).</summary>
+    public static CurrentUserDto UserOf(Guid? companyId, bool isSuperAdmin = false, Guid? id = null) =>
+        new(id ?? Guid.NewGuid(), "minted", "Minted User", companyId, "en", isSuperAdmin, [], [], null, [], []);
 
     /// <summary>Adds Company 2 with Branch "X1" and a Company 2 user (setup writes run in a cross-tenant section).</summary>
     public async Task<Company2> AddCompany2Async()

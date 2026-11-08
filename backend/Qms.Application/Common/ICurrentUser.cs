@@ -14,11 +14,9 @@ public interface ICurrentUser
     /// <summary>The <c>company_id</c> claim; absent for a Super Admin.</summary>
     Guid? CompanyId { get; }
 
-    /// <summary>The <c>role</c> claim, one of <see cref="Auth.Roles"/>.</summary>
-    string? Role { get; }
+    /// <summary>True when the <c>role</c> claim is <see cref="Auth.Roles.SuperAdmin"/>. Only a Super Admin token carries a <c>role</c> claim (ADR-009 section 6).</summary>
+    bool IsSuperAdmin { get; }
 
     /// <summary>The <c>lang</c> claim, <c>en</c> or <c>ar</c>.</summary>
     string? Language { get; }
-
-    bool IsInRole(string role);
 }

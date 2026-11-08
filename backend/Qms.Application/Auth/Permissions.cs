@@ -145,7 +145,7 @@ public static class Permissions
         public const string Edit = "company-languages.edit";
     }
 
-    /// <summary>Every permission that exists (the M2 catalog of ADR-009 section 3 plus company-languages): 60 codes. The display order of the catalog endpoint is TASK-015.</summary>
+    /// <summary>Every permission that exists (the M2 catalog of ADR-009 section 3 plus company-languages): 60 codes. The order of this list is the display order of the catalog (see <see cref="PermissionCatalog"/>).</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         ServiceTypes.View, ServiceTypes.Create, ServiceTypes.Edit, ServiceTypes.Delete,
@@ -168,31 +168,4 @@ public static class Permissions
         TicketTemplates.View, TicketTemplates.Create, TicketTemplates.Edit, TicketTemplates.Delete,
         CompanyLanguages.View, CompanyLanguages.Edit,
     ];
-}
-
-/// <summary>
-/// The fixed role to permission table that reproduces the ADR-008 section 9 matrix until roles become configurable:
-/// Company Admin has every company setup permission (including <c>company-languages</c>, ADR-010), Branch Manager only
-/// <c>view</c> of service types and priority types, Counter Staff and Super Admin none (Super Admin has no company).
-/// </summary>
-public static class RolePermissionMap
-{
-    private static readonly IReadOnlySet<string> None = new HashSet<string>(StringComparer.Ordinal);
-
-    private static readonly Dictionary<string, IReadOnlySet<string>> Map = new(StringComparer.Ordinal)
-    {
-        [Roles.CompanyAdmin] = new HashSet<string>(Permissions.All, StringComparer.Ordinal),
-        [Roles.BranchManager] = new HashSet<string>([Permissions.ServiceTypes.View, Permissions.PriorityTypes.View], StringComparer.Ordinal),
-    };
-
-    public static IReadOnlySet<string> For(string? role) => role is not null && Map.TryGetValue(role, out var set) ? set : None;
-}
-
-/// <summary>
-/// Answers whether the signed-in user holds a permission. The one place that knows how permissions are granted; endpoints
-/// and handlers only ask. Today backed by <see cref="RolePermissionMap"/>.
-/// </summary>
-public interface IPermissionResolver
-{
-    Task<bool> HasPermissionAsync(Common.ICurrentUser user, string permission, CancellationToken cancellationToken);
 }

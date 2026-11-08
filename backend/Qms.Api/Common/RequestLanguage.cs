@@ -24,8 +24,14 @@ public sealed class RequestLanguage(IHttpContextAccessor accessor, ICompanyLangu
             return _current = LanguageDefaults.DefaultLanguage;
         }
 
+        return _current = Negotiate(company);
+    }
+
+    public string Negotiate(CompanyLanguageSettings company)
+    {
+        ArgumentNullException.ThrowIfNull(company);
         var header = accessor.HttpContext?.Request.Headers.AcceptLanguage.ToString();
-        return _current = AcceptLanguageNegotiator.Negotiate(header, company.EnabledLanguages.ToList(), company.DefaultLanguage);
+        return AcceptLanguageNegotiator.Negotiate(header, company.EnabledLanguages.ToList(), company.DefaultLanguage);
     }
 }
 

@@ -139,30 +139,46 @@ public sealed class SetupPlumbingUnitTests
     // ---- permissions (product owner change: permission-based authorization)
 
     [Fact]
-    public void The_static_map_reproduces_the_adr_008_matrix()
+    public void The_catalog_constants_are_well_formed_and_unique()
     {
-        RolePermissionMap.For(Roles.CompanyAdmin).ShouldBe(Permissions.All, ignoreOrder: true);
-        RolePermissionMap.For(Roles.BranchManager).ShouldBe(
-            [Permissions.ServiceTypes.View, Permissions.PriorityTypes.View], ignoreOrder: true);
-        RolePermissionMap.For(Roles.CounterStaff).ShouldBeEmpty();
-        RolePermissionMap.For(Roles.SuperAdmin).ShouldBeEmpty();
-        RolePermissionMap.For(null).ShouldBeEmpty();
-        RolePermissionMap.For("Unknown").ShouldBeEmpty();
         Permissions.All.ShouldAllBe(p => p.Contains('.') && p == p.ToLowerInvariant());
         Permissions.All.Distinct().Count().ShouldBe(Permissions.All.Count);
     }
 
-    [Fact]
-    public async Task The_resolver_needs_a_signed_in_user_with_a_company()
+    private sealed class CountingReader(EffectiveAccess access) : IEffectiveAccessReader
     {
-        var resolver = new Qms.Infrastructure.Authorization.StaticRolePermissionResolver();
-        var company = Guid.NewGuid();
+        public int Reads { get; private set; }
 
-        (await resolver.HasPermissionAsync(new FakeUser(company, Roles.CompanyAdmin), Permissions.ServiceTypes.Delete, default)).ShouldBeTrue();
-        (await resolver.HasPermissionAsync(new FakeUser(company, Roles.BranchManager), Permissions.ServiceTypes.View, default)).ShouldBeTrue();
-        (await resolver.HasPermissionAsync(new FakeUser(company, Roles.BranchManager), Permissions.ServiceTypes.Edit, default)).ShouldBeFalse();
-        (await resolver.HasPermissionAsync(new FakeUser(null, Roles.CompanyAdmin), Permissions.ServiceTypes.View, default)).ShouldBeFalse();
-        (await resolver.HasPermissionAsync(new FakeUser(company, Roles.CompanyAdmin, authenticated: false), Permissions.ServiceTypes.View, default)).ShouldBeFalse();
+        public Task<EffectiveAccess> ReadAsync(Guid userId, CancellationToken cancellationToken)
+        {
+            Reads++;
+            return Task.FromResult(access);
+        }
+    }
+
+    [Fact]
+    public async Task The_resolver_needs_a_signed_in_company_user_and_asks_the_reader_once_per_request()
+    {
+        var company = Guid.NewGuid();
+        var access = EffectiveAccess.Combine([new GrantedRole(
+            new EffectiveRole(Guid.NewGuid(), "R", new Dictionary<string, string>(), Qms.Domain.Enums.RoleBranchScope.Assigned, 1),
+            [Permissions.ServiceTypes.View, "removed.from-catalog"])]);
+        var reader = new CountingReader(access);
+        var resolver = new Qms.Infrastructure.Authorization.DatabaseRolePermissionResolver(reader);
+        var user = new FakeUser(company);
+
+        (await resolver.HasPermissionAsync(user, Permissions.ServiceTypes.View, default)).ShouldBeTrue();
+        (await resolver.HasPermissionAsync(user, Permissions.ServiceTypes.Edit, default)).ShouldBeFalse();
+        (await resolver.HasPermissionAsync(user, "removed.from-catalog", default)).ShouldBeFalse();
+        (await resolver.GetEffectiveAccessAsync(user, default)).BranchScope.ShouldBe(Qms.Domain.Enums.RoleBranchScope.Assigned);
+        reader.Reads.ShouldBe(1);
+
+        var none = new CountingReader(access);
+        var other = new Qms.Infrastructure.Authorization.DatabaseRolePermissionResolver(none);
+        (await other.HasPermissionAsync(new FakeUser(null), Permissions.ServiceTypes.View, default)).ShouldBeFalse();
+        (await other.HasPermissionAsync(new FakeUser(company, superAdmin: true), Permissions.ServiceTypes.View, default)).ShouldBeFalse();
+        (await other.HasPermissionAsync(new FakeUser(company, authenticated: false), Permissions.ServiceTypes.View, default)).ShouldBeFalse();
+        none.Reads.ShouldBe(0);
     }
 
     // ---- AC-29 defaults, AC-33 production registration
@@ -192,7 +208,7 @@ public sealed class SetupPlumbingUnitTests
     }
 }
 
-internal sealed class FakeUser(Guid? companyId, string role, bool authenticated = true, Guid? id = null) : ICurrentUser
+internal sealed class FakeUser(Guid? companyId, bool superAdmin = false, bool authenticated = true, Guid? id = null) : ICurrentUser
 {
     public bool IsAuthenticated => authenticated;
 
@@ -200,11 +216,9 @@ internal sealed class FakeUser(Guid? companyId, string role, bool authenticated 
 
     public Guid? CompanyId => companyId;
 
-    public string? Role => role;
+    public bool IsSuperAdmin => superAdmin;
 
     public string? Language => "en";
-
-    public bool IsInRole(string value) => value == role;
 }
 
 public sealed class ErrorCodeSelectionTests
