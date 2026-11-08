@@ -41,7 +41,7 @@ Conventions for all M2 stories: [ADR-008](../adr/ADR-008-setup-api-conventions.m
 | [STORY-012](stories/STORY-012-devices-dispenser-settings-mapping.md) | Devices: create, registration code, dispenser settings (Show VIP default yes), zone + service mapping (4.4) (+ STORY-002 follow-ups: §4.4 "no counter serves this service" warning, N3 device type check) | 2, 3 | ⬜ |
 | [STORY-013](stories/STORY-013-ticket-templates.md) | Ticket templates (incl. fee line) | 3 (2 only if a `name` column is approved) | ⬜ |
 
-Order: 005 → (006 ∥ 007 ∥ 013) → 008 → (009 ∥ 010) → 012 → 011. Single track: 005 → 006 → 007 → 008 → 009 → 010 → 013 → 012 → 011. One branch and PR per story (rules §9).
+Order (dependencies): 005 → (006 ∥ 007 ∥ 013) → 008 → (009 ∥ 010) → (011 ∥ 012); 012 also uses 013. Single track: 005 → 006 → 007 → 008 → 009 → 010 → 013 → 012 → 011. One branch and PR per story (rules §9).
 Open for the product owner: no story covers `CRUD /companies` and provisioning a new company's first Company Admin (spec §8, §10); proposal: add it to M2 (next free id STORY-047). See STORY-005 section 10.
 
 ### M3 Queue engine
