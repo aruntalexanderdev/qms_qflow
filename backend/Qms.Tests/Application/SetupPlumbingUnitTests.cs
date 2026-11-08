@@ -44,12 +44,12 @@ public sealed class SetupPlumbingUnitTests
         RowVersionCodec.TryDecode(text, out _).ShouldBeFalse();
 
     [Fact]
-    public void Ac32_a_bad_version_is_a_validation_error_on_version()
+    public async Task Ac32_a_bad_version_is_a_validation_error_on_version()
     {
-        var validator = new UpdateServiceTypeValidator();
+        var validator = new UpdateServiceTypeValidator(new FakeCompanyLanguages());
         var command = new UpdateServiceTypeCommand(Guid.NewGuid(), "x", null, "A", null, 0, true, "garbage");
 
-        var result = validator.Validate(command);
+        var result = await validator.ValidateAsync(command);
 
         result.Errors.Select(e => e.PropertyName).ShouldBe(["Version"]);
     }
@@ -73,7 +73,8 @@ public sealed class SetupPlumbingUnitTests
     // ---- AC-5
 
     private static string[] ServiceFields(string? nameEn = "Cards", IReadOnlyDictionary<string, string?>? translations = null, string? prefix = "H", int? target = null, int sort = 0) =>
-        [.. new CreateServiceTypeValidator().Validate(new CreateServiceTypeCommand(nameEn, translations, prefix, target, sort, true)).Errors.Select(e => e.PropertyName)];
+        [.. new CreateServiceTypeValidator(new FakeCompanyLanguages(FakeCompanyLanguages.EnglishAndArabic))
+            .ValidateAsync(new CreateServiceTypeCommand(nameEn, translations, prefix, target, sort, true)).GetAwaiter().GetResult().Errors.Select(e => e.PropertyName)];
 
     [Fact]
     public void Ac5_service_type_rules()
@@ -104,7 +105,8 @@ public sealed class SetupPlumbingUnitTests
     // ---- AC-17
 
     private static string[] PriorityFields(string? prefix = "P", int? level = 1, bool? paid = false, decimal? fee = null, string? nameEn = "Premium", IReadOnlyDictionary<string, string?>? translations = null) =>
-        [.. new CreatePriorityTypeValidator().Validate(new CreatePriorityTypeCommand(nameEn, translations ?? new Dictionary<string, string?> { ["ar"] = "مميز" }, prefix, level, paid, fee, true)).Errors.Select(e => e.PropertyName)];
+        [.. new CreatePriorityTypeValidator(new FakeCompanyLanguages(FakeCompanyLanguages.EnglishAndArabic))
+            .ValidateAsync(new CreatePriorityTypeCommand(nameEn, translations ?? new Dictionary<string, string?> { ["ar"] = "مميز" }, prefix, level, paid, fee, true)).GetAwaiter().GetResult().Errors.Select(e => e.PropertyName)];
 
     [Fact]
     public void Ac17_priority_type_rules()
@@ -205,25 +207,14 @@ internal sealed class FakeUser(Guid? companyId, string role, bool authenticated 
     public bool IsInRole(string value) => value == role;
 }
 
-public sealed class LocalizedTextTests
+public sealed class ErrorCodeSelectionTests
 {
-    [Fact]
-    public void The_temporary_adapter_maps_name_to_name_and_ar_to_the_translations_object()
-    {
-        var (name, translations) = LocalizedText.ToStorage(" Cards ", new Dictionary<string, string?> { ["AR"] = " البطاقات " });
-        name.ShouldBe("Cards");
-        translations.ShouldBe(new Dictionary<string, string> { ["ar"] = "البطاقات" });
-        LocalizedText.ToStorage("Cards", null).Translations.ShouldBeEmpty();
-        LocalizedText.ToStorage("Cards", new Dictionary<string, string?> { ["ar"] = "  " }).Translations.ShouldBeEmpty();
-        LocalizedText.FromStorage(new Dictionary<string, string> { ["ar"] = "البطاقات" })["ar"].ShouldBe("البطاقات");
-        LocalizedText.FromStorage(new Dictionary<string, string> { ["ar"] = "" }).ShouldBeEmpty();
-        LocalizedText.FromStorage(new Dictionary<string, string>()).ShouldBeEmpty();
-    }
-
     [Fact]
     public async Task A_shared_specific_error_code_becomes_the_validation_code()
     {
-        var provider = new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddHandlersAndValidators(typeof(LocalizedText).Assembly).BuildServiceProvider();
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton<Qms.Application.Localisation.ICompanyLanguages>(new FakeCompanyLanguages());
+        var provider = services.AddHandlersAndValidators(typeof(Qms.Application.Common.Result).Assembly).BuildServiceProvider();
         var validator = provider.GetRequiredService<FluentValidation.IValidator<CreateServiceTypeCommand>>();
 
         var result = await validator.ValidateAsync(new CreateServiceTypeCommand("x", new Dictionary<string, string?> { ["fr"] = "x" }, "H", null, 0, true));

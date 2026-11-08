@@ -154,6 +154,12 @@ public sealed class SetupTestController : QmsControllerBase
         return NoContent();
     }
 
+    /// <summary>STORY-051 AC-26: the language <see cref="Qms.Application.Localisation.IRequestLanguage"/> negotiated for this request.</summary>
+    [HttpGet("request-language")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RequestLanguage([FromServices] Qms.Application.Localisation.IRequestLanguage language, CancellationToken cancellationToken) =>
+        Ok(new { language = await language.GetCurrentAsync(cancellationToken) });
+
     [HttpGet("branch-scope/{branchId:guid}")]
     public async Task<IActionResult> BranchScope(
         Guid branchId,

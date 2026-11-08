@@ -6,7 +6,7 @@
 | Story | STORY-051 |
 | Stage | 3 Backend |
 | Agent | backend-developer |
-| Status | To do |
+| Status | Done |
 | Estimate | L |
 | Created | 2026-11-08 |
 
@@ -33,12 +33,12 @@ Source: STORY-051 section 7 "Backend (stage 3)", ADR-010 §3 to §7, ADR-008 (Am
 - Provides to: TASK-013 (`GET /languages` contract, `Accept-Language` accepted and ignored by existing endpoints), STORY-048, 011, 012, 013, 047 (helper, ports, `IRequestLanguage`).
 
 ## 5. Done checklist
-- [ ] Code follows common project rules
-- [ ] Tests added and passing (list them below)
-- [ ] User-facing text localised (translation keys / translated fields; English required, ADR-010)
-- [ ] No business logic outside `Qms.Application`
-- [ ] Spec / ADR updated if behaviour changed
-- [ ] Handoff written in the story's Stage log
+- [x] Code follows common project rules
+- [x] Tests added and passing (list them below)
+- [x] User-facing text localised (translation keys / translated fields; English required, ADR-010)
+- [x] No business logic outside `Qms.Application`
+- [x] Spec / ADR updated if behaviour changed
+- [x] Handoff written in the story's Stage log
 
 ## 6. Tests
 - Unit: AC-23 (rules), AC-24 (merge, `ForAdmin`), AC-25 (`Resolve`, `ResolveAll`), AC-26 (Accept-Language negotiation).
@@ -48,4 +48,24 @@ Source: STORY-051 section 7 "Backend (stage 3)", ADR-010 §3 to §7, ADR-008 (Am
 - Test helper: `SetupTestData` gets a method that makes `ar` available and enables it for Company 1 (and a way to list `ar` on Dispenser 1).
 
 ## 7. Notes / result
-<Filled by the agent when done.>
+Done 2026-11-08 (stage 3). Build `dotnet build backend/Qms.slnx -c Release`: 0 warnings, 0 errors. Tests: 489 passed, 0 failed, 0 skipped (two full runs; was 408, one adapter test replaced, 82 added).
+
+**Code**
+- `Qms.Application/Common/LocalizedTextRules.cs` replaces `LocalizedText.cs` (deleted): `DefaultValue(maxLength)` and `Translations(ICompanyLanguages, maxLength)` FluentValidation rules, pure `Check`, `Merge`, `ForAdmin`, `Resolve`, `ResolveAll`, `Same`.
+- `Qms.Application/Localisation/`: `ICompanyLanguages` (port) with `LanguageSnapshot` / `LanguageInfo` / `CompanyLanguageSettings`; `IRequestLanguage`; `AcceptLanguageNegotiator` (pure); `Languages/ListLanguages.cs` (`GET /languages`); `CompanyLanguages/` (`Get`, `Update`, DTO, errors).
+- `Qms.Infrastructure/Localisation/CompanyLanguages.cs`: one SQL statement per request (registry `CROSS JOIN` the tenant-filtered company row; registry only without a company), memoised in the scoped instance.
+- `Qms.Api`: `LanguagesController` (`[AllowAnonymous]`), `CompanyLanguagesController` (`[RequirePermission]`), `RequestLanguage` (`IRequestLanguage`), `ResultExtensions.ToProblem` copies `Error.Extensions` into the problem body.
+- Service types and priority types: validators take `ICompanyLanguages`; handlers use `Merge` / `ForAdmin`; lists keep their sort.
+- `Permissions.CompanyLanguages.View|Edit` in `Permissions.All`; `RolePermissionMap` unchanged in code (Company Admin gets `All`; Branch Manager keeps only service/priority type `view`). New `ErrorCodes`: `company_language.not_available|default_required|in_use`, `language.not_enabled`.
+- `IQmsDbContext.Languages` added (the context already had it).
+
+**Decisions**
+1. `IRequestLanguage` is `Task<string> GetCurrentAsync(ct)` (the language needs the memoised company query), not a sync `Current` property.
+2. Anonymous callers and Super Admin always resolve to `en` (no company, task text); a company user gets the best `Accept-Language` match among the company's enabled languages, else the company default.
+3. A blank translation value (null, empty, whitespace) is dropped before any key check, so `{"ar": ""}` is 201 even when `ar` is not enabled (AC-27); duplicate keys by letter case are refused whatever the values.
+4. `PUT /company-languages`: order of checks is validation (shape, blank code, duplicates), stale `version` (409), `not_available` (400, names the codes in `errors.enabledLanguages`), `default_required` (400), `in_use` (409, `devices: [{ id, name }]` and `languages: [..]` as extra members of the problem body). Stored order is registry order. A `PUT` equal to the stored set is audited, sends no `UPDATE` and no device notification; a real change notifies every branch of the company after the commit.
+5. A body `defaultLanguage` is ignored. A successful `PUT` carrying it (for example with the stored enabled list) is a normal 200 and is audited; AC-19 "nothing saved, no audit row" applies to the failing cases.
+6. The audit row's `entity_id` is the company id (`Id` on the DTO, `[JsonIgnore]`, not part of the response).
+7. `Error` got an optional `Extensions` map (additive) to carry the devices of the 409.
+
+**Tests** (all in `Qms.Tests`): `Application/LocalizedTextRulesTests` (AC-23 to AC-26 unit), `Setup/LanguagesApiTests` (AC-12 to AC-14, AC-26), `Setup/CompanyLanguagesApiTests` (AC-15 to AC-22, AC-40), `Setup/LocalisedNamesApiTests` (AC-27 to AC-30, both resources, phase 1 and ar-enabled), `Architecture/ArchitectureTests` additions (AC-31: no `NameEn`/`NameAr` in Application, adapter gone, module permissions). STORY-005 tests that send or expect `ar` now start `SetupHost.StartWithArabicAsync` (ar-enabled database built by SQL in the test); Company 2 bodies and the `Ac11_real_foreign_key_errors` test no longer send `ar`. `SetupPlumbingUnitTests` validators use `FakeCompanyLanguages` and `ValidateAsync`; the temporary-adapter test was replaced by `LocalizedTextRulesTests`.

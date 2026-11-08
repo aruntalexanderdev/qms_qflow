@@ -1,4 +1,5 @@
 using Qms.Application.Common;
+using Qms.Application.Localisation;
 using Qms.Domain.Entities;
 
 namespace Qms.Application.ServiceTypes;
@@ -14,12 +15,14 @@ public sealed record ServiceTypeDto(
     bool IsActive,
     string Version)
 {
-    public static ServiceTypeDto From(ServiceType row) => From(
-        row.Id, row.Name, row.NameTranslations, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion);
+    /// <summary>The admin form: only the translations of the company's enabled languages are returned (BR-11).</summary>
+    public static ServiceTypeDto From(ServiceType row, CompanyLanguageSettings languages) => From(
+        row.Id, row.Name, row.NameTranslations, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion, languages);
 
     public static ServiceTypeDto From(
-        Guid id, string name, IReadOnlyDictionary<string, string> nameTranslations, string prefix, int? targetMinutes, int sortOrder, bool isActive, uint rowVersion) =>
-        new(id, name, LocalizedText.FromStorage(nameTranslations), prefix.Trim(), targetMinutes, sortOrder, isActive, RowVersionCodec.Encode(rowVersion));
+        Guid id, string name, IReadOnlyDictionary<string, string> nameTranslations, string prefix, int? targetMinutes, int sortOrder, bool isActive, uint rowVersion,
+        CompanyLanguageSettings languages) =>
+        new(id, name, LocalizedTextRules.ForAdmin(nameTranslations, languages), prefix.Trim(), targetMinutes, sortOrder, isActive, RowVersionCodec.Encode(rowVersion));
 }
 
 /// <summary>Stable error codes of the service type endpoints (web and Android translate them).</summary>

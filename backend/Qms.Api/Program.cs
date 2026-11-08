@@ -50,6 +50,7 @@ builder.Services.AddControllers()
 });
 builder.Services.AddQmsProblemDetails();
 builder.Services.AddQmsAuthentication();
+builder.Services.AddQmsRequestLanguage();
 builder.Services.AddQmsHealthChecks();
 builder.Services.AddQmsOpenApi();
 

@@ -25,18 +25,25 @@ public static class Permissions
         public const string Delete = "priority-types.delete";
     }
 
+    public static class CompanyLanguages
+    {
+        public const string View = "company-languages.view";
+        public const string Edit = "company-languages.edit";
+    }
+
     /// <summary>Every permission that exists.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         ServiceTypes.View, ServiceTypes.Create, ServiceTypes.Edit, ServiceTypes.Delete,
         PriorityTypes.View, PriorityTypes.Create, PriorityTypes.Edit, PriorityTypes.Delete,
+        CompanyLanguages.View, CompanyLanguages.Edit,
     ];
 }
 
 /// <summary>
 /// The fixed role to permission table that reproduces the ADR-008 section 9 matrix until roles become configurable:
-/// Company Admin has every company setup permission, Branch Manager only <c>view</c> of service types and priority types,
-/// Counter Staff and Super Admin none (Super Admin has no company).
+/// Company Admin has every company setup permission (including <c>company-languages</c>, ADR-010), Branch Manager only
+/// <c>view</c> of service types and priority types, Counter Staff and Super Admin none (Super Admin has no company).
 /// </summary>
 public static class RolePermissionMap
 {

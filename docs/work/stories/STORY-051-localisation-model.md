@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-051 |
-| Status | Backend |
+| Status | Frontend |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 2 (Web i18n, Display voice), 7 (dispenser languages), 8 (`/login` language choice, `/admin/languages`), 9 (translated text pattern, `language`, `company`, all former `*_en` / `*_ar` columns, user `language`, `dispenser_setting.languages`), 10 (`/languages`, `/company-languages`), 11 (Languages), 12 (M2), 13 (localisation resolved) |
@@ -446,3 +446,15 @@ Notes for next stage:
 - Down loses translation keys other than `ar` and does not undo the dispenser language fix (documented in the migration).
 - PostgreSQL 18 (test container) names not-null constraints after the column; the migration renames them, and a model check still passes (`HasPendingModelChanges` is false).
 Open questions: none
+
+### Stage 3 — Backend — backend-developer — 2026-11-08
+Result: Done
+Changed: `Qms.Application/Common/LocalizedTextRules.cs` (new; `LocalizedText.cs` deleted); `Qms.Application/Localisation/*` (new: `LanguageModels.cs`, `AcceptLanguageNegotiator.cs`, `Languages/ListLanguages.cs`, `CompanyLanguages/*`); `Common/Error.cs` (optional `Extensions`), `ErrorCodes.cs`, `IQmsDbContext.cs` (`Languages`), `Auth/Permissions.cs`; service types and priority types (validators, handlers, DTOs); `Qms.Infrastructure/Localisation/CompanyLanguages.cs` and its registration; `Qms.Api/Controllers/LanguagesController.cs`, `CompanyLanguagesController.cs`, `Common/RequestLanguage.cs`, `Common/ResultExtensions.cs`, `Program.cs`; tests (new `LocalizedTextRulesTests`, `LanguagesApiTests`, `CompanyLanguagesApiTests`, `LocalisedNamesApiTests`, `FakeCompanyLanguages`; STORY-005 tests moved to the ar-enabled database via `SetupHost.StartWithArabicAsync`; architecture tests extended). Task: [TASK-012](../tasks/TASK-012-localisation-backend.md) Done. Build: 0 warnings, 0 errors. Tests: 489 passed, 0 failed, 0 skipped (run twice).
+Notes for next stage:
+- `GET /api/v1/languages` (anonymous allowed; send the token when signed in): `{ "defaultLanguage": "en", "languages": [ { "code": "en", "nativeName": "English", "direction": "ltr" } ] }`, sorted by registry `sort_order`. No token or Super Admin: the languages the release makes available. Company user (any role, no permission needed): the languages the company enabled. Re-read after sign-in, session restore and user switch. An invalid or expired token on this endpoint is treated as anonymous (200), it is not a 401.
+- `Accept-Language` is accepted by every endpoint and changes nothing yet: service type and priority type admin responses are not resolved by it (raw `name` + `translations`). Only the test host reads it (`IRequestLanguage`). Negotiation, for the later resolved APIs: quality order, primary subtag (`ar-AE` matches `ar`), only the company's enabled languages, else the company default; anonymous and Super Admin get `en`.
+- `translations` in service/priority type responses holds only enabled non-default languages: with `{en}` it is always `{}`, even though the seed stores Arabic. Sending `ar` is 400 `translation.language_not_enabled` (error key `translations.ar`) until Arabic is available and enabled; `en` as a key is 400 `translation.default_language_key`; empty or blank values are dropped. Keys are case-insensitive and returned in registry form. A `PUT` without `translations` keeps the stored texts of languages that are not enabled.
+- `GET /api/v1/company-languages` (`company-languages.view`): `{ defaultLanguage, enabledLanguages: string[], availableLanguages: [{ code, nativeName, direction }], version }`. `PUT` (`company-languages.edit`): `{ enabledLanguages: string[], version }` (both required; `defaultLanguage` in the body is ignored). Errors: 400 `company_language.not_available` / `company_language.default_required` (`errors.enabledLanguages`), 400 `validation.failed` (duplicates, blank code, missing field), 409 `company_language.in_use` (problem body has `devices: [{ id, name }]` and `languages: [..]`), 409 `request.conflict` (stale `version`). Company Admin only (Branch Manager, Counter Staff and Super Admin get 403, anonymous 401). New error codes need `errors.*` entries when STORY-050 builds the screen.
+- Test helpers for stage 4 e2e: none new for the browser; backend tests make Arabic available with `UPDATE language SET is_available = true WHERE code = 'ar'` and `UPDATE company SET enabled_languages = '{en,ar}'`.
+Open questions: none. Deviations to confirm (non-blocking): `IRequestLanguage` is `GetCurrentAsync(ct)` instead of a sync `Current`; a 200 `PUT /company-languages` that carries an ignored `defaultLanguage` is audited like any other 200.
+

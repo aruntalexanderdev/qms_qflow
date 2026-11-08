@@ -62,6 +62,14 @@ public static class ResultExtensions
         }
 
         problem.Extensions["code"] = error.Code;
+        if (error.Extensions is not null)
+        {
+            foreach (var (key, value) in error.Extensions)
+            {
+                problem.Extensions[key] = value;
+            }
+        }
+
         return new ObjectResult(problem)
         {
             StatusCode = status,

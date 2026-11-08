@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Qms.Application.Common;
+using Qms.Application.Localisation;
 using Qms.Domain.Entities;
 
 namespace Qms.Application.ServiceTypes;
@@ -12,17 +13,17 @@ public sealed record CreateServiceTypeCommand(
 
 public sealed class CreateServiceTypeValidator : AbstractValidator<CreateServiceTypeCommand>
 {
-    public CreateServiceTypeValidator()
+    public CreateServiceTypeValidator(ICompanyLanguages languages)
     {
-        RuleFor(command => command.Name).LocalizedName();
-        RuleFor(command => command.Translations).LocalizedTranslations();
+        RuleFor(command => command.Name).DefaultValue();
+        RuleFor(command => command.Translations).Translations(languages);
         RuleFor(command => command.Prefix).PrefixLetter();
         RuleFor(command => command.TargetMinutes).GreaterThan(0).When(command => command.TargetMinutes is not null);
         RuleFor(command => command.SortOrder).SortOrder();
     }
 }
 
-public sealed class CreateServiceTypeHandler(IQmsDbContext db, ICurrentTenant tenant) : ICommandHandler<CreateServiceTypeCommand, ServiceTypeDto>
+public sealed class CreateServiceTypeHandler(IQmsDbContext db, ICurrentTenant tenant, ICompanyLanguages languages) : ICommandHandler<CreateServiceTypeCommand, ServiceTypeDto>
 {
     public async Task<Result<ServiceTypeDto>> HandleAsync(CreateServiceTypeCommand command, CancellationToken cancellationToken)
     {
@@ -35,12 +36,12 @@ public sealed class CreateServiceTypeHandler(IQmsDbContext db, ICurrentTenant te
             return ServiceTypeErrors.PrefixTaken;
         }
 
-        var (name, translations) = LocalizedText.ToStorage(command.Name!, command.Translations);
+        var company = await languages.GetCompanySettingsAsync(cancellationToken);
         var row = new ServiceType
         {
             CompanyId = companyId,
-            Name = name,
-            NameTranslations = translations,
+            Name = command.Name!.Trim(),
+            NameTranslations = LocalizedTextRules.Merge(null, command.Translations, company),
             Prefix = prefix,
             TargetMinutes = command.TargetMinutes,
             SortOrder = command.SortOrder,
@@ -48,6 +49,6 @@ public sealed class CreateServiceTypeHandler(IQmsDbContext db, ICurrentTenant te
         };
         db.ServiceTypes.Add(row);
         await db.SaveChangesAsync(cancellationToken);
-        return ServiceTypeDto.From(row);
+        return ServiceTypeDto.From(row, company);
     }
 }

@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Qms.Application.Common;
+using Qms.Application.Localisation;
 
 namespace Qms.Application.ServiceTypes;
 
 /// <summary>Service types of the current company; <c>IsActive</c> filters when given.</summary>
 public sealed record ListServiceTypesQuery(bool? IsActive);
 
-public sealed class ListServiceTypesHandler(IQmsDbContext db) : IQueryHandler<ListServiceTypesQuery, IReadOnlyList<ServiceTypeDto>>
+public sealed class ListServiceTypesHandler(IQmsDbContext db, ICompanyLanguages languages) : IQueryHandler<ListServiceTypesQuery, IReadOnlyList<ServiceTypeDto>>
 {
     public async Task<Result<IReadOnlyList<ServiceTypeDto>>> HandleAsync(ListServiceTypesQuery query, CancellationToken cancellationToken)
     {
@@ -21,8 +22,9 @@ public sealed class ListServiceTypesHandler(IQmsDbContext db) : IQueryHandler<Li
             .Select(row => new { row.Id, row.Name, row.NameTranslations, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion })
             .ToListAsync(cancellationToken);
 
+        var company = await languages.GetCompanySettingsAsync(cancellationToken);
         return items
-            .Select(row => ServiceTypeDto.From(row.Id, row.Name, row.NameTranslations, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion))
+            .Select(row => ServiceTypeDto.From(row.Id, row.Name, row.NameTranslations, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion, company))
             .ToList();
     }
 }

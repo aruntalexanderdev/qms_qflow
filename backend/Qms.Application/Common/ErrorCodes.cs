@@ -16,6 +16,10 @@ public static class ErrorCodes
     public const string AuthForbidden = "auth.forbidden";
     public const string TranslationLanguageNotEnabled = "translation.language_not_enabled";
     public const string TranslationDefaultLanguageKey = "translation.default_language_key";
+    public const string CompanyLanguageNotAvailable = "company_language.not_available";
+    public const string CompanyLanguageDefaultRequired = "company_language.default_required";
+    public const string CompanyLanguageInUse = "company_language.in_use";
+    public const string LanguageNotEnabled = "language.not_enabled";
 }
 
 /// <summary>Shared errors.</summary>

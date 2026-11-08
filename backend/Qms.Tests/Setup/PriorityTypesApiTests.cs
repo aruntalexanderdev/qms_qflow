@@ -33,7 +33,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac13_list_returns_vip_then_normal_with_the_company_currency()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.GetAsync(SetupUser.CompanyAdminC1, Url);
 
@@ -59,7 +59,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac13_the_company_2_list_shows_only_its_own_row_with_its_own_currency()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.GetAsync(SetupUser.CompanyAdminC2, Url);
 
@@ -71,7 +71,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac13_the_isActive_filter_works_as_for_service_types_and_ties_sort_by_prefix()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var normal = await GetAsync(setup, SeedIds.Normal);
         (await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}", Update(normal, isActive: false))).Status.ShouldBe(200);
         (await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { ar = "كبار السن" }, prefix = "S", priorityLevel = 1, isPaid = false })).Status.ShouldBe(201);
@@ -88,7 +88,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac14_get_returns_the_fee_as_a_json_number()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.GetAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Vip}");
 
@@ -104,7 +104,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac15_create_an_unpaid_priority_type()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url,
             new { name = "Senior", translations = new { ar = "كبار السن" }, prefix = "S", priorityLevel = 1, isPaid = false, isActive = true, companyId = SetupTestData.Company2 });
@@ -119,7 +119,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac16_create_a_paid_priority_type_and_accept_a_zero_fee()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var paid = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Premium", translations = new { ar = "مميز" }, prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = 75.50m });
         var free = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Gift", translations = new { ar = "هدية" }, prefix = "Q", priorityLevel = 1, isPaid = true, feeAmount = 0 });
@@ -136,7 +136,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac17_every_invalid_body_is_400_validation_failed_naming_the_field_and_saves_nothing()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var cases = new (string Field, object Body)[]
         {
             ("name", new { name = "", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = false }),
@@ -171,7 +171,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac17_the_largest_fee_with_two_decimals_is_accepted()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url,
             new { name = "Max", translations = new { ar = "أقصى" }, prefix = "M", priorityLevel = 1, isPaid = true, feeAmount = 9999999999.99m });
@@ -183,7 +183,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Translations_other_than_arabic_are_refused_for_now_and_arabic_is_optional()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var french = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { fr = "Aîné" }, prefix = "S", priorityLevel = 1, isPaid = false });
         var none = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", prefix = "S", priorityLevel = 1, isPaid = false });
@@ -199,7 +199,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac17_the_english_key_in_translations_is_refused_with_its_own_code()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { en = "Senior" }, prefix = "S", priorityLevel = 1, isPaid = false });
 
@@ -212,7 +212,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac7_put_with_empty_translations_clears_the_arabic_text_and_other_languages_are_refused()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var url = $"{Url}/{SeedIds.Vip}";
         var version = (await GetAsync(setup, SeedIds.Vip)).GetProperty("version").GetString();
         object Body(object translations) => new { name = "VIP", translations, prefix = "V", priorityLevel = 1, isPaid = true, feeAmount = 50, isActive = true, version };
@@ -230,7 +230,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac4_empty_translations_create_a_priority_type_with_no_translations()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var emptyObject = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { }, prefix = "S", priorityLevel = 1, isPaid = false });
         var emptyArabic = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Gift", translations = new { ar = "" }, prefix = "Q", priorityLevel = 1, isPaid = false });
@@ -243,7 +243,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Put_never_defaults_a_missing_field_a_dropped_ispaid_cannot_make_vip_free()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var url = $"{Url}/{SeedIds.Vip}";
         var version = (await GetAsync(setup, SeedIds.Vip)).GetProperty("version").GetString();
         var bodies = new (string Field, object Body)[]
@@ -274,14 +274,14 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac18_prefix_is_unique_per_company_but_independent_of_service_type_prefixes()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var normal = await GetAsync(setup, SeedIds.Normal);
 
         var create = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Other", translations = new { ar = "آخر" }, prefix = "V", priorityLevel = 3, isPaid = false });
         var update = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}", Update(normal, prefix: "V"));
         var sameLetterAsService = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Alpha", translations = new { ar = "ألفا" }, prefix = "A", priorityLevel = 3, isPaid = false });
         var serviceWithPriorityLetter = await setup.PostAsync(SetupUser.CompanyAdminC1, "/api/v1/service-types", new { name = "Vee", translations = new { ar = "في" }, prefix = "V" });
-        var otherCompany = await setup.PostAsync(SetupUser.CompanyAdminC2, Url, new { name = "Vip X", translations = new { ar = "في آي بي" }, prefix = "V", priorityLevel = 1, isPaid = false });
+        var otherCompany = await setup.PostAsync(SetupUser.CompanyAdminC2, Url, new { name = "Vip X", prefix = "V", priorityLevel = 1, isPaid = false });
 
         create.Status.ShouldBe(409);
         create.Code.ShouldBe("priority_type.prefix_taken");
@@ -295,7 +295,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac18_two_concurrent_creates_of_the_same_prefix_give_one_201_and_one_409()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         object Body(string name) => new { name, translations = new { ar = "ع" }, prefix = "S", priorityLevel = 1, isPaid = false };
 
         var replies = await Task.WhenAll(setup.PostAsync(SetupUser.CompanyAdminC1, Url, Body("One")), setup.PostAsync(SetupUser.CompanyAdminC1, Url, Body("Two")));
@@ -309,7 +309,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac19_update_the_fee_of_vip()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var vip = await GetAsync(setup, SeedIds.Vip);
 
         var reply = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Vip}", Update(vip, isPaid: true, fee: 60.00m));
@@ -323,7 +323,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac20_paid_to_unpaid_and_back_keeps_branch_fee_overrides()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         await setup.AddBranchFeeAsync(SeedIds.Vip);
         var vip = await GetAsync(setup, SeedIds.Vip);
 
@@ -347,7 +347,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac21_a_stale_version_is_409_and_a_missing_version_is_400()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var v1 = await GetAsync(setup, SeedIds.Normal);
 
         var first = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}", Update(v1, nameEn: "First"));
@@ -367,7 +367,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac22_deactivate_a_priority_type()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var normal = await GetAsync(setup, SeedIds.Normal);
 
         var reply = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}", Update(normal, isActive: false));
@@ -383,7 +383,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac23_an_unused_priority_type_is_deleted_with_204_and_an_audit_row()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { ar = "كبار السن" }, prefix = "S", priorityLevel = 1, isPaid = false }));
 
         var reply = await setup.DeleteAsync(SetupUser.CompanyAdminC1, $"{Url}/{id}");
@@ -397,7 +397,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac23_vip_in_the_company_mapping_cannot_be_deleted()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.DeleteAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Vip}");
 
@@ -414,7 +414,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [InlineData("token sequence")]
     public async Task Ac23_a_single_reference_of_each_kind_blocks_the_delete(string kind)
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { ar = "كبار السن" }, prefix = "S", priorityLevel = 1, isPaid = false }));
         switch (kind)
         {
@@ -443,10 +443,10 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac24_another_company_gets_404_priority_type_not_found_exactly_like_an_unknown_id()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var foreign = $"{Url}/{SeedIds.Vip}";
         var unknown = $"{Url}/{Guid.NewGuid()}";
-        var body = new { name = "Hacked", translations = new { ar = "ع" }, prefix = "V", priorityLevel = 1, isPaid = true, feeAmount = 1, isActive = true, version = "AAAAAA" };
+        var body = new { name = "Hacked", prefix = "V", priorityLevel = 1, isPaid = true, feeAmount = 1, isActive = true, version = "AAAAAA" };
 
         var results = new List<(ApiReply Foreign, ApiReply Unknown)>
         {

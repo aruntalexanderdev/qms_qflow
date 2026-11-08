@@ -6,7 +6,9 @@ using Microsoft.Extensions.Options;
 using Qms.Application.Auth;
 using Qms.Application.Common;
 using Qms.Infrastructure.Authorization;
+using Qms.Application.Localisation;
 using Qms.Infrastructure.Identity;
+using Qms.Infrastructure.Localisation;
 using Qms.Infrastructure.Notifications;
 using Qms.Infrastructure.Scope;
 using Qms.Infrastructure.Persistence;
@@ -50,6 +52,8 @@ public static class DependencyInjection
         // The port the use cases see (ADR-008 section 1): the same scoped context instance.
         services.AddScoped<IQmsDbContext>(provider => provider.GetRequiredService<QmsDbContext>());
         services.AddScoped<IBranchScope, BranchScope>();
+        // One query per request for the registry and the company languages (ADR-010, AC-26).
+        services.AddScoped<ICompanyLanguages, CompanyLanguages>();
         services.AddSingleton<IPermissionResolver, StaticRolePermissionResolver>();
         // No-op until STORY-021 (SignalR DeviceConfigChanged); a host or test may register its own before or after.
         services.TryAddSingleton<IDeviceConfigNotifier, NoOpDeviceConfigNotifier>();

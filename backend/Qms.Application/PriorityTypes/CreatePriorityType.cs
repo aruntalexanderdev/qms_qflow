@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Qms.Application.Common;
+using Qms.Application.Localisation;
 using Qms.Domain.Entities;
 
 namespace Qms.Application.PriorityTypes;
@@ -11,9 +12,9 @@ public sealed record CreatePriorityTypeCommand(
     string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? PriorityLevel, bool? IsPaid, decimal? FeeAmount, bool IsActive)
     : IPriorityTypeFields;
 
-public sealed class CreatePriorityTypeValidator : PriorityTypeFieldsValidator<CreatePriorityTypeCommand>;
+public sealed class CreatePriorityTypeValidator(ICompanyLanguages languages) : PriorityTypeFieldsValidator<CreatePriorityTypeCommand>(languages);
 
-public sealed class CreatePriorityTypeHandler(IQmsDbContext db, ICurrentTenant tenant) : ICommandHandler<CreatePriorityTypeCommand, PriorityTypeDto>
+public sealed class CreatePriorityTypeHandler(IQmsDbContext db, ICurrentTenant tenant, ICompanyLanguages languages) : ICommandHandler<CreatePriorityTypeCommand, PriorityTypeDto>
 {
     public async Task<Result<PriorityTypeDto>> HandleAsync(CreatePriorityTypeCommand command, CancellationToken cancellationToken)
     {
@@ -25,12 +26,12 @@ public sealed class CreatePriorityTypeHandler(IQmsDbContext db, ICurrentTenant t
             return PriorityTypeErrors.PrefixTaken;
         }
 
-        var (name, translations) = LocalizedText.ToStorage(command.Name!, command.Translations);
+        var company = await languages.GetCompanySettingsAsync(cancellationToken);
         var row = new PriorityType
         {
             CompanyId = companyId,
-            Name = name,
-            NameTranslations = translations,
+            Name = command.Name!.Trim(),
+            NameTranslations = LocalizedTextRules.Merge(null, command.Translations, company),
             Prefix = prefix,
             PriorityLevel = command.PriorityLevel!.Value,
             IsPaid = command.IsPaid!.Value,
@@ -39,6 +40,6 @@ public sealed class CreatePriorityTypeHandler(IQmsDbContext db, ICurrentTenant t
         };
         db.PriorityTypes.Add(row);
         await db.SaveChangesAsync(cancellationToken);
-        return PriorityTypeDto.From(row, await PriorityTypeDto.CurrencyOfCompanyAsync(db, cancellationToken));
+        return PriorityTypeDto.From(row, await PriorityTypeDto.CurrencyOfCompanyAsync(db, cancellationToken), company);
     }
 }

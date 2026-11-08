@@ -75,9 +75,14 @@ public sealed class AuthHost : IDisposable
     }
 
     public async Task<ApiReply> SendAsync(
-        HttpMethod method, string url, object? body = null, string? bearer = null, string? refreshCookie = null)
+        HttpMethod method, string url, object? body = null, string? bearer = null, string? refreshCookie = null, string? acceptLanguage = null)
     {
         using var request = new HttpRequestMessage(method, url);
+        if (acceptLanguage is not null)
+        {
+            request.Headers.TryAddWithoutValidation("Accept-Language", acceptLanguage);
+        }
+
         if (body is not null)
         {
             request.Content = JsonContent.Create(body);
