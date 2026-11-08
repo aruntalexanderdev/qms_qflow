@@ -31,7 +31,7 @@ Conventions for all M2 stories: [ADR-008](../adr/ADR-008-setup-api-conventions.m
 
 | Story | Title | Stages | Status |
 | --- | --- | --- | --- |
-| [STORY-005](stories/STORY-005-service-and-priority-types.md) | Service types and priority types CRUD (incl. paid flag and fee) + shared setup-API plumbing (ADR-008), permission-based endpoints with a static resolver | 2, 3 | ⬜ |
+| [STORY-005](stories/STORY-005-service-and-priority-types.md) | Service types and priority types CRUD (incl. paid flag and fee) + shared setup-API plumbing (ADR-008), permission-based endpoints with a static resolver | 2, 3 | ✅ |
 | [STORY-051](stories/STORY-051-localisation-model.md) | Localisation model: language registry, company enabled languages (`/company-languages`), `/languages`, every `*_en`/`*_ar` column → `<field>` + `<field>_translations` (data fill), shared `LocalizedTextRules` replacing STORY-005's temporary mapping, user language FK, dispenser language defaults; web switch from the API, hidden with one language, `ar.json` kept but not offered (ADR-010) | 2, 3, 4 | ⬜ |
 | [STORY-048](stories/STORY-048-roles-and-permissions.md) | Roles and permissions: role CRUD per company, permission catalog endpoint, DB permission resolver, default roles seeded, Identity roles migrated, `/auth/me` permissions (ADR-009) | 2, 3, 4 | ⬜ |
 | [STORY-047](stories/STORY-047-company-management.md) | Company management (Super Admin): `CRUD /companies`, activate/deactivate, first Company Admin | 3 | ⬜ |

@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-005 |
-| Status | QA |
+| Status | Done |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 4 (entities), 4.1 (priority types table), 5.1 step 2, 6 (Paid priority), 8 (Company Admin; `/admin/service-types`, `/admin/priority-types`), 9 (`service_type`, `priority_type`, `audit_log`), 10 (`/service-types`, `/priority-types`), 11 (Audit, Security), 12 (M2) |
@@ -394,3 +394,19 @@ Nice to have
 - Open from round 1 (unchanged, not blocking): N3 enum converter for SignalR/minimal APIs, N4 `IgnoreQueryFilters()` architecture test, N5 audit row on a no-op `PUT`, N6 [stage 1] TASK-010 / story §7 wording.
 
 Notes for next stage (QA): the contract is as in the stage 3 handoff, plus: `PUT` bodies must send every field (`isActive`, `sortOrder` / `priorityLevel`, `isPaid`), or 400 `validation.failed` names the missing field. `POST /priority-types` must send `isPaid` and `priorityLevel`. Duplicate translation keys that differ only by case are 400.
+
+### Stage 7 — QA — qa-tester — 2026-11-08
+Result: Done
+Test cases and per-AC results: [STORY-005-tests.md](STORY-005-tests.md) (TC-005-1 to TC-005-37).
+Builds/tests: `dotnet test backend/Qms.slnx -c Release` = 392 passed, 0 failed, 0 skipped (2 m 43 s). Live run against `postgres:18` + `dotnet run -c Release` (Development).
+AC results: AC-1 to AC-27 Pass (live API run, with Branch Manager, Counter Staff, Super Admin, anonymous and a Company 2 admin; SQL checks for audit rows, in-use references and unchanged data). AC-28 to AC-35 Pass (automated tests; AC-29, AC-32, AC-36 also touched live). AC-36 Pass (test + live: no `xmin` column). AC-37 Pass (live). Branch Manager of Branch 2 (BM-B2) and fault-injected audit failure: verified by automated tests only.
+Bugs: none
+Manual device checks pending: none (no web or Android change in this story)
+Follow-ups (not bugs): S-R1, S-R2, N3 to N6, N-R1, N-R2 from the code review; audit `data` keeps the raw command JSON (untrimmed prefix), as AC-26 states.
+
+### Stage 0 — Architecture review (review follow-up S-R2/S-R1) — project-architect — 2026-11-08
+Result: Done
+Changed: docs/adr/ADR-008-setup-api-conventions.md (Amendment 3), docs/work/BACKLOG.md (STORY-014, STORY-021 notes)
+Notes for next stage: S-R2 done (full-replacement PUT, post-commit actions, IAuditCompanyTarget, test pattern, permission coverage, raw PostgresException mapping recorded). S-R1 decided: a TransactionDecorator independent of auditing ([Transactional]); code work moved to STORY-014. The section 10 "error-code mismatch" question is resolved (codes per ADR-010). Open follow-ups: N-R1, N-R2, N4, N6.
+Open questions: none
+
