@@ -1,0 +1,70 @@
+<div class="login">
+  <header class="login__language">
+    <qms-language-switch />
+  </header>
+
+  <main class="login__card qms-card">
+    <div class="login__brand">
+      <div class="login__logo" aria-hidden="true">Q</div>
+      <span class="login__name">{{ 'app.name' | translate }}</span>
+    </div>
+
+    <h1 class="login__title">{{ 'auth.title' | translate }}</h1>
+    <p class="login__subtitle">{{ 'auth.subtitle' | translate }}</p>
+
+    <div class="login__messages" role="alert">
+      @if (error(); as failure) {
+        <p class="qms-alert" id="login-error">
+          {{ failure.messageKey | translate: failure.params }}
+          @if (failure.correlationId) {
+            <span class="login__reference">
+              ({{ 'errors.reference' | translate }}: {{ failure.correlationId }})
+            </span>
+          }
+        </p>
+      } @else if (sessionMessageKey(); as messageKey) {
+        <p class="qms-alert" id="login-error">{{ messageKey | translate }}</p>
+      }
+    </div>
+
+    <form class="login__form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="qms-field">
+        <label class="qms-label" for="login-user-name">{{ 'auth.userName' | translate }}</label>
+        <input
+          id="login-user-name"
+          class="qms-input"
+          type="text"
+          formControlName="userName"
+          autocomplete="username"
+          autocapitalize="none"
+          spellcheck="false"
+          [attr.aria-invalid]="fieldError('userName') ? 'true' : null"
+          [attr.aria-describedby]="fieldError('userName') ? 'login-user-name-error' : null"
+        />
+        @if (fieldError('userName'); as messageKey) {
+          <p class="qms-field-error" id="login-user-name-error">{{ messageKey | translate }}</p>
+        }
+      </div>
+
+      <div class="qms-field">
+        <label class="qms-label" for="login-password">{{ 'auth.password' | translate }}</label>
+        <input
+          id="login-password"
+          class="qms-input"
+          type="password"
+          formControlName="password"
+          autocomplete="current-password"
+          [attr.aria-invalid]="fieldError('password') ? 'true' : null"
+          [attr.aria-describedby]="fieldError('password') ? 'login-password-error' : null"
+        />
+        @if (fieldError('password'); as messageKey) {
+          <p class="qms-field-error" id="login-password-error">{{ messageKey | translate }}</p>
+        }
+      </div>
+
+      <button mat-flat-button type="submit" class="login__submit" [disabled]="submitting()">
+        {{ (submitting() ? 'auth.signingIn' : 'auth.signIn') | translate }}
+      </button>
+    </form>
+  </main>
+</div>

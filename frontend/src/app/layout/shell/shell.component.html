@@ -1,0 +1,24 @@
+<a class="skip-link" href="#qms-main">{{ 'shell.skipToContent' | translate }}</a>
+
+<div
+  class="shell"
+  [class.shell--collapsed]="collapsed()"
+  [class.shell--drawer-open]="drawerVisible()"
+>
+  <aside id="qms-sidebar" class="shell__sidebar" [cdkTrapFocus]="drawerVisible()">
+    <qms-sidebar #sidebar [role]="role()" (navigated)="closeDrawer()" />
+  </aside>
+  <div class="shell__backdrop" aria-hidden="true" (click)="closeDrawer()"></div>
+
+  <!-- Inert while the drawer is open: nothing behind the backdrop can take focus. -->
+  <div class="shell__column" [attr.inert]="drawerVisible() ? '' : null">
+    <header>
+      <qms-topbar [navExpanded]="navExpanded()" (menuToggle)="toggleNav()" />
+    </header>
+    <main id="qms-main" class="shell__main" tabindex="-1">
+      <div class="shell__content">
+        <router-outlet />
+      </div>
+    </main>
+  </div>
+</div>

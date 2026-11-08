@@ -1,0 +1,111 @@
+@use '../../../styles/breakpoints' as bp;
+
+:host {
+  display: block;
+}
+
+.skip-link {
+  position: absolute;
+  inset-block-start: var(--qms-space-2);
+  inset-inline-start: var(--qms-space-2);
+  z-index: 30;
+  padding: var(--qms-space-2) var(--qms-space-4);
+  border-radius: var(--qms-radius-md);
+  background: var(--qms-brand-primary);
+  color: var(--qms-brand-on-primary);
+  transform: translateY(-200%);
+
+  &:focus {
+    transform: none;
+  }
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--qms-size-sidebar-width) minmax(0, 1fr);
+  min-block-size: 100vh;
+}
+
+.shell--collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+
+  .shell__sidebar {
+    visibility: hidden;
+    overflow: hidden;
+  }
+}
+
+.shell__sidebar {
+  position: sticky;
+  inset-block-start: 0;
+  block-size: 100vh;
+  background: var(--qms-nav-bg);
+  overflow-y: auto;
+}
+
+.shell__sidebar qms-sidebar {
+  min-block-size: 100%;
+}
+
+.shell__backdrop {
+  display: none;
+}
+
+.shell__column {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.shell__main {
+  flex: 1;
+  padding: var(--qms-space-8);
+
+  &:focus {
+    outline: none;
+  }
+
+  @media (width < #{bp.$md}) {
+    padding: var(--qms-space-4);
+  }
+}
+
+.shell__content {
+  max-inline-size: var(--qms-size-content-max-width);
+}
+
+// Below lg the sidebar is a drawer on the start side; inset-inline-start flips it to the right in RTL.
+@media (width < #{bp.$lg}) {
+  .shell,
+  .shell--collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell__sidebar,
+  .shell--collapsed .shell__sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: calc(-1 * var(--qms-size-sidebar-width));
+    z-index: 20;
+    inline-size: var(--qms-size-sidebar-width);
+    max-inline-size: 85vw;
+    visibility: hidden;
+    transition:
+      inset-inline-start var(--qms-motion-normal) var(--qms-motion-easing),
+      visibility 0s linear var(--qms-motion-normal);
+  }
+
+  .shell--drawer-open .shell__sidebar {
+    inset-inline-start: 0;
+    visibility: visible;
+    transition-delay: 0s;
+  }
+
+  .shell--drawer-open .shell__backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: var(--qms-neutral-overlay);
+  }
+}

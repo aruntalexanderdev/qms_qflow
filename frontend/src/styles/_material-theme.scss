@@ -1,0 +1,92 @@
+// Angular Material 22 (Material 3) mapped to the QMS design tokens (ADR-001, DESIGN_SYSTEM.md).
+// mat.theme() emits the --mat-sys-* roles from a built-in palette; the overrides below replace every role we use
+// with a --qms-* token, so the tokens stay the single source of colour. Radius, density and type follow section 3/4/6.
+@use '@angular/material' as mat;
+
+html {
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$cyan-palette,
+        theme-type: light,
+      ),
+      typography: (
+        plain-family: var(--qms-font-active),
+        brand-family: var(--qms-font-active),
+        bold-weight: 700,
+        medium-weight: 500,
+        regular-weight: 400,
+      ),
+      density: 0,
+    ),
+    (
+      primary: var(--qms-brand-primary),
+      on-primary: var(--qms-brand-on-primary),
+      primary-container: var(--qms-brand-primary-subtle),
+      on-primary-container: var(--qms-brand-on-primary-subtle),
+      surface-tint: var(--qms-brand-primary),
+      secondary: var(--qms-neutral-text-label),
+      on-secondary: var(--qms-neutral-surface),
+      secondary-container: var(--qms-brand-primary-subtle),
+      on-secondary-container: var(--qms-brand-on-primary-subtle),
+      background: var(--qms-neutral-bg),
+      on-background: var(--qms-neutral-text),
+      surface: var(--qms-neutral-surface),
+      on-surface: var(--qms-neutral-text),
+      on-surface-variant: var(--qms-neutral-text-label),
+      surface-variant: var(--qms-neutral-surface-muted),
+      surface-dim: var(--qms-neutral-bg),
+      surface-bright: var(--qms-neutral-surface),
+      surface-container-lowest: var(--qms-neutral-surface),
+      surface-container-low: var(--qms-neutral-surface),
+      surface-container: var(--qms-neutral-surface),
+      surface-container-high: var(--qms-neutral-surface),
+      surface-container-highest: var(--qms-neutral-surface-muted),
+      outline: var(--qms-neutral-border-input),
+      outline-variant: var(--qms-neutral-border),
+      error: var(--qms-status-error-fg),
+      on-error: var(--qms-neutral-surface),
+      error-container: var(--qms-status-error-bg),
+      on-error-container: var(--qms-status-error-on-bg),
+      scrim: var(--qms-neutral-overlay),
+      corner-extra-small: var(--qms-radius-sm),
+      corner-small: var(--qms-radius-md),
+      corner-medium: var(--qms-radius-lg),
+      corner-large: var(--qms-radius-xl),
+    )
+  );
+}
+
+// Flat, 44px controls as in DESIGN_SYSTEM.md section 6.
+html {
+  --mat-button-filled-container-shape: var(--qms-radius-md);
+  --mat-button-outlined-container-shape: var(--qms-radius-md);
+  --mat-button-text-container-shape: var(--qms-radius-md);
+  --mat-button-filled-container-height: var(--qms-size-control-height);
+  --mat-button-outlined-container-height: var(--qms-size-control-height);
+  --mat-button-text-container-height: var(--qms-size-control-height);
+  --mat-button-filled-label-text-weight: var(--qms-font-weight-semibold);
+  --mat-button-outlined-label-text-weight: var(--qms-font-weight-semibold);
+  --mat-button-outlined-outline-color: var(--qms-neutral-border);
+  --mat-button-outlined-label-text-color: var(--qms-neutral-text-label);
+  --mat-button-text-label-text-color: var(--qms-neutral-text-muted);
+  --mat-button-filled-hover-state-layer-color: var(--qms-brand-primary-hover);
+  --mat-button-filled-container-color: var(--qms-brand-primary);
+  --mat-button-filled-label-text-color: var(--qms-brand-on-primary);
+  --mat-form-field-container-height: var(--qms-size-control-height);
+  --mat-form-field-outlined-container-shape: var(--qms-radius-md);
+}
+
+// Toast: white card with a 4px status bar on the start edge (DESIGN_SYSTEM.md section 6).
+html {
+  --mat-snack-bar-container-color: var(--qms-neutral-surface);
+  --mat-snack-bar-supporting-text-color: var(--qms-neutral-text);
+  --mat-snack-bar-button-color: var(--qms-brand-primary);
+  --mat-snack-bar-container-shape: var(--qms-radius-md);
+}
+
+.qms-toast .mat-mdc-snackbar-surface {
+  border: 1px solid var(--qms-neutral-border);
+  border-inline-start: 4px solid var(--qms-status-error-fg);
+  box-shadow: var(--qms-shadow-md);
+}

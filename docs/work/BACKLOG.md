@@ -22,7 +22,7 @@ Status: ✅ done · 🟡 ready (stages 0–1 done) · ⬜ not started
 | STORY-001 | Backend solution, API host, logging, OpenAPI, health, Docker Compose | 3 | ✅ |
 | STORY-002 | Full database schema, migration and seed data (Company 1, Branch 1) | 2, 3 | ✅ |
 | STORY-003 | Sign-in: Identity, JWT, refresh token rotation, roles, seeded admin (+ STORY-002 follow-ups S2, S3, S5, N7) | 2, 3 | ✅ |
-| STORY-004 | Angular shell: theme, fonts, English/Arabic + RTL, layout, login page, web container (note STORY-003 review N2: coordinate token refresh across browser tabs) | 4 | 🟡 |
+| STORY-004 | Angular shell: theme, fonts, English/Arabic + RTL, layout, login page, web container (note STORY-003 review N2: coordinate token refresh across browser tabs) | 4 | ✅ |
 
 Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an admin signs in through the web app, and Swagger lists the auth endpoints.
 
@@ -35,7 +35,7 @@ Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an
 | STORY-008 | Branch service mapping grid API (4.2) |
 | STORY-009 | Zones, counters and counter service mapping (4.3), validation chain |
 | STORY-010 | Service flows (Auto / Ask / None) |
-| STORY-011 | Users, roles, branch and counter assignment |
+| STORY-011 | Users, roles, branch and counter assignment (+ STORY-003 follow-ups: password policy, user-table company scope, assignment 23503 mapping; STORY-004 follow-up: endpoint to save a user's language) |
 | STORY-012 | Devices: create, registration code, dispenser settings (Show VIP default yes), zone + service mapping (4.4) |
 | STORY-013 | Ticket templates (incl. fee line) |
 
@@ -57,7 +57,7 @@ Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an
 ### M4 Admin web
 | Story | Title |
 | --- | --- |
-| STORY-023 | Company setup screens: service types, priority types (fee), company mapping grid |
+| STORY-023 | Company setup screens: service types, priority types (fee), company mapping grid (**first**: STORY-004 review S7 — interceptor must fail the request when the pre-request refresh returns `signed-out`/`user-changed`; plus N8, N9) |
 | STORY-024 | Branch screens: details, hours, calendar, settings, fee override, branch mapping grid |
 | STORY-025 | Zones, counters, counter mapping grid, service flows |
 | STORY-026 | Devices screen with dispenser preview, ticket templates, users |

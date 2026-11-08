@@ -1,0 +1,39 @@
+.switch {
+  display: inline-flex;
+  border: 1px solid var(--qms-neutral-border);
+  border-radius: var(--qms-radius-md);
+  background: var(--qms-neutral-surface);
+}
+
+.switch__button {
+  min-block-size: var(--qms-size-control-height);
+  min-inline-size: var(--qms-size-control-height);
+  padding-inline: var(--qms-space-3);
+  border: 0;
+  background: transparent;
+  color: var(--qms-neutral-text-label);
+  font: inherit;
+  font-size: var(--qms-font-size-sm);
+  font-weight: var(--qms-font-weight-semibold);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--qms-neutral-surface-muted);
+  }
+
+  &[aria-pressed='true'] {
+    background: var(--qms-brand-primary-subtle);
+    color: var(--qms-brand-on-primary-subtle);
+  }
+}
+
+// No overflow clipping on the container (it would cut the focus ring), so the outer buttons carry the rounded corners.
+.switch__button:first-child {
+  border-start-start-radius: var(--qms-radius-md);
+  border-end-start-radius: var(--qms-radius-md);
+}
+
+.switch__button:last-child {
+  border-start-end-radius: var(--qms-radius-md);
+  border-end-end-radius: var(--qms-radius-md);
+}

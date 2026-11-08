@@ -1,0 +1,101 @@
+:host {
+  display: block;
+  background: var(--qms-nav-bg);
+  color: var(--qms-nav-text);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--qms-space-3);
+  padding: var(--qms-space-5) var(--qms-space-4);
+  border-block-end: 1px solid var(--qms-nav-border);
+}
+
+.brand__logo {
+  display: grid;
+  place-items: center;
+  inline-size: var(--qms-size-control-height-sm);
+  block-size: var(--qms-size-control-height-sm);
+  border-radius: var(--qms-radius-md);
+  background: var(--qms-brand-primary);
+  color: var(--qms-brand-on-primary);
+  font-weight: var(--qms-font-weight-bold);
+}
+
+.brand__text {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand__title {
+  color: var(--qms-nav-brand-title);
+  font-size: var(--qms-font-size-lg);
+  font-weight: var(--qms-font-weight-bold);
+}
+
+.brand__subtitle {
+  color: var(--qms-nav-brand-sub);
+  font-size: var(--qms-font-size-xs);
+  letter-spacing: var(--qms-font-letter-spacing-section-label);
+}
+
+.section {
+  padding: var(--qms-space-6) var(--qms-space-4) var(--qms-space-2);
+  color: var(--qms-nav-text-section);
+  font-size: var(--qms-font-size-xs);
+  font-weight: var(--qms-font-weight-semibold);
+  letter-spacing: var(--qms-font-letter-spacing-section-label);
+  text-transform: uppercase;
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--qms-space-3);
+  block-size: var(--qms-size-control-height);
+  margin: 2px var(--qms-space-2);
+  padding-inline: var(--qms-space-3);
+  border-radius: var(--qms-radius-md);
+  color: var(--qms-nav-text);
+  font-size: var(--qms-font-size-md);
+  font-weight: var(--qms-font-weight-medium);
+  text-decoration: none;
+
+  // Dot bullet before the label (decorative).
+  &::before {
+    content: '';
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: var(--qms-radius-full);
+    background: var(--qms-nav-bullet);
+  }
+
+  &:hover {
+    background: var(--qms-nav-bg-hover);
+  }
+
+  &:focus-visible {
+    outline-color: var(--qms-nav-active-text);
+    box-shadow: none;
+  }
+}
+
+.item--active {
+  background: var(--qms-nav-active-bg);
+  color: var(--qms-nav-active-text);
+
+  &::before {
+    background: var(--qms-nav-active-text);
+  }
+
+  &:hover {
+    background: var(--qms-nav-active-bg);
+  }
+}

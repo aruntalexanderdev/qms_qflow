@@ -39,7 +39,7 @@ docker-compose.yml
 Fill these in during milestone M1 and keep them correct.
 - Backend build / test: `dotnet build backend/Qms.slnx` · `dotnet test backend/Qms.slnx`
 - Migrations (from the repository root): `dotnet tool restore` (once), then `dotnet ef migrations add <Name> -p backend/Qms.Infrastructure -s backend/Qms.Api`
-- Web: `cd frontend && npm ci && npm run build && npm test -- --watch=false`
+- Web: `cd frontend && npm ci && npm run lint && npm test -- --watch=false && npm run build` (dev server: `npm start`, proxies `/api` and `/hubs` to http://localhost:8080)
 - Android: `cd android && ./gradlew assembleDebug testDebugUnitTest`
-- Full stack: `cp .env.example .env` (once; set `JWT_SIGNING_KEY`, optionally the `SEED_*` admin users), then `docker compose up --build` (API at http://localhost:8080/health/live)
+- Full stack: `cp .env.example .env` (once; set `JWT_SIGNING_KEY`, optionally the `SEED_*` admin users), then `docker compose up --build` (web at http://localhost:4200, API at http://localhost:8080/health/live)
 - Local API (Development): needs `ConnectionStrings:Qms` and `Jwt:SigningKey` (user-secrets or env, see `backend/README.md`, "Authentication settings")

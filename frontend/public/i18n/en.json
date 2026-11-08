@@ -1,0 +1,87 @@
+{
+  "app": {
+    "name": "QFlow",
+    "title": "QFlow – Bank QMS"
+  },
+  "language": {
+    "label": "Language"
+  },
+  "auth": {
+    "title": "Sign in",
+    "subtitle": "Sign in to manage queues, counters and branches.",
+    "userName": "Username",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "userNameRequired": "Enter your username",
+    "passwordRequired": "Enter your password",
+    "tooLong": "Use at most 256 characters"
+  },
+  "shell": {
+    "brandSubtitle": "BANK QMS",
+    "menu": "Menu",
+    "mainNavigation": "Main navigation",
+    "skipToContent": "Skip to content",
+    "signOut": "Sign out",
+    "close": "Close",
+    "accountOf": "Signed in as {{name}}"
+  },
+  "nav": {
+    "sections": {
+      "overview": "Overview",
+      "setup": "Setup",
+      "operations": "Operations"
+    },
+    "home": "Home",
+    "dashboard": "Dashboard",
+    "companies": "Companies",
+    "serviceTypes": "Service types",
+    "priorityTypes": "Priority types",
+    "serviceMapping": "Service mapping",
+    "branches": "Branches",
+    "users": "Users",
+    "templates": "Ticket templates",
+    "counterConsole": "Counter console",
+    "reports": "Reports"
+  },
+  "roles": {
+    "SuperAdmin": "Super Admin",
+    "CompanyAdmin": "Company Admin",
+    "BranchManager": "Branch Manager / Supervisor",
+    "CounterStaff": "Counter Staff"
+  },
+  "home": {
+    "welcome": "Welcome, {{name}}",
+    "description": "You are signed in to QFlow. Your menu shows the areas available to your role."
+  },
+  "errors": {
+    "network": "Cannot reach the server",
+    "unknown": "Something went wrong. Please try again.",
+    "reference": "Reference",
+    "auth": {
+      "invalid_credentials": "Incorrect username or password",
+      "locked_out": "This account is locked after too many failed attempts. Try again later.",
+      "refresh_reused": "Your session ended. Sign in again.",
+      "unauthorized": "Your session has expired. Sign in again.",
+      "forbidden": "You do not have permission to do this"
+    },
+    "request": {
+      "rate_limited": "Too many attempts. Try again in {{minutes}} minutes.",
+      "rate_limited_one": "Too many attempts. Try again in 1 minute.",
+      "rate_limited_two": "Too many attempts. Try again in 2 minutes.",
+      "rate_limited_generic": "Too many attempts. Try again later.",
+      "invalid": "The request is not valid",
+      "conflict": "The data was changed by someone else. Reload and try again."
+    },
+    "resource": {
+      "not_found": "The requested item was not found"
+    },
+    "validation": {
+      "failed": "Check the highlighted fields and try again",
+      "field_invalid": "Check this field"
+    },
+    "server": {
+      "unexpected_error": "An unexpected error occurred. Please try again."
+    }
+  }
+}
