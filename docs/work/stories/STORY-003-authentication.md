@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-003 |
-| Status | Analysis |
+| Status | Database |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2 (Auth), 8 (roles), 10 (`/auth/*`), 11 (Security) |
@@ -32,13 +32,30 @@ Depends on STORY-001 and STORY-002 (Identity tables, `refresh_token`, `user_bran
 - `ICurrentUser` implementation (ADR-003) from claims.
 - Swagger: bearer security scheme so authorised endpoints can be tried.
 
+**In scope — amendment 2026-11-08 (STORY-002 review follow-ups, ADR-003 Amendment 1)**
+- S2: tenant writes fail closed when there is no company; explicit cross-tenant scope (`ITenantScope`, `[CrossTenant]`, `CrossTenantDecorator`) restricted to Super Admin; the seeder runs in a cross-tenant section.
+- S3: `user_branch` and `user_counter` carry `company_id` with composite FKs, so a cross-company or Super Admin assignment is rejected by the database (new additive migration); `IUserDirectory` validates user ids that come from request input.
+- S5: `GlobalExceptionHandler` maps `DbUpdateConcurrencyException` and `TenantViolationException` to problem details.
+- N7: one claims-based `RequestTenantContext` provides `ICurrentTenant` and `ITenantScope`, registered in `AddQmsAuthentication`.
+
 **Out of scope**
 - User management CRUD (STORY-011). Device keys (STORY-015). Active Directory / LDAP (later).
+- Production endpoints that write tenant data or assignments (STORY-011 and later); the amendment is proven with endpoints registered only in the test host.
+- Composite FKs on the actor-user columns (`token.issued_by_user_id`, `token.fee_settled_by_user_id`, `token_visit.user_id`, `counter.current_user_id`); they stay Application-only (ADR-003 Amendment 1 B.3).
+- Web, Android and displays: no change.
 
 ## 4. Business rules
 1. The access token is valid for 15 minutes; the refresh token is rotated on every use (spec 11).
 2. Passwords are hashed by Identity (spec 11).
 3. Roles and scopes are as in spec section 8.
+
+Amendment 2026-11-08 (no new business rules; these implement spec 8, 9 and 11 and ADR-003 Amendment 1):
+
+4. Tenant tables carry `company_id` so no row can reference another company's data (spec 9). This now includes `user_branch` and `user_counter` (listing `company_id` in spec 9 awaits product owner approval, section 10).
+5. A Company Admin sees only their own company; Branch Manager and Counter Staff only their assigned branches or counters; Super Admin is not tied to a company and has no branch or counter assignments (spec 8). Assignments therefore only exist between a user and a branch or counter of the user's own company (spec 8, 9).
+6. A write to tenant data needs a current company, or an explicit cross-tenant section opened only by the seeder, a background job, or a handler marked `[CrossTenant]` that only a Super Admin may call (spec 8, 11; ADR-003 A.4).
+7. Actor columns (who issued, settled, served) are set only from the signed-in user, never from the request body. A user id that does come from the request must belong to the current company, otherwise the response is `user.not_found`, which does not reveal whether the user exists in another company (spec 11; ADR-003 B.3).
+8. Error responses do not confirm that another company's data exists (404 `resource.not_found`) and never expose internal details on server misconfiguration (500 `server.unexpected_error`) (spec 11, RFC 7807 per project rules).
 
 ## 5. Acceptance criteria
 
@@ -81,6 +98,86 @@ Depends on STORY-001 and STORY-002 (Identity tables, `refresh_token`, `user_bran
 - Given the API runs in Development
 - When Swagger UI is opened
 - Then it lists `/auth/login`, `/auth/refresh`, `/auth/logout` and `/auth/me`, and supports the bearer scheme (M1 done-when, spec 12).
+
+Wording check for the amendment: AC-1 to AC-8 are unchanged; no fix needed.
+
+### Amendment 2026-11-08 — S2, S3, S5, N7
+Test hosts for AC-9 to AC-22 register test-only endpoints or call the use cases / DbContext directly; STORY-003 adds no production tenant-write endpoint.
+
+**AC-9: Tenant write with no company is rejected (S2)**
+- Given a request with no `company_id` (no company in the current tenant) and no cross-tenant section
+- When a handler saves a new `branch` row, or modifies or deletes an existing `counter` row
+- Then `SaveChanges` throws `TenantViolationException` with reason `NoTenant`, nothing is stored, and the same save for `asp_net_users`, `refresh_token` (login, refresh, logout, lockout) still succeeds.
+
+**AC-10: Seeder and cross-tenant section still work (S2)**
+- Given an empty database and no signed-in user
+- When `MigrateAndSeedAsync` runs the development seeder
+- Then Company 1 with Branch 1, Zones 1 and 2, Counters 1 to 4 and the example mappings are created; a second run changes nothing; and a new tenant row inside a cross-tenant section with `CompanyId = Guid.Empty` is rejected.
+
+**AC-11: `[CrossTenant]` handler refuses a non-Super Admin (S2)**
+- Given the seeded Company Admin of Company 1 is signed in
+- When a handler marked `[CrossTenant]` is called
+- Then the result is `Forbidden` (HTTP 403, code `auth.forbidden`), the handler body does not run, and no cross-tenant section is opened.
+
+**AC-12: `[CrossTenant]` handler works for Super Admin (S2)**
+- Given the seeded Super Admin is signed in (no company)
+- When a handler marked `[CrossTenant]` creates a branch row for Company 2 with an explicit `CompanyId`
+- Then the decorator opens the cross-tenant section, the row is saved with Company 2, and after the handler returns the section is closed (a following tenant write in the same scope fails as in AC-9). In a unit test of `ITenantScope`, disposing an inner handle does not end the outer section.
+
+**AC-13: Company 2 user cannot be assigned to Branch 1 (S3)**
+- Given a user of Company 2 and Branch 1 of Company 1
+- When a `user_branch` row for that user and Branch 1 is inserted (with `company_id` of Company 1 or Company 2)
+- Then the database rejects it: with Company 1 by `fk_user_branch_user_company`, with Company 2 by the composite FK `(company_id, branch_id)` to `branch`.
+
+**AC-14: Company 2 user cannot be assigned to Counter 2 (S3)**
+- Given a user of Company 2 and Counter 2 (Zone 1, Branch 1) of Company 1
+- When a `user_counter` row for that user and Counter 2 is inserted (with `company_id` of either company)
+- Then the database rejects it: with Company 1 by `fk_user_counter_user_company`, with Company 2 by the composite FK `(company_id, counter_id)` to `counter`.
+
+**AC-15: Super Admin cannot be assigned (S3)**
+- Given the seeded Super Admin (no company)
+- When a `user_branch` row for the Super Admin and Branch 1, or a `user_counter` row for the Super Admin and Counter 2, is inserted
+- Then the database rejects both rows (no `asp_net_users (id, company_id)` match), and the seeder created no assignments for the Super Admin or the Company Admin.
+
+**AC-16: Same-company assignment is accepted (S3)**
+- Given a Counter Staff user of Company 1, Branch 1 and Counter 2
+- When `user_branch` (Branch 1) and `user_counter` (Counter 2) rows are inserted with `company_id` of Company 1
+- Then both are saved; and changing that user's `company_id` to Company 2 while the rows exist is rejected by the database.
+
+**AC-17: Request-supplied user id of another company (S3)**
+- Given a signed-in Company Admin of Company 1 and a user of Company 2
+- When a handler receives that user's id from the request and checks it with `IUserDirectory.IsInCompanyAsync(userId, Company 1)`
+- Then the check returns false and the handler returns `NotFound` (HTTP 404, code `user.not_found`) with the same response as for a user id that does not exist; a Company 1 user id passes.
+
+**AC-18: Concurrency conflict returns 409 (S5)**
+- Given a test-host endpoint that updates Counter 2 and another request changed the same row first
+- When the save raises `DbUpdateConcurrencyException`
+- Then the response is 409 problem details with code `request.conflict`.
+
+**AC-19: Cross-company access returns 404 (S5)**
+- Given a signed-in Company Admin of Company 1 and a test-host endpoint that updates a Company 2 row, or changes the `company_id` of a Company 1 row
+- When the save raises `TenantViolationException` with reason `OtherCompany` or `CompanyChanged`
+- Then the response is 404 problem details with code `resource.not_found`, the body contains no entity values, and a Warning is logged without entity values.
+
+**AC-20: Missing tenant returns 500 without details (S5)**
+- Given a test-host endpoint that writes a tenant row with no company and no cross-tenant section
+- When the save raises `TenantViolationException` with reason `NoTenant`
+- Then the response is 500 problem details with code `server.unexpected_error`, the body contains no exception type, message, stack trace or entity values, and an Error is logged.
+
+**AC-21: Tenant context comes from the sign-in claims (N7)**
+- Given the seeded Company Admin of Company 1 signed in, and rows exist for Company 1 and Company 2
+- When a test-host endpoint lists branches
+- Then only Company 1 rows are returned; the same call with a Company 2 token returns only Company 2 rows; the tenant is registered outside `AddQmsHealthChecks` and `NoCompanyCurrentTenant` no longer exists.
+
+**AC-22: Super Admin sees nothing tenant-scoped by default (N7)**
+- Given the seeded Super Admin is signed in (no `company_id` claim)
+- When a test-host endpoint lists branches without a cross-tenant read, and then through a `[CrossTenant]` handler that reads with `IgnoreQueryFilters()`
+- Then the first call returns an empty list and the second returns the branches of Company 1 and Company 2.
+
+**AC-23: Migration is additive and reversible (S3)**
+- Given a database at `InitialSchema` with Company 1 data, and with one `user_branch` row whose user belongs to another company
+- When the new migration `UserAssignmentCompany` is applied
+- Then for same-company rows `company_id` is backfilled from `branch.company_id` / `counter.company_id`; with the mismatched row the migration fails and changes nothing; and on migrate down all added columns, keys and constraints are removed and `InitialSchema` data is intact.
 
 ## 6. UI / UX
 No screen in this story; the login page is STORY-004. Error codes are translated by the web app.
@@ -146,9 +243,9 @@ No screen in this story; the login page is STORY-004. Error codes are translated
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
 | 0 Architect | Yes | — | ADR-004, ADR-003 (+ Amendment 1, 2026-11-08) |
-| 1 BA | Yes | — | Add ACs for S2/S3/S5/N7. Create the stage 2 task (suggested TASK-007). For S2, S3 (Application side), S5 and N7, extend TASK-004 or add a stage 3 task (suggested TASK-008) |
-| 2 Database | Yes (amended 2026-11-08) | to be created by BA (TASK-007) | Additive migration: `company_id` and composite FKs on `user_branch` / `user_counter`; `counter (company_id, id)` alternate key; raw-SQL `asp_net_users (id, company_id)` key and user FKs. Entities become `ITenantEntity`. DB tests. Must run before stage 3 |
-| 3 Backend | Yes | TASK-004 (+ TASK-008, or TASK-004 extended) | Auth as before. Also: fail-closed tenant writes, `ITenantScope` / `[CrossTenant]`, claims-based tenant context (N7), `IUserDirectory`, exception mapping with integration tests |
+| 1 BA | Yes | — | Done: AC-9 to AC-23 added; TASK-007 (stage 2) and TASK-008 (stage 3) created |
+| 2 Database | Yes (amended 2026-11-08) | TASK-007 (AC-13 to AC-16, AC-23) | Additive migration: `company_id` and composite FKs on `user_branch` / `user_counter`; `counter (company_id, id)` alternate key; raw-SQL `asp_net_users (id, company_id)` key and user FKs. Entities become `ITenantEntity`. DB tests. Must run before stage 3 |
+| 3 Backend | Yes | TASK-004 (AC-1 to AC-8) + TASK-008 (AC-9 to AC-12, AC-17 to AC-22; AC-13 to AC-16 and AC-23 depend on TASK-007) | Auth as before. Also: fail-closed tenant writes, `ITenantScope` / `[CrossTenant]`, claims-based tenant context (N7), `IUserDirectory`, exception mapping with integration tests |
 | 4 Frontend | N/A | — | Login page is STORY-004; the amendment does not change the auth contract or error codes |
 | 5 Android | N/A | — | Devices use keys (M3); no device API change |
 | 6 Code review | Yes | — | Security focus: grep `BeginCrossTenant`, `[CrossTenant]`, `IgnoreQueryFilters`; check the raw-SQL constraints in the migration |
@@ -160,7 +257,7 @@ No screen in this story; the login page is STORY-004. Error codes are translated
 
 ## 10. Open questions
 - [ ] Depends on ADR-004 (Proposed), accepted with the Phase 0 PR.
-- [ ] Product owner: approve adding `company_id` to `user_branch` and `user_counter` in spec section 9 (ADR-003 Amendment 1, spec impact). This follows the section 9 tenant-table rule. It does not block analysis, but it must be approved before the stage 2 migration is merged.
+- [ ] Product owner: approve adding `company_id` to `user_branch` and `user_counter` in spec section 9 (ADR-003 Amendment 1, spec impact). This follows the section 9 tenant-table rule. It does not block analysis or starting stage 2, but it blocks merging the stage 2 migration (TASK-007) until approved.
 
 ## 11. Stage log
 
@@ -203,3 +300,13 @@ Notes for next stage:
   - `ICurrentTenant` comes from the `company_id` claim and is registered outside the health checks.
 - Stages 4 and 5 stay N/A.
 Open questions: the product owner must approve listing `user_branch.company_id` / `user_counter.company_id` in spec section 9. Not blocking for analysis; needed before the stage 2 merge.
+
+### Stage 1 — Analysis (scope amendment) — business-analyst — 2026-11-08
+Result: Done
+Changed: this story (status, sections 3, 4, 5 AC-9 to AC-23, 8, 10), docs/work/tasks/TASK-007-user-assignment-company-migration.md, docs/work/tasks/TASK-008-tenant-guard-and-error-mapping.md
+Notes for next stage:
+- Stage 2 (TASK-007): AC-13 to AC-16 and AC-23. Start now; do not merge until the product owner approves `company_id` on `user_branch` / `user_counter` in spec section 9.
+- Stage 3 (TASK-008) follows TASK-007; TASK-004 (AC-1 to AC-8) is unchanged.
+- AC-1 to AC-8 unchanged. AC-9 to AC-22 use test-host-only endpoints or direct use-case calls; no production tenant-write endpoint exists in this story.
+- Stages 4 and 5 stay N/A.
+Open questions: product owner approval of spec section 9 (blocks the TASK-007 merge only).
