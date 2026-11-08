@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-005 |
-| Status | Frontend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 4 (entities), 4.1 (priority types table), 5.1 step 2, 6 (Paid priority), 8 (Company Admin; `/admin/service-types`, `/admin/priority-types`), 9 (`service_type`, `priority_type`, `audit_log`), 10 (`/service-types`, `/priority-types`), 11 (Audit, Security), 12 (M2) |
@@ -309,3 +309,15 @@ Notes for next stage:
 - TASK-010 still describes `translations.unsupported_language` and the old role wording; it was not edited by instruction.
 Open questions: backend error-code mismatch (section 10).
 - Follow-up (ADR-010): error code `translations.unsupported_language` renamed to `translation.language_not_enabled`; the `en` key gives `translation.default_language_key`; field errors are keyed `translations.<code>`.
+
+### Stage 4 — Frontend — frontend-developer — 2026-11-08
+Result: N/A — Admin screens are M4 (stage plan)
+Changed: none
+Notes for next stage: none
+Open questions: none
+
+### Stage 5 — Android — android-developer — 2026-11-08
+Result: N/A — No dispenser change (stage plan)
+Changed: none
+Notes for next stage: Ready for code review (stage 6).
+Open questions: none
