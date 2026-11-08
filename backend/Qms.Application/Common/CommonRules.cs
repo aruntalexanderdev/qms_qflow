@@ -8,15 +8,8 @@ namespace Qms.Application.Common;
 /// </summary>
 public static class CommonRules
 {
-    public const int NameMaxLength = 200;
-
     /// <summary>Largest money amount: <c>numeric(12,2)</c>.</summary>
     public const decimal MoneyMax = 9_999_999_999.99m;
-
-    /// <summary>Name in English or Arabic: required, 1 to 200 characters after trimming. Arabic is not script-checked.</summary>
-    public static IRuleBuilderOptions<T, string?> BilingualName<T>(this IRuleBuilder<T, string?> rule) =>
-        rule.Must(value => value is not null && value.Trim().Length is >= 1 and <= NameMaxLength)
-            .WithMessage("'{PropertyName}' is required and must be 1 to 200 characters.");
 
     /// <summary>One letter A to Z after trimming. No silent upper-casing: <c>h</c> is rejected.</summary>
     public static IRuleBuilderOptions<T, string?> PrefixLetter<T>(this IRuleBuilder<T, string?> rule) =>

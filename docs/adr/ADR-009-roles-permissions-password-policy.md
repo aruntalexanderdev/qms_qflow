@@ -1,6 +1,6 @@
 # ADR-009 — Configurable roles and permissions, per-company password policy
 
-Status: Accepted (product owner decision, Alexa, 2026-11-08)
+Status: Accepted (product owner decision, Alexa, 2026-11-08); §2, §3 and §6 role names amended by ADR-010 (Amendment 1)
 Date: 2026-11-08
 Story: STORY-048 (roles and permissions), STORY-049 (password policy), STORY-047 (companies); affects STORY-005 to STORY-013 and every later story with an endpoint
 
@@ -121,3 +121,10 @@ Planned for later milestones (names are guidance; the owning story adds them wit
 - §9: tables `role`, `role_permission`, `user_role`, `password_policy`, `password_history`; column `asp_net_users.password_changed_at`; Identity roles only `SuperAdmin`.
 - §10: `CRUD /roles`, `GET /permissions`, `GET/PUT /password-policy`, `POST /auth/change-password`, `POST /companies/{id}/admin-users`; `/auth/me` returns permissions.
 - §13: Resolved rows. Applied to the spec on 2026-11-08 with the product owner's approval.
+
+## Amendment 1 — Role names localised (ADR-010, 2026-11-08)
+- **§2 `role`:** `name_en`, `name_ar` are replaced by `name` (default language, English, required) + `name_translations` (jsonb, ADR-010 §4). Unique `(company_id, lower(name))`; the unique on `name_ar` is dropped. STORY-048 builds the table this way directly (it runs after STORY-051).
+- **API:** role DTOs and requests use `name` + `translations` (ADR-010 §7.1); lists sort by `sortOrder`, then `name`. The auth `user` object returns `roles: [{ id, name }]` with `name` resolved for the request's `Accept-Language` (ADR-010 §7.2), instead of `{ id, nameEn, nameAr }`.
+- **§3 catalog labels:** `permissions.modules.<module>` / `permissions.actions.<action>` are translated in `en.json` (other languages through their translation files when made available), not "en + ar".
+- **Seeded default roles:** English names (Company Admin, Branch Manager / Supervisor, Counter Staff) with no translations; the migration SQL and `DefaultRoles` agree.
+- New permission module `company-languages` (view, edit; default grant Company Admin) from STORY-051 joins the M2 catalog and the default grants.

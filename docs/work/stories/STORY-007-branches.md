@@ -31,6 +31,15 @@ To be completed by the BA. (Branch screens are M4 STORY-024.)
 ## 7. Data and API impact
 **Spec:** sections 4, 6, 8, 9, 10, 11, 13. No business rule changes. Interpretations in ADR-008 §14 (default "Main zone" and settings on create) and §2 (hours as a whole week).
 
+**Amendment 2026-11-08 (localisation, ADR-010). It supersedes the conflicting lines below.**
+- `branch` stores `name` + `name_translations` (built by STORY-051), not `name_en` / `name_ar`. The API exchanges `name` (required, 1–200) and `translations` (optional) through the shared `LocalizedTextRules` (ADR-010 §5).
+  - Translation keys must be languages enabled for the company.
+  - Responses return only the enabled-language keys.
+  - `PUT` keeps the stored keys of languages that are not enabled.
+- Branch create: the default zone is `name` "Main zone" with no translations (ADR-008 Amendment 2 §14).
+- Tests: one branch test with a second language made available and enabled for a test company (ADR-008 Amendment 2 §15). Phase 1 data is English only.
+- Now depends on STORY-051 as well.
+
 **Amendment 2026-11-08 (product owner decisions, ADR-009, ADR-008 Amendment 1):**
 - Authorization is permission-based. The "Roles" column below is the **default grant**; endpoints declare permissions: `branches.view/create/edit/delete` (details), `branch-hours.view/edit` (hours **and** calendar), `branch-settings.view/edit`, `branch-fees.view/edit`. Read for the Branch Manager role by default; a company may grant the Branch Manager role edit rights (open question 1 resolved by configuration). "Own branches" = `IBranchScope` (role branch scope `Company` or `Assigned` + `user_branch`), unchanged order 404 → 403.
 - The branch list returns all branches for a user with `Company` scope and only assigned ones for `Assigned` scope (`AccessibleBranchIdsAsync`, no longer a role check).
@@ -39,7 +48,7 @@ To be completed by the BA. (Branch screens are M4 STORY-024.)
 - Integration tests: per ADR-008 Amendment 1 A, one grant/revoke test (custom role with `branch-hours.edit` can save hours; revoked → 403 on the next request).
 
 **Database**
-- Tables: `branch` (name_en, name_ar, code unique per company, timezone, is_active), `branch_hours` (day_of_week, open_time, close_time; unique `(branch_id, day_of_week, open_time)`; split shifts allowed), `branch_calendar` (date_from, date_to, type Holiday/SpecialHours, open_time, close_time; checks `ck_branch_calendar_date_range`, `ck_branch_calendar_special_hours_times`), `branch_setting` (one per branch: recall_limit, skip_default, block_when_no_counter, wait_alert_minutes), `branch_priority_fee` (unique `(branch_id, priority_type_id)`, fee ≥ 0), `zone` (default "Main zone" inserted on create), `audit_log`.
+- Tables: `branch` (name, name_translations, code unique per company, timezone, is_active), `branch_hours` (day_of_week, open_time, close_time; unique `(branch_id, day_of_week, open_time)`; split shifts allowed), `branch_calendar` (date_from, date_to, type Holiday/SpecialHours, open_time, close_time; checks `ck_branch_calendar_date_range`, `ck_branch_calendar_special_hours_times`), `branch_setting` (one per branch: recall_limit, skip_default, block_when_no_counter, wait_alert_minutes), `branch_priority_fee` (unique `(branch_id, priority_type_id)`, fee ≥ 0), `zone` (default "Main zone" inserted on create), `audit_log`.
 - **Schema change: none.** All columns and constraints exist.
 
 **Backend**
@@ -47,7 +56,7 @@ To be completed by the BA. (Branch screens are M4 STORY-024.)
 |---|---|---|---|
 | GET | `/api/v1/branches` | CA (all), BM (own only, via `AccessibleBranchIdsAsync`) | sorted by `code`; `?isActive=` |
 | GET | `/api/v1/branches/{id}` | CA, BM (own) | 404 `branch.not_found`; BM of another branch 403 |
-| POST | `/api/v1/branches` | CA | creates branch + default `branch_setting` + zone "Main zone" / "المنطقة الرئيسية" in one transaction (ADR-008 §14); 409 `branch.code_taken` |
+| POST | `/api/v1/branches` | CA | creates branch + default `branch_setting` + zone "Main zone" (no translations, ADR-010) in one transaction (ADR-008 §14); 409 `branch.code_taken` |
 | PUT | `/api/v1/branches/{id}` | CA | name, code, timezone (IANA), `isActive`; `version` |
 | DELETE | `/api/v1/branches/{id}` | CA | removes its own default rows (setting, empty zones, hours, calendar, fees) only if nothing else references the branch; else 409 `branch.in_use` (deactivate instead) |
 | GET / PUT | `/api/v1/branches/{id}/hours` | GET CA, BM (own); PUT CA | whole week `{ version, rows: [{ dayOfWeek, openTime, closeTime }] }`; close after open; no overlapping intervals on a day → 400 `branch_hours.overlap` |
@@ -81,7 +90,7 @@ To be completed by the BA.
 ## 10. Open questions
 - [x] **Resolved 2026-11-08 by configurable roles (ADR-009):** default stays read-only for the Branch Manager role; a company may grant edit. Original question: **Product owner — Branch Manager rights on branch details.** Spec §8 gives "Branches … working hours, holidays, special hours, branch settings … fee override" to the Company Admin and does not list them for the Branch Manager. ADR-008 §9 therefore lets the Branch Manager **read** their own branches only. Confirm, or allow the Branch Manager to edit hours / calendar / settings of their own branches. Not blocking (default = read only).
 - [x] **Resolved 2026-11-08:** overlaps rejected. Original question: Product owner — overlapping calendar entries (e.g. a holiday inside a Ramadan special-hours range). Proposal: reject overlaps (409 `branch_calendar.overlap`) so M3 has one answer per date. Alternative: allow, with Holiday winning over SpecialHours. Not blocking.
-- [ ] Product owner — the default zone created with a new branch (ADR-008 §14, from spec §4 "A branch with one zone gets a default Main zone"). Confirm the names "Main zone" / "المنطقة الرئيسية". Not blocking.
+- [x] **Resolved 2026-11-08 by localisation (ADR-010):** the default zone is named "Main zone" (English only). A company adds translations when it enables another language. Original question: Product owner — the default zone created with a new branch (ADR-008 §14). Confirm the names "Main zone" / "المنطقة الرئيسية".
 - [ ] Carried from STORY-002 QA: Branch 1 sample working hours (seed uses Sunday–Thursday 08:00–15:00; spec §4 lists none). Not blocking.
 
 ## 11. Stage log
@@ -103,3 +112,10 @@ Notes for next stage:
 - Product owner decisions applied: permission-based authorization (permission codes listed in section 7), BM rights now come from the seeded Branch Manager role (default read-only), calendar overlaps rejected.
 - Now depends on STORY-048 as well (permission catalog, DB resolver, role branch scope). Stage plan unchanged (no schema change).
 Open questions: default zone names, sample hours (unchanged, not blocking).
+
+### Stage 0 — Architecture review (amendment: localisation) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (sections 7, 10); ADR-010 (new); ADR-008 Amendment 2; ADR-009 Amendment 1; `docs/PROJECT_SPEC.md` §2, §7–§13 (approved by the product owner 2026-11-08)
+Notes for next stage:
+- Branch names follow the localised-text pattern (`name` + `translations`) built by STORY-051; the default zone has an English name only. Depends on STORY-051. Stage plan unchanged (no schema change here).
+Open questions: none.

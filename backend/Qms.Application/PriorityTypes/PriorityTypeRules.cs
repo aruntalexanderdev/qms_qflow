@@ -6,9 +6,9 @@ namespace Qms.Application.PriorityTypes;
 /// <summary>The fields create and update share.</summary>
 public interface IPriorityTypeFields
 {
-    string? NameEn { get; }
+    string? Name { get; }
 
-    string? NameAr { get; }
+    IReadOnlyDictionary<string, string?>? Translations { get; }
 
     string? Prefix { get; }
 
@@ -25,8 +25,8 @@ public abstract class PriorityTypeFieldsValidator<T> : AbstractValidator<T>
 {
     protected PriorityTypeFieldsValidator()
     {
-        RuleFor(command => command.NameEn).BilingualName();
-        RuleFor(command => command.NameAr).BilingualName();
+        RuleFor(command => command.Name).LocalizedName();
+        RuleFor(command => command.Translations).LocalizedTranslations();
         RuleFor(command => command.Prefix).PrefixLetter();
         RuleFor(command => command.PriorityLevel).GreaterThanOrEqualTo(1).WithMessage("'{PropertyName}' must be 1 or more.");
 

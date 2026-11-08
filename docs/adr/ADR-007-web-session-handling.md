@@ -1,6 +1,6 @@
 # ADR-007 — Web session handling: one login, refresh or logout at a time across browser tabs, language precedence
 
-Status: Accepted (2026-11-08; part A updated to the built behaviour at STORY-004 code review, item S6)
+Status: Accepted (2026-11-08; part A updated to the built behaviour at STORY-004 code review, item S6; part B amended by ADR-010, see Amendment 1)
 Date: 2026-11-08
 Story: STORY-004 (STORY-003 review follow-up N2)
 
@@ -50,7 +50,7 @@ This part records the behaviour built in STORY-004 (stage 4 review loop 1, code 
    - Sign-out failure: see A.5.
 8. **Without Web Locks.** If `navigator.locks` is missing (a non-secure context such as plain `http://<LAN IP>`), each call runs at once, with no probe and no grace wait. Only the single flight inside the tab applies, so two tabs can still race. Without `BroadcastChannel`, tabs do not share sessions or sign-out. Such contexts are not supported, because the `Secure` cookie is not stored there either. Production is HTTPS only (spec 11).
 
-**B. Language precedence (interpretation of spec 8 "language choice" + "language per user").**
+**B. Language precedence (interpretation of spec 8 "language choice" + "language per user").** Amended by ADR-010 (Amendment 1 below): the language list is no longer fixed to `en` | `ar`.
 1. One UI preference key, `qms.lang` (`en` | `ar`), is kept in `localStorage`. It is not personal data and not a credential.
 2. Before sign-in: use `qms.lang` if set, else `en`. The login page switch writes `qms.lang`.
 3. After login, refresh or start-up restore: if `qms.lang` is set, it wins (the person at this PC chose it, for example on the login page). Otherwise apply `user.language` from the API response and store it in `qms.lang`.
@@ -75,3 +75,16 @@ This part records the behaviour built in STORY-004 (stage 4 review loop 1, code 
 
 ## Spec impact
 None. Section 11 (refresh token rotated) and ADR-004 (including decision 3, reuse revokes the family) are unchanged; the S6 update only records frontend behaviour. Decision B interprets section 8 ("language choice") and section 13 ("per device and user") without changing them; persisting the in-app language switch per user is a follow-up.
+
+## Amendment 1 — Language precedence with configurable languages (ADR-010, 2026-11-08)
+Part B is restated for configurable languages (product owner decision 2026-11-08, ADR-010). Part A is unchanged.
+
+1. `qms.lang` in `localStorage` holds one language code (BCP-47, e.g. `en`). It is not personal data and not a credential.
+2. **Offered languages.** The candidates come from `GET /api/v1/languages` (ADR-010 §8): anonymous → the deployment's available languages; signed-in company user → the company's enabled languages; Super Admin → available languages. The response also gives `defaultLanguage` (`en` in phase 1) and each language's `direction`.
+3. **Before sign-in:** `qms.lang` if it is offered, else `defaultLanguage`. The login page switch writes `qms.lang`.
+4. **After login, refresh or start-up restore** (offered list re-read for the signed-in user): `qms.lang` if it is offered; else `user.language` if it is offered; else `defaultLanguage`. The result is applied and stored in `qms.lang`. A stored choice that is no longer offered (language disabled) is replaced, never shown.
+5. **Switch.** The switch lists only the offered languages by `nativeName` and is **hidden when only one language is offered** (phase 1: English only, so no switch). Choosing a language writes `qms.lang` and, once STORY-011 provides it, saves it with `PUT /auth/me/language` (M4 follow-up, STORY-026). After a switch the app re-reads `GET /auth/me`, because role names are resolved per `Accept-Language` (ADR-010 §7).
+6. `<html lang>` = the code; `<html dir>` = the language's `direction` (not an `ar` check).
+7. B.5 is unchanged: no UI data from the JWT.
+
+Spec impact of the amendment: spec §8 and §11 updated with ADR-010 (approved 2026-11-08).

@@ -9,11 +9,11 @@ namespace Qms.Api.Controllers;
 
 /// <summary>Body of <c>POST /service-types</c>. No <c>companyId</c>: the company comes from the token (ADR-008 section 3).</summary>
 public sealed record CreateServiceTypeRequest(
-    string? NameEn, string? NameAr, string? Prefix, int? TargetMinutes, int SortOrder = 0, bool IsActive = true);
+    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? TargetMinutes, int SortOrder = 0, bool IsActive = true);
 
 /// <summary>Body of <c>PUT /service-types/{id}</c>: every editable field and the <c>version</c> that was read.</summary>
 public sealed record UpdateServiceTypeRequest(
-    string? NameEn, string? NameAr, string? Prefix, int? TargetMinutes, int SortOrder, bool IsActive, string? Version);
+    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? TargetMinutes, int SortOrder, bool IsActive, string? Version);
 
 /// <summary>Service types of the company (spec section 10, ADR-008). Thin: bind, call the handler, map the result.</summary>
 [Route(ApiRoutes.Prefix + "/service-types")]
@@ -43,7 +43,7 @@ public sealed class ServiceTypesController : QmsControllerBase
         CancellationToken cancellationToken)
     {
         var command = new CreateServiceTypeCommand(
-            request.NameEn, request.NameAr, request.Prefix, request.TargetMinutes, request.SortOrder, request.IsActive);
+            request.Name, request.Translations, request.Prefix, request.TargetMinutes, request.SortOrder, request.IsActive);
         return (await handler.HandleAsync(command, cancellationToken))
             .ToCreatedResult(this, dto => $"/{ApiRoutes.Prefix}/service-types/{dto.Id}");
     }
@@ -57,7 +57,7 @@ public sealed class ServiceTypesController : QmsControllerBase
         CancellationToken cancellationToken)
     {
         var command = new UpdateServiceTypeCommand(
-            id, request.NameEn, request.NameAr, request.Prefix, request.TargetMinutes, request.SortOrder, request.IsActive, request.Version);
+            id, request.Name, request.Translations, request.Prefix, request.TargetMinutes, request.SortOrder, request.IsActive, request.Version);
         return (await handler.HandleAsync(command, cancellationToken)).ToActionResult(this);
     }
 

@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-005 |
-| Status | Backend |
+| Status | Frontend |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 4 (entities), 4.1 (priority types table), 5.1 step 2, 6 (Paid priority), 8 (Company Admin; `/admin/service-types`, `/admin/priority-types`), 9 (`service_type`, `priority_type`, `audit_log`), 10 (`/service-types`, `/priority-types`), 11 (Audit, Security), 12 (M2) |
@@ -284,3 +284,14 @@ Notes for next stage:
 - Migration `RowVersion` has empty Up/Down. EF generated `AddColumn xmin` for each table (the property is new to its model); PostgreSQL rejects a column named like a system column, so I removed those operations by hand before anything was applied. The snapshot and designer carry the model; `HasPendingModelChanges` is false. Do not regenerate it. A test asserts the migration has no operations and no table has a real `xmin` column.
 - Set hash for whole-set resources: read `RowVersion` of each tracked row (sorted by id) after `SELECT ... FOR UPDATE` on the parent.
 Open questions: none. Spec section 9 unchanged (no ADR request needed).
+
+### Stage 3 — Backend — backend-developer — 2026-11-08
+Result: Done
+Changed: backend/Qms.Application (Common plumbing, Auth/Permissions, ServiceTypes, PriorityTypes), backend/Qms.Infrastructure (Scope, Errors, Notifications, Authorization, DependencyInjection, QmsDbContext: interface only), backend/Qms.Api (Auth/RequirePermission, two controllers, ProblemDetailsSetup, ResultExtensions, Program), backend/Qms.Tests (new Setup/, Application/, support; 377 tests green, build 0 warnings). Task: TASK-010 (Done).
+Notes for next stage:
+- Endpoints (`/api/v1`): `GET/POST /service-types`, `GET/PUT/DELETE /service-types/{id}`, same for `/priority-types`; `GET ?isActive=true|false`. Service type DTO `{ id, name, translations, prefix, targetMinutes, sortOrder, isActive, version }`; priority type DTO `{ id, name, translations, prefix, priorityLevel, isPaid, feeAmount, currencyCode, isActive, version }`. `translations` is an object (`{}` or `{ "ar": "..." }`); requests send `name` (required) and optional `translations`; `PUT` sends all fields plus `version`; `companyId` is ignored. 201 + `Location`; 204 on delete.
+- Errors (problem+json `code`): `validation.failed` (errors keyed camelCase), `translations.unsupported_language`, `service_type|priority_type.prefix_taken | in_use | not_found`, `request.conflict`, `auth.forbidden`, `auth.unauthorized`.
+- Permissions: `<module>.<action>` kebab-case in `Permissions` (`service-types.view|create|edit|delete`, `priority-types.*`); `Permissions.All` is the single list. Static map: Company Admin all, Branch Manager view only, Counter Staff and Super Admin none. Later stories add constants + map entries + `[RequirePermission]`; STORY-048 swaps `StaticRolePermissionResolver` for database roles.
+- Plumbing for later M2 stories: handlers inject `IQmsDbContext`; mark commands `[Audited("entity","action")]` (+ `[NotAudited]` on secrets); load -> check version (`CommonRules.DecodeVersion`, `RowVersionCodec`, set `Entry(row).Property(r => r.RowVersion).OriginalValue`) -> change -> save; call `IBranchScope.EnsureAccessAsync` after loading the target; announce device changes with `IPostCommitActions.Enqueue(ct => notifier.ConfigChangedAsync(...))`; add constraint names to `PostgresErrorCatalog` (a test checks they exist); tests use `SetupHost.StartAsync(postgres)` (`SetupTestData`, `CallAsync(SetupUser, ...)`, `AuditRowsAsync`).
+- Product owner: master records get `is_active` on all tables (service/priority types already have it); localisation storage migration (`name`/`name_translations`) will change only `LocalizedText`.
+Open questions: none. Stages 4 and 5 are N/A (orchestrator logs them). ADR-008 and the spec section 10 item routes were not edited by this stage.

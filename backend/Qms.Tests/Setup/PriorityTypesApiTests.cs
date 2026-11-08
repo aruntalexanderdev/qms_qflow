@@ -18,8 +18,8 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     private static object Update(JsonElement current, string? nameEn = null, string? prefix = null, bool? isActive = null, bool? isPaid = null, decimal? fee = null, bool clearFee = false, string? version = null) =>
         new
         {
-            nameEn = nameEn ?? current.GetProperty("nameEn").GetString(),
-            nameAr = current.GetProperty("nameAr").GetString(),
+            name = nameEn ?? current.GetProperty("name").GetString(),
+            translations = new { ar = current.GetProperty("translations").GetProperty("ar").GetString() },
             prefix = prefix ?? current.GetProperty("prefix").GetString(),
             priorityLevel = current.GetProperty("priorityLevel").GetInt32(),
             isPaid = isPaid ?? current.GetProperty("isPaid").GetBoolean(),
@@ -64,7 +64,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         var reply = await setup.GetAsync(SetupUser.CompanyAdminC2, Url);
 
         var item = reply.Json.EnumerateArray().Single();
-        item.GetProperty("nameEn").GetString().ShouldBe("Normal X");
+        item.GetProperty("name").GetString().ShouldBe("Normal X");
         item.GetProperty("currencyCode").GetString().ShouldBe("SAR");
     }
 
@@ -74,7 +74,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
         var normal = await GetAsync(setup, SeedIds.Normal);
         (await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}", Update(normal, isActive: false))).Status.ShouldBe(200);
-        (await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { nameEn = "Senior", nameAr = "كبار السن", prefix = "S", priorityLevel = 1, isPaid = false })).Status.ShouldBe(201);
+        (await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { ar = "كبار السن" }, prefix = "S", priorityLevel = 1, isPaid = false })).Status.ShouldBe(201);
 
         var inactive = await setup.GetAsync(SetupUser.CompanyAdminC1, Url + "?isActive=false");
         var active = await setup.GetAsync(SetupUser.CompanyAdminC1, Url + "?isActive=true");
@@ -96,7 +96,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         reply.Json.GetProperty("feeAmount").ValueKind.ShouldBe(JsonValueKind.Number);
         reply.Json.GetProperty("feeAmount").GetDecimal().ShouldBe(50.00m);
         reply.Body.ShouldContain("\"feeAmount\":50.00");
-        reply.Json.GetProperty("nameAr").GetString().ShouldBe("كبار الشخصيات");
+        reply.Json.GetProperty("translations").GetProperty("ar").GetString().ShouldBe("كبار الشخصيات");
     }
 
     // ---- AC-15, AC-16
@@ -107,7 +107,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url,
-            new { nameEn = "Senior", nameAr = "كبار السن", prefix = "S", priorityLevel = 1, isPaid = false, isActive = true, companyId = SetupTestData.Company2 });
+            new { name = "Senior", translations = new { ar = "كبار السن" }, prefix = "S", priorityLevel = 1, isPaid = false, isActive = true, companyId = SetupTestData.Company2 });
 
         reply.Status.ShouldBe(201);
         reply.Response.Headers.Location!.ToString().ShouldBe($"/api/v1/priority-types/{SetupHost.Id(reply)}");
@@ -121,8 +121,8 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     {
         using var setup = await SetupHost.StartAsync(postgres);
 
-        var paid = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { nameEn = "Premium", nameAr = "مميز", prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = 75.50m });
-        var free = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { nameEn = "Gift", nameAr = "هدية", prefix = "Q", priorityLevel = 1, isPaid = true, feeAmount = 0 });
+        var paid = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Premium", translations = new { ar = "مميز" }, prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = 75.50m });
+        var free = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Gift", translations = new { ar = "هدية" }, prefix = "Q", priorityLevel = 1, isPaid = true, feeAmount = 0 });
 
         paid.Status.ShouldBe(201);
         paid.Json.GetProperty("isPaid").GetBoolean().ShouldBeTrue();
@@ -139,20 +139,19 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
         var cases = new (string Field, object Body)[]
         {
-            ("nameEn", new { nameEn = "", nameAr = "ع", prefix = "P", priorityLevel = 1, isPaid = false }),
-            ("nameAr", new { nameEn = "x", prefix = "P", priorityLevel = 1, isPaid = false }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "p", priorityLevel = 1, isPaid = false }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "PV", priorityLevel = 1, isPaid = false }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "7", priorityLevel = 1, isPaid = false }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "", priorityLevel = 1, isPaid = false }),
-            ("priorityLevel", new { nameEn = "x", nameAr = "ع", prefix = "P", priorityLevel = 0, isPaid = false }),
-            ("priorityLevel", new { nameEn = "x", nameAr = "ع", prefix = "P", priorityLevel = -1, isPaid = false }),
-            ("feeAmount", new { nameEn = "x", nameAr = "ع", prefix = "P", priorityLevel = 1, isPaid = true }),
-            ("feeAmount", new { nameEn = "x", nameAr = "ع", prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = 12.345m }),
-            ("feeAmount", new { nameEn = "x", nameAr = "ع", prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = -1 }),
-            ("feeAmount", new { nameEn = "x", nameAr = "ع", prefix = "P", priorityLevel = 1, isPaid = false, feeAmount = 10 }),
-            ("feeAmount", new { nameEn = "x", nameAr = "ع", prefix = "P", priorityLevel = 1, isPaid = false, feeAmount = 0 }),
-            ("feeAmount", new { nameEn = "x", nameAr = "ع", prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = 10000000000m }),
+            ("name", new { name = "", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = false }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "p", priorityLevel = 1, isPaid = false }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "PV", priorityLevel = 1, isPaid = false }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "7", priorityLevel = 1, isPaid = false }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "", priorityLevel = 1, isPaid = false }),
+            ("priorityLevel", new { name = "x", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 0, isPaid = false }),
+            ("priorityLevel", new { name = "x", translations = new { ar = "ع" }, prefix = "P", priorityLevel = -1, isPaid = false }),
+            ("feeAmount", new { name = "x", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = true }),
+            ("feeAmount", new { name = "x", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = 12.345m }),
+            ("feeAmount", new { name = "x", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = -1 }),
+            ("feeAmount", new { name = "x", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = false, feeAmount = 10 }),
+            ("feeAmount", new { name = "x", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = false, feeAmount = 0 }),
+            ("feeAmount", new { name = "x", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = true, feeAmount = 10000000000m }),
         };
 
         foreach (var (field, body) in cases)
@@ -174,10 +173,25 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url,
-            new { nameEn = "Max", nameAr = "أقصى", prefix = "M", priorityLevel = 1, isPaid = true, feeAmount = 9999999999.99m });
+            new { name = "Max", translations = new { ar = "أقصى" }, prefix = "M", priorityLevel = 1, isPaid = true, feeAmount = 9999999999.99m });
 
         reply.Status.ShouldBe(201);
         reply.Json.GetProperty("feeAmount").GetDecimal().ShouldBe(9999999999.99m);
+    }
+
+    [Fact]
+    public async Task Translations_other_than_arabic_are_refused_for_now_and_arabic_is_optional()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+
+        var french = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { fr = "Aîné" }, prefix = "S", priorityLevel = 1, isPaid = false });
+        var none = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", prefix = "S", priorityLevel = 1, isPaid = false });
+
+        french.Status.ShouldBe(400);
+        french.Code.ShouldBe("translations.unsupported_language");
+        none.Status.ShouldBe(201);
+        none.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+        none.Body.ShouldNotContain("nameEn");
     }
 
     // ---- AC-18
@@ -188,11 +202,11 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
         var normal = await GetAsync(setup, SeedIds.Normal);
 
-        var create = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { nameEn = "Other", nameAr = "آخر", prefix = "V", priorityLevel = 3, isPaid = false });
+        var create = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Other", translations = new { ar = "آخر" }, prefix = "V", priorityLevel = 3, isPaid = false });
         var update = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}", Update(normal, prefix: "V"));
-        var sameLetterAsService = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { nameEn = "Alpha", nameAr = "ألفا", prefix = "A", priorityLevel = 3, isPaid = false });
-        var serviceWithPriorityLetter = await setup.PostAsync(SetupUser.CompanyAdminC1, "/api/v1/service-types", new { nameEn = "Vee", nameAr = "في", prefix = "V" });
-        var otherCompany = await setup.PostAsync(SetupUser.CompanyAdminC2, Url, new { nameEn = "Vip X", nameAr = "في آي بي", prefix = "V", priorityLevel = 1, isPaid = false });
+        var sameLetterAsService = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Alpha", translations = new { ar = "ألفا" }, prefix = "A", priorityLevel = 3, isPaid = false });
+        var serviceWithPriorityLetter = await setup.PostAsync(SetupUser.CompanyAdminC1, "/api/v1/service-types", new { name = "Vee", translations = new { ar = "في" }, prefix = "V" });
+        var otherCompany = await setup.PostAsync(SetupUser.CompanyAdminC2, Url, new { name = "Vip X", translations = new { ar = "في آي بي" }, prefix = "V", priorityLevel = 1, isPaid = false });
 
         create.Status.ShouldBe(409);
         create.Code.ShouldBe("priority_type.prefix_taken");
@@ -207,7 +221,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     public async Task Ac18_two_concurrent_creates_of_the_same_prefix_give_one_201_and_one_409()
     {
         using var setup = await SetupHost.StartAsync(postgres);
-        object Body(string name) => new { nameEn = name, nameAr = "ع", prefix = "S", priorityLevel = 1, isPaid = false };
+        object Body(string name) => new { name, translations = new { ar = "ع" }, prefix = "S", priorityLevel = 1, isPaid = false };
 
         var replies = await Task.WhenAll(setup.PostAsync(SetupUser.CompanyAdminC1, Url, Body("One")), setup.PostAsync(SetupUser.CompanyAdminC1, Url, Body("Two")));
 
@@ -264,7 +278,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         var first = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}", Update(v1, nameEn: "First"));
         var second = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}", Update(v1, nameEn: "Second"));
         var missing = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Normal}",
-            new { nameEn = "x", nameAr = "ع", prefix = "N", priorityLevel = 2, isPaid = false, isActive = true });
+            new { name = "x", translations = new { ar = "ع" }, prefix = "N", priorityLevel = 2, isPaid = false, isActive = true });
 
         first.Status.ShouldBe(200);
         second.Status.ShouldBe(409);
@@ -272,7 +286,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         missing.Status.ShouldBe(400);
         missing.Code.ShouldBe("validation.failed");
         missing.Json.GetProperty("errors").TryGetProperty("version", out _).ShouldBeTrue();
-        (await GetAsync(setup, SeedIds.Normal)).GetProperty("nameEn").GetString().ShouldBe("First");
+        (await GetAsync(setup, SeedIds.Normal)).GetProperty("name").GetString().ShouldBe("First");
     }
 
     [Fact]
@@ -295,7 +309,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     public async Task Ac23_an_unused_priority_type_is_deleted_with_204_and_an_audit_row()
     {
         using var setup = await SetupHost.StartAsync(postgres);
-        var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { nameEn = "Senior", nameAr = "كبار السن", prefix = "S", priorityLevel = 1, isPaid = false }));
+        var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { ar = "كبار السن" }, prefix = "S", priorityLevel = 1, isPaid = false }));
 
         var reply = await setup.DeleteAsync(SetupUser.CompanyAdminC1, $"{Url}/{id}");
 
@@ -326,7 +340,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
     public async Task Ac23_a_single_reference_of_each_kind_blocks_the_delete(string kind)
     {
         using var setup = await SetupHost.StartAsync(postgres);
-        var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { nameEn = "Senior", nameAr = "كبار السن", prefix = "S", priorityLevel = 1, isPaid = false }));
+        var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { ar = "كبار السن" }, prefix = "S", priorityLevel = 1, isPaid = false }));
         switch (kind)
         {
             case "company mapping":
@@ -357,7 +371,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
         var foreign = $"{Url}/{SeedIds.Vip}";
         var unknown = $"{Url}/{Guid.NewGuid()}";
-        var body = new { nameEn = "Hacked", nameAr = "ع", prefix = "V", priorityLevel = 1, isPaid = true, feeAmount = 1, isActive = true, version = "AAAAAA" };
+        var body = new { name = "Hacked", translations = new { ar = "ع" }, prefix = "V", priorityLevel = 1, isPaid = true, feeAmount = 1, isActive = true, version = "AAAAAA" };
 
         var results = new List<(ApiReply Foreign, ApiReply Unknown)>
         {

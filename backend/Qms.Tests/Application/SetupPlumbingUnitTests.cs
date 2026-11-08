@@ -47,7 +47,7 @@ public sealed class SetupPlumbingUnitTests
     public void Ac32_a_bad_version_is_a_validation_error_on_version()
     {
         var validator = new UpdateServiceTypeValidator();
-        var command = new UpdateServiceTypeCommand(Guid.NewGuid(), "x", "ع", "A", null, 0, true, "garbage");
+        var command = new UpdateServiceTypeCommand(Guid.NewGuid(), "x", null, "A", null, 0, true, "garbage");
 
         var result = validator.Validate(command);
 
@@ -72,8 +72,8 @@ public sealed class SetupPlumbingUnitTests
 
     // ---- AC-5
 
-    private static string[] ServiceFields(string? nameEn = "Cards", string? nameAr = "ب", string? prefix = "H", int? target = null, int sort = 0) =>
-        [.. new CreateServiceTypeValidator().Validate(new CreateServiceTypeCommand(nameEn, nameAr, prefix, target, sort, true)).Errors.Select(e => e.PropertyName)];
+    private static string[] ServiceFields(string? nameEn = "Cards", IReadOnlyDictionary<string, string?>? translations = null, string? prefix = "H", int? target = null, int sort = 0) =>
+        [.. new CreateServiceTypeValidator().Validate(new CreateServiceTypeCommand(nameEn, translations, prefix, target, sort, true)).Errors.Select(e => e.PropertyName)];
 
     [Fact]
     public void Ac5_service_type_rules()
@@ -81,10 +81,14 @@ public sealed class SetupPlumbingUnitTests
         ServiceFields().ShouldBeEmpty();
         ServiceFields(prefix: " H ").ShouldBeEmpty();
         ServiceFields(nameEn: new string('x', 200), target: 1).ShouldBeEmpty();
-        ServiceFields(nameEn: "").ShouldBe(["NameEn"]);
-        ServiceFields(nameEn: "  ").ShouldBe(["NameEn"]);
-        ServiceFields(nameEn: new string('x', 201)).ShouldBe(["NameEn"]);
-        ServiceFields(nameAr: null).ShouldBe(["NameAr"]);
+        ServiceFields(nameEn: "").ShouldBe(["Name"]);
+        ServiceFields(nameEn: "  ").ShouldBe(["Name"]);
+        ServiceFields(nameEn: new string('x', 201)).ShouldBe(["Name"]);
+        ServiceFields(nameEn: null).ShouldBe(["Name"]);
+        ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = "ب" }).ShouldBeEmpty();
+        ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = null }).ShouldBeEmpty();
+        ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = new string('ع', 201) }).ShouldBe(["Translations"]);
+        ServiceFields(translations: new Dictionary<string, string?> { ["fr"] = "x" }).ShouldBe(["Translations"]);
         foreach (var prefix in new[] { "h", "HB", "1", "", "  ", null, "É", "-" })
         {
             ServiceFields(prefix: prefix).ShouldBe(["Prefix"], prefix ?? "null");
@@ -98,7 +102,7 @@ public sealed class SetupPlumbingUnitTests
     // ---- AC-17
 
     private static string[] PriorityFields(string? prefix = "P", int level = 1, bool paid = false, decimal? fee = null, string? nameEn = "Premium") =>
-        [.. new CreatePriorityTypeValidator().Validate(new CreatePriorityTypeCommand(nameEn, "مميز", prefix, level, paid, fee, true)).Errors.Select(e => e.PropertyName)];
+        [.. new CreatePriorityTypeValidator().Validate(new CreatePriorityTypeCommand(nameEn, new Dictionary<string, string?> { ["ar"] = "مميز" }, prefix, level, paid, fee, true)).Errors.Select(e => e.PropertyName)];
 
     [Fact]
     public void Ac17_priority_type_rules()
@@ -107,7 +111,7 @@ public sealed class SetupPlumbingUnitTests
         PriorityFields(paid: true, fee: 75.50m).ShouldBeEmpty();
         PriorityFields(paid: true, fee: 0m).ShouldBeEmpty();
         PriorityFields(paid: true, fee: 9_999_999_999.99m).ShouldBeEmpty();
-        PriorityFields(nameEn: "").ShouldBe(["NameEn"]);
+        PriorityFields(nameEn: "").ShouldBe(["Name"]);
         foreach (var prefix in new[] { "p", "PV", "7", "" })
         {
             PriorityFields(prefix: prefix).ShouldBe(["Prefix"], prefix);
@@ -192,4 +196,29 @@ internal sealed class FakeUser(Guid? companyId, string role, bool authenticated 
     public string? Language => "en";
 
     public bool IsInRole(string value) => value == role;
+}
+
+public sealed class LocalizedTextTests
+{
+    [Fact]
+    public void The_temporary_storage_mapping_is_name_to_english_and_ar_to_arabic()
+    {
+        LocalizedText.ToStorage(" Cards ", new Dictionary<string, string?> { ["AR"] = " البطاقات " }).ShouldBe(("Cards", "البطاقات"));
+        LocalizedText.ToStorage("Cards", null).ShouldBe(("Cards", string.Empty));
+        LocalizedText.ToStorage("Cards", new Dictionary<string, string?> { ["ar"] = "  " }).ShouldBe(("Cards", string.Empty));
+        LocalizedText.FromStorage("البطاقات")["ar"].ShouldBe("البطاقات");
+        LocalizedText.FromStorage("").ShouldBeEmpty();
+        LocalizedText.UnsupportedLanguages(new Dictionary<string, string?> { ["ar"] = "x", ["fr"] = "y" }).ShouldBe(["fr"]);
+    }
+
+    [Fact]
+    public async Task A_shared_specific_error_code_becomes_the_validation_code()
+    {
+        var provider = new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddHandlersAndValidators(typeof(LocalizedText).Assembly).BuildServiceProvider();
+        var validator = provider.GetRequiredService<FluentValidation.IValidator<CreateServiceTypeCommand>>();
+
+        var result = await validator.ValidateAsync(new CreateServiceTypeCommand("x", new Dictionary<string, string?> { ["fr"] = "x" }, "H", null, 0, true));
+
+        result.Errors.Single().ErrorCode.ShouldBe("translations.unsupported_language");
+    }
 }

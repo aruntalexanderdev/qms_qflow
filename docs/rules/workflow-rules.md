@@ -16,8 +16,8 @@ flowchart LR
 | 1 | Analysis | `business-analyst` | Stage 0 done | Story complete from template, acceptance criteria in Given/When/Then, one task file per applicable stage |
 | 2 | Database | `database-architect` | Stage 1 done | Entities, configuration, migration, seed data, DB tests; or "N/A" |
 | 3 | Backend | `backend-developer` | Stage 2 done or N/A | Use cases, endpoints, SignalR events, unit + integration tests green |
-| 4 | Frontend | `frontend-developer` | Stage 3 done or N/A | Screens, translations (en + ar), RTL check, component tests green |
-| 5 | Android | `android-developer` | Stage 4 done or N/A | App changes, strings (en + ar), unit tests, build green |
+| 4 | Frontend | `frontend-developer` | Stage 3 done or N/A | Screens, translations (en; other shipped languages per rules §7), RTL-safe CSS, component tests green |
+| 5 | Android | `android-developer` | Stage 4 done or N/A | App changes, strings (en; other shipped languages per rules §7), unit tests, build green |
 | 6 | Code review | `code-reviewer` | All dev stages done | Review report: Approved, or Changes requested with "Must fix" list |
 | 7 | QA | `qa-tester` | Stage 6 Approved | Test cases, results per acceptance criterion, bugs logged, sign-off |
 

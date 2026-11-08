@@ -1,6 +1,6 @@
 # ADR-008 — Setup API conventions (milestone M2)
 
-Status: Accepted with changes (product owner, 2026-11-08) — see Amendment 1; §9 superseded by ADR-009
+Status: Accepted with changes (product owner, 2026-11-08) — see Amendment 1; §9 superseded by ADR-009; §4, §8, §13, §14 amended by ADR-010 (Amendment 2)
 Date: 2026-11-08
 Story: STORY-005 to STORY-013 (M2 Setup API)
 
@@ -62,7 +62,7 @@ All under `/api/v1`. Collections keep the spec §10 shape (nested under their pa
 - Inactive service and priority types stay valid in existing mapping rows; new mapping rows may not reference an inactive type (400 `mapping.type_inactive`). Interpretation of "is_active"; queue behaviour of inactive types is M3.
 
 ### 8. Validation (FluentValidation on every command)
-- `nameEn` and `nameAr` both required, trimmed, 1–200 characters (templates' header/footer 1–500). `nameAr` is not script-checked.
+- ~~`nameEn` and `nameAr` both required~~ **Replaced by Amendment 2 (ADR-010 §5): localized-text rule** — the default-language value (`name`, `header`, …) is required, trimmed, 1–200 characters (header, footer, consent text 1–500); `translations` / `<field>Translations` is optional, keys = enabled non-default languages of the company, values trimmed (empty = no translation), same limits. No script check.
 - Prefix: exactly one character `A`–`Z` after trimming (no silent upper-casing); unique per company (pre-check + `23505`).
 - Money: 0 to 9 999 999 999.99, at most 2 decimals. `sortOrder` ≥ 0. Codes (branch): 1–50 of `[A-Za-z0-9_-]`, unique per company. Time zone: an IANA id that `TimeZoneInfo.TryFindSystemTimeZoneById` accepts. Ids in bodies must be non-empty GUIDs.
 - Validation failure → 400 `validation.failed` with `errors` (existing behaviour).
@@ -144,3 +144,13 @@ One flow per from-service (STORY-010, now also a unique index); overlapping cale
 
 ### D. Spec impact (amendment)
 Spec §8, §9, §10 and §13 updated on 2026-11-08: the "Spec impact" route additions above are now in §10; §9 gains `is_active` on zone, counter and device.
+
+## Amendment 2 — Localised text (ADR-010, product owner decision 2026-11-08)
+English is the default language; other languages are configurable and optional (ADR-010). Sections not named here stand as written.
+
+- **§3 Contracts:** translated fields are exposed as `name` + `translations` (field `name`) or `<field>` + `<field>Translations` (other fields), never `nameEn` / `nameAr`. Admin DTOs return only keys of enabled non-default languages; `PUT` keeps stored keys of languages that are not enabled (ADR-010 §5).
+- **§4 Lists:** "then `nameEn`" reads "then `name`" (the default-language value) everywhere (service types, zones, roles).
+- **§8 Validation:** the "bilingual names" rule is replaced by the **localized-text rule** of ADR-010 §5, implemented once in the shared Application helper (`LocalizedTextRules`, STORY-051). Error codes `translation.language_not_enabled`, `translation.default_language_key` (400, `errors` keyed `translations.<code>`; top-level code per §6). Empty translation values mean "no translation" and are dropped.
+- **§13 Error codes:** "the web app translates every code (en + ar) in M4" reads "the web app translates every code in `en.json` (other languages through their translation files when they are made available)". New codes: the two above, `language.not_enabled`, `company_language.not_available`, `company_language.default_required`, `company_language.in_use`.
+- **§14 Defaults:** the default zone of a new branch is `name` "Main zone" with no translations (the Arabic name is added by the company when Arabic is enabled); a new dispenser gets `languages = {<company default>}`, `default_language = <company default>` (phase 1: `{en}`, `en`) instead of "en + ar".
+- **§15 Tests:** endpoints with translated fields add one test with a second language made available and enabled for a test company (valid key saved and returned; not-enabled key → 400; key of a later-disabled language kept on `PUT` and not returned).

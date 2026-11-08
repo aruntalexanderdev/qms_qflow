@@ -8,14 +8,14 @@ namespace Qms.Application.ServiceTypes;
 /// <summary>Creates a service type. The company comes from the token, never from the body (ADR-008 section 3).</summary>
 [Audited("service_type", "create")]
 public sealed record CreateServiceTypeCommand(
-    string? NameEn, string? NameAr, string? Prefix, int? TargetMinutes, int SortOrder, bool IsActive);
+    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? TargetMinutes, int SortOrder, bool IsActive);
 
 public sealed class CreateServiceTypeValidator : AbstractValidator<CreateServiceTypeCommand>
 {
     public CreateServiceTypeValidator()
     {
-        RuleFor(command => command.NameEn).BilingualName();
-        RuleFor(command => command.NameAr).BilingualName();
+        RuleFor(command => command.Name).LocalizedName();
+        RuleFor(command => command.Translations).LocalizedTranslations();
         RuleFor(command => command.Prefix).PrefixLetter();
         RuleFor(command => command.TargetMinutes).GreaterThan(0).When(command => command.TargetMinutes is not null);
         RuleFor(command => command.SortOrder).SortOrder();
@@ -35,11 +35,12 @@ public sealed class CreateServiceTypeHandler(IQmsDbContext db, ICurrentTenant te
             return ServiceTypeErrors.PrefixTaken;
         }
 
+        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
         var row = new ServiceType
         {
             CompanyId = companyId,
-            NameEn = command.NameEn!.Trim(),
-            NameAr = command.NameAr!.Trim(),
+            NameEn = nameEn,
+            NameAr = nameAr,
             Prefix = prefix,
             TargetMinutes = command.TargetMinutes,
             SortOrder = command.SortOrder,

@@ -31,10 +31,19 @@ To be completed by the BA. (Devices screen with preview is M4 STORY-026.)
 ## 7. Data and API impact
 **Spec:** sections 4.4, 7, 8, 9, 10, 11, 13. No business rule changes. ADR-008 §14: a new dispenser gets its `dispenser_setting` with spec defaults.
 
+**Amendment 2026-11-08 (localisation, ADR-010). It supersedes the conflicting lines below, including the consent-text columns.**
+- **Consent text:** the columns are `dispenser_setting.consent_text` (varchar 500, null) and `consent_text_translations` (jsonb, not null, default `'{}'`, object check), not `consent_text_en` / `consent_text_ar`.
+  - The API exchanges `consentText` (null, or 1–500 trimmed) and `consentTextTranslations` (optional; enabled languages only; allowed only when `consentText` is set, else 400 `dispenser.consent_text_incomplete`). Validation uses the shared `LocalizedTextRules`.
+  - The rule "both or neither" is gone: English alone is complete.
+- **Languages:** `languages` must be a non-empty subset of the **company's enabled languages**, and `defaultLanguage` must be one of them. Otherwise 400 `language.not_enabled`. This replaces "subset of `en`, `ar`".
+- **New dispenser defaults:** `languages = {<company default>}`, `defaultLanguage = <company default>` (phase 1: `{en}`, `en`), instead of "en + ar" (ADR-008 Amendment 2 §14). STORY-051 already changes the entity default and fixes the seed.
+- Tests: one test with a second language enabled for a test company (consent translation saved and returned, a not-enabled language in `languages` → 400).
+- Now depends on STORY-051 as well.
+
 **Amendment 2026-11-08 (product owner decisions, ADR-009, ADR-008 Amendment 1 B):**
 - Permissions (the "Roles" column below is the default grant; Company Admin and the Branch Manager role have all by default): `devices.view/create/edit/delete`, `devices.registration-code`, `dispenser-settings.view/edit` (settings **and** zone + service mapping). Branch scope unchanged.
 - **`device.is_active`** (new column): `PUT /devices/{id}` gains `isActive`; lists return it and accept `?isActive=`. An inactive device keeps its key, settings and mapping but is refused by the device endpoints in M3 (403 `device.inactive`, STORY-015) and hidden from the dashboard's offline list. Delete rule unchanged (only while unreferenced). A new dispenser mapping row may not use an inactive zone (400 `zone.inactive`).
-- **Consent text and idle banner now** (approved): `dispenser_setting.consent_text_en`, `consent_text_ar` (nullable, 1–500 when given, both or neither → 400 `dispenser.consent_text_incomplete`) and `idle_banner_url` (nullable; relative or https on the deployment's own origin, same rule as the ticket logo → 400 `dispenser.idle_banner_url_invalid`). Part of the settings GET/PUT.
+- **Consent text and idle banner now** (approved): `dispenser_setting.consent_text` + `consent_text_translations` (localised, see the localisation amendment above) and `idle_banner_url` (nullable; relative or https on the deployment's own origin, same rule as the ticket logo → 400 `dispenser.idle_banner_url_invalid`). Part of the settings GET/PUT.
 - The §4.4 warning counts only **active** counters of the zone (inactive counters are hidden from consoles, STORY-009).
 - Settings inheritance (company → branch → dispenser, spec §7) is still not modelled: phase 1 = per dispenser with code defaults (open question 1, remaining part).
 
@@ -43,17 +52,17 @@ To be completed by the BA. (Devices screen with preview is M4 STORY-026.)
 - **Schema change: yes (stage 2), small:**
   1. `DispenserSetting.ConfirmSeconds` entity default is 5; spec §7 says "returns home after N seconds (default 8)". Change the entity default to 8 (no DB default exists, so no DDL); the seed may keep its explicit value — stage 2 decides and records it.
   2. STORY-002 review N3: check constraint for device type consistency, e.g. `ck_device_type_targets`: `counter_id IS NOT NULL` exactly when `type = 'CounterDisplay'`, and `zone_id IS NOT NULL` unless `type = 'ZoneDisplay'` (spec §9: zone is empty only for a lobby display). Migration e.g. `DeviceTypeConsistency`; the seed (two dispensers in Zone 1) already satisfies it.
-  3. **Approved 2026-11-08:** `consent_text_en`, `consent_text_ar` (varchar 500, null), `idle_banner_url` (varchar 500, null) on `dispenser_setting`.
+  3. **Approved 2026-11-08, localised per ADR-010:** `consent_text` (varchar 500, null), `consent_text_translations` (jsonb, not null, default `'{}'`, check object), `idle_banner_url` (varchar 500, null) on `dispenser_setting`.
   4. **Approved 2026-11-08:** `device.is_active` (boolean, not null, default true; existing rows true).
 
 **Backend**
 | Method | Route | Roles | Notes |
 |---|---|---|---|
 | GET | `/api/v1/branches/{branchId}/devices` | CA, BM (own) | `[{ id, type, name, zoneId?, counterId?, isRegistered, registrationCodeExpiresAt?, lastSeenAt?, printerStatus, version }]` (live status read-only) |
-| POST | `/api/v1/branches/{branchId}/devices` | CA, BM (own) | `{ type, name, zoneId?, counterId? }` → 201 with **`registrationCode` and `registrationCodeExpiresAt` (only in this response)**; Dispenser also gets default settings (PrintOnly, `showVip` true, confirm 8 s, languages en + ar, default en) |
+| POST | `/api/v1/branches/{branchId}/devices` | CA, BM (own) | `{ type, name, zoneId?, counterId? }` → 201 with **`registrationCode` and `registrationCodeExpiresAt` (only in this response)**; Dispenser also gets default settings (PrintOnly, `showVip` true, confirm 8 s, languages = {company default}, default = company default; ADR-010) |
 | GET / PUT / DELETE | `/api/v1/devices/{id}` | CA, BM (own) | PUT `{ name, zoneId?, counterId?, version }` (type immutable); counter display: counter in the branch, zone = the counter's zone; DELETE removes its mapping rows and settings, refused if tokens reference it → 409 `device.in_use` |
 | POST | `/api/v1/devices/{id}/registration-code` | CA, BM (own) | new single-use code, expires in 24 h, **clears `device_key_hash`** (revokes the device, ADR-004 §7) → `{ registrationCode, registrationCodeExpiresAt }` |
-| GET / PUT | `/api/v1/devices/{id}/dispenser-settings` | CA, BM (own) | Dispenser only (else 409 `device.not_dispenser`); `tokenMode` PrintOnly / PrintPhoneOptional / PrintPhoneRequired — PhoneOnly → 400 `dispenser.token_mode_phase2` (spec §7, phase 2); `countryCodes` like `+971`, `defaultCountryCode` in the list; `phoneMin` ≤ `phoneMax` (1–15); `languages` non-empty subset of `en`, `ar`, `defaultLanguage` in it; `ticketTemplateId` of the company or null; `confirmSeconds` 1–120; `showVip` |
+| GET / PUT | `/api/v1/devices/{id}/dispenser-settings` | CA, BM (own) | Dispenser only (else 409 `device.not_dispenser`); `tokenMode` PrintOnly / PrintPhoneOptional / PrintPhoneRequired — PhoneOnly → 400 `dispenser.token_mode_phase2` (spec §7, phase 2); `countryCodes` like `+971`, `defaultCountryCode` in the list; `phoneMin` ≤ `phoneMax` (1–15); `languages` non-empty subset of the company's enabled languages, `defaultLanguage` in it (ADR-010); `ticketTemplateId` of the company or null; `confirmSeconds` 1–120; `showVip` |
 | GET / PUT | `/api/v1/devices/{id}/zone-service-mapping` | CA, BM (own) | Dispenser only; whole set `{ version, rows: [{ zoneId, serviceTypeId, sortOrder }] }`; zone of the device's branch (else 400 `zone.not_found`); service with at least one pair in the branch mapping, Available or not (else 400 `mapping.service_not_in_branch`); response and GET carry `warnings: [{ code: "mapping.no_counter_for_service", zoneId, serviceTypeId }]` when no counter of that zone maps the service with any priority (spec §4.4: save **with** the warning) |
 - Registration code: cryptographically random, 8 characters from an unambiguous upper-case alphabet (no 0/O/1/I), unique among live codes (retry on 23505); stored as the spec column says; never returned by GET. Device key generation is STORY-015 (M3).
 - Audit on every write (`device`, `device_registration_code` (code not in `data`), `dispenser_setting`, `dispenser_zone_service`).
@@ -69,7 +78,7 @@ To be completed by the BA. (Devices screen with preview is M4 STORY-026.)
 |---|---|---|---|
 | 0 Architect | Yes | — | ADR-008 (+ Amendment 1), ADR-009, ADR-004 §7 |
 | 1 BA | Yes | — | |
-| 2 Database | Yes | BA creates | Entity default `ConfirmSeconds` 8 (spec §7); device type check constraint (STORY-002 N3); `device.is_active`; `consent_text_en`, `consent_text_ar`, `idle_banner_url` on `dispenser_setting` (approved 2026-11-08); one migration |
+| 2 Database | Yes | BA creates | Entity default `ConfirmSeconds` 8 (spec §7); device type check constraint (STORY-002 N3); `device.is_active`; `consent_text` + `consent_text_translations`, `idle_banner_url` on `dispenser_setting` (approved 2026-11-08, localised per ADR-010); one migration |
 | 3 Backend | Yes | BA creates | Device CRUD incl. active flag, registration code, dispenser settings incl. consent/banner, dispenser mapping with warning, permission attributes, tests; after STORY-048 |
 | 4 Frontend | N/A | — | Devices screen is M4 (STORY-026) |
 | 5 Android | N/A | — | App consumes `/device/config` in M3/M7; no app change here |
@@ -80,7 +89,8 @@ To be completed by the BA. (Devices screen with preview is M4 STORY-026.)
 To be completed by the BA.
 
 ## 10. Open questions
-- [~] **Partly resolved 2026-11-08:** consent text (en + ar) and idle banner URL columns approved and added to spec §9; company/branch default inheritance still open (default: per dispenser only in phase 1, not blocking). Original question: **Product owner — settings in spec §7 with no column in §9.** §7 lists "consent text" and "idle banner image" per dispenser, and says settings "inherit company default → branch default → dispenser". §9 has only `dispenser_setting` and none of these columns, and no company/branch default tables. Proposal: phase 1 = settings per dispenser only, with code defaults (ADR-008 §14); add `consent_text_en`, `consent_text_ar` (needed for the phone modes in phase 1) and `idle_banner_url` to `dispenser_setting` if approved; company/branch defaults later. Without approval, this story ships without consent text and banner. Not blocking analysis; blocks only item 3 of stage 2.
+- [x] **Changed 2026-11-08 (ADR-010):** consent text is English (required when consent is used) plus optional translations, not an en + ar pair; dispenser languages come from the company's enabled languages (phase 1: English only, no toggle).
+- [~] **Partly resolved 2026-11-08:** consent text (now English + optional translations, ADR-010) and idle banner URL columns approved and added to spec §9; company/branch default inheritance still open (default: per dispenser only in phase 1, not blocking). Original question: **Product owner — settings in spec §7 with no column in §9.** §7 lists "consent text" and "idle banner image" per dispenser, and says settings "inherit company default → branch default → dispenser". §9 has only `dispenser_setting` and none of these columns, and no company/branch default tables. Proposal: phase 1 = settings per dispenser only, with code defaults (ADR-008 §14); add `consent_text_en`, `consent_text_ar` (needed for the phone modes in phase 1) and `idle_banner_url` to `dispenser_setting` if approved; company/branch defaults later. Without approval, this story ships without consent text and banner. Not blocking analysis; blocks only item 3 of stage 2.
 - [x] **Resolved 2026-11-08:** `device.is_active` added (ADR-008 Amendment 1 B). Original question: Product owner (low) — devices have no `is_active` (§9). A device that issued tokens cannot be deleted (history); it is retired by regenerating its code (revokes the key). Accept for phase 1? Not blocking.
 - [ ] Note: the dispenser-mapping warning counts counters with **any** priority for the service (spec §4.4 wording "at least one counter mapped to that service"); the stricter per-priority check belongs to the M3 issue rules ("block when no counter", branch setting).
 
@@ -103,3 +113,11 @@ Notes for next stage:
 - Permission codes in section 7; depends on STORY-048 too. The dispenser warning counts active counters only (STORY-009 adds `counter.is_active`).
 - The dispenser fee notice text comes from the dispenser's ticket template fee line (STORY-013), not from this story's settings.
 Open questions: settings inheritance company → branch → dispenser (not blocking; per dispenser in phase 1).
+
+### Stage 0 — Architecture review (amendment: localisation) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (sections 7, 8, 10); ADR-010 (new); ADR-007 Amendment 1; ADR-008 Amendment 2; ADR-009 Amendment 1; `docs/PROJECT_SPEC.md` §2, §7–§13 (approved by the product owner 2026-11-08)
+Notes for next stage:
+- Stage 2: create `consent_text` + `consent_text_translations` (not `_en`/`_ar`) in the same migration as the other approved columns.
+- Dispenser `languages` are validated against the company's enabled languages; new dispensers default to the company default only. Depends on STORY-051.
+Open questions: none.

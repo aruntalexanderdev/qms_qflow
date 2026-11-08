@@ -41,6 +41,15 @@ To be completed by the BA. (Users screen is M4 STORY-026; the shell language swi
 ## 7. Data and API impact
 **Spec:** sections 2, 8, 9, 10, 11, 13. No business rule changes. Password policy is a security setting (open question 1).
 
+**Amendment 2026-11-08 (localisation, ADR-010). It supersedes the conflicting lines below.**
+- **User language** is a registry code, no longer `"en" | "ar"`. STORY-051 replaces `ck_asp_net_users_language` with an FK to `language(code)`.
+- `PUT /auth/me/language` `{ language }` accepts only a language **offered to the caller** (ADR-010 §8–9): the company's enabled languages for a company user, the available languages for a Super Admin. Anything else → 400 `language.not_enabled`.
+- `POST` / `PUT /users`: `language` follows the same rule. When it is omitted, the company default (`en`) is used.
+- A stored language that is later disabled stays stored and resolves to the default at read time.
+- Role names in user DTOs are resolved for the request's `Accept-Language` (`IRequestLanguage`, STORY-051), or come from the role list. Users have no translated fields (`display_name` is personal and not translated).
+- Phase 1: only `en` is offered, so every language value other than `en` is rejected. Tests make `ar` available and enabled in a test database to prove the rule.
+- Now depends on STORY-051 (registry, `ICompanyLanguages`).
+
 **Amendment 2026-11-08 (product owner decisions, ADR-009) — supersedes the conflicting lines below:**
 - **Roles come from STORY-048.** A user holds **one or more** company roles (`user_role`), not an Identity role. Request bodies carry `roleIds: Guid[]` (at least one → 400 `user.role_required`; each an existing role of the caller's company → 404 `role.not_found`; inactive roles may be kept but not newly assigned → 400 `role.inactive`). The `role` field and the "one role per user" rule are gone; `GET /users` filters by `?roleId=`. Super Admin is never assignable (it is not a company role).
 - **Assignments follow the effective branch scope** (ADR-009 §5): `branchIds` / `counterIds` only when every assigned active role has `Assigned` scope (any role with `Company` scope → no assignments, 400 `user.assignment_invalid`). Counter assignments are no longer limited to "Counter Staff": any Assigned-scope user may have counters. **Confirmed:** every assigned counter's branch must be in `branchIds` (400 `user.counter_outside_branches`). A newly assigned counter must be active (400 `counter.inactive`, ADR-008 Amendment 1 B).
@@ -64,7 +73,7 @@ To be completed by the BA. (Users screen is M4 STORY-026; the shell language swi
 | PUT | `/api/v1/users/{id}` | CA | same without `userName`/`password`, plus `version` (Identity `ConcurrencyStamp`); replaces role and assignments |
 | DELETE | `/api/v1/users/{id}` | CA | refused while referenced by token history (actor FKs restrict) → 409 `user.in_use` (deactivate instead); assignments and refresh tokens cascade |
 | POST | `/api/v1/users/{id}/password` | CA | admin sets a new password `{ password }`; policy errors → 400 `user.password_weak` with Identity error codes; revokes the user's refresh tokens |
-| PUT | `/api/v1/auth/me/language` | any signed-in user (incl. Super Admin) | `{ language: "en" \| "ar" }` → 204; `GET /auth/me` and the next refresh return it (ADR-007 B.4) |
+| PUT | `/api/v1/auth/me/language` | any signed-in user (incl. Super Admin) | `{ language }` (a language offered to the caller, ADR-010 §9; else 400 `language.not_enabled`) → 204; `GET /auth/me` and the next refresh return it (ADR-007 B.4) |
 - Rules for the BA to state:
   - Roles assignable: CompanyAdmin, BranchManager, CounterStaff. SuperAdmin → 400 `user.role_invalid`. One role per user (`Roles`, STORY-003).
   - `branchIds` only for BranchManager and CounterStaff; `counterIds` only for CounterStaff; Company Admin has none (scope = all branches, spec §8) → 400 `user.assignment_invalid`.
@@ -123,3 +132,10 @@ Notes for next stage:
 - Users now get one or more roles from STORY-048; assignments depend on the effective branch scope; self-protection and last-admin guard reuse STORY-048's guard; passwords go through STORY-049's validator.
 - New dependencies: STORY-048 and STORY-049. Stage 2 stays N/A.
 Open questions: none open (all five resolved 2026-11-08).
+
+### Stage 0 — Architecture review (amendment: localisation) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (sections 7); ADR-010 (new); ADR-007 Amendment 1; ADR-008 Amendment 2; ADR-009 Amendment 1; `docs/PROJECT_SPEC.md` §2, §7–§13 (approved by the product owner 2026-11-08)
+Notes for next stage:
+- Language values are validated against the offered languages (ADR-010 §9) instead of `en`/`ar`. The shell switch calling `PUT /auth/me/language` remains an M4 follow-up (STORY-026) and only shows when 2+ languages are offered (ADR-007 Amendment 1). Depends on STORY-051.
+Open questions: none.

@@ -13,13 +13,13 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     private const string Url = "/api/v1/service-types";
 
     private static object NewBody(string prefix, string nameEn = "Cards", string nameAr = "البطاقات", int? targetMinutes = 10, int sortOrder = 7, bool isActive = true) =>
-        new { nameEn, nameAr, prefix, targetMinutes, sortOrder, isActive };
+        new { name = nameEn, translations = new { ar = nameAr }, prefix, targetMinutes, sortOrder, isActive };
 
     private static object UpdateBody(JsonElement current, string? nameEn = null, string? nameAr = null, string? prefix = null, int? targetMinutes = null, int? sortOrder = null, bool? isActive = null, string? version = null) =>
         new
         {
-            nameEn = nameEn ?? current.GetProperty("nameEn").GetString(),
-            nameAr = nameAr ?? current.GetProperty("nameAr").GetString(),
+            name = nameEn ?? current.GetProperty("name").GetString(),
+            translations = new { ar = nameAr ?? current.GetProperty("translations").GetProperty("ar").GetString() },
             prefix = prefix ?? current.GetProperty("prefix").GetString(),
             targetMinutes = targetMinutes ?? (current.GetProperty("targetMinutes").ValueKind == JsonValueKind.Null ? (int?)null : current.GetProperty("targetMinutes").GetInt32()),
             sortOrder = sortOrder ?? current.GetProperty("sortOrder").GetInt32(),
@@ -46,8 +46,8 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         foreach (var item in items)
         {
             item.GetProperty("id").GetGuid().ShouldNotBe(Guid.Empty);
-            item.GetProperty("nameEn").GetString().ShouldNotBeNullOrEmpty();
-            item.GetProperty("nameAr").GetString().ShouldNotBeNullOrEmpty();
+            item.GetProperty("name").GetString().ShouldNotBeNullOrEmpty();
+            item.GetProperty("translations").GetProperty("ar").GetString().ShouldNotBeNullOrEmpty();
             item.GetProperty("isActive").GetBoolean().ShouldBeTrue();
             item.GetProperty("version").GetString().ShouldNotBeNullOrEmpty();
             item.TryGetProperty("targetMinutes", out _).ShouldBeTrue();
@@ -64,7 +64,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         (await setup.PostAsync(SetupUser.CompanyAdminC1, Url, NewBody("H", nameEn: "Alpha", sortOrder: 6))).Status.ShouldBe(201);
 
         var names = (await setup.GetAsync(SetupUser.CompanyAdminC1, Url)).Json.EnumerateArray()
-            .Where(i => i.GetProperty("sortOrder").GetInt32() == 6).Select(i => i.GetProperty("nameEn").GetString()).ToList();
+            .Where(i => i.GetProperty("sortOrder").GetInt32() == 6).Select(i => i.GetProperty("name").GetString()).ToList();
 
         names.ShouldBe(["Alpha", "Service 6"]);
     }
@@ -94,8 +94,8 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
 
         reply.Status.ShouldBe(200);
         reply.Json.GetProperty("prefix").GetString().ShouldBe("B");
-        reply.Json.GetProperty("nameAr").GetString().ShouldBe("الخدمة 2");
-        reply.Json.GetProperty("nameEn").GetString().ShouldBe("Service 2");
+        reply.Json.GetProperty("translations").GetProperty("ar").GetString().ShouldBe("الخدمة 2");
+        reply.Json.GetProperty("name").GetString().ShouldBe("Service 2");
     }
 
     // ---- AC-4, AC-5
@@ -107,7 +107,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new
         {
-            nameEn = "Cards", nameAr = "البطاقات", prefix = "H", targetMinutes = 10, sortOrder = 7, isActive = true,
+            name = "Cards", translations = new { ar = "البطاقات" }, prefix = "H", targetMinutes = 10, sortOrder = 7, isActive = true,
             companyId = SetupTestData.Company2,
         });
 
@@ -125,7 +125,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
 
         var read = await setup.GetAsync(SetupUser.CompanyAdminC1, reply.Response.Headers.Location.ToString());
         read.Status.ShouldBe(200);
-        read.Json.GetProperty("nameAr").GetString().ShouldBe("البطاقات");
+        read.Json.GetProperty("translations").GetProperty("ar").GetString().ShouldBe("البطاقات");
     }
 
     [Fact]
@@ -134,20 +134,19 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
         var cases = new (string Field, object Body)[]
         {
-            ("nameEn", new { nameEn = "", nameAr = "ع", prefix = "H" }),
-            ("nameEn", new { nameEn = "   ", nameAr = "ع", prefix = "H" }),
-            ("nameAr", new { nameEn = "x", prefix = "H" }),
-            ("nameEn", new { nameEn = new string('x', 201), nameAr = "ع", prefix = "H" }),
-            ("nameAr", new { nameEn = "x", nameAr = new string('ع', 201), prefix = "H" }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "h" }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "HB" }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "1" }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "" }),
-            ("prefix", new { nameEn = "x", nameAr = "ع", prefix = "  " }),
-            ("prefix", new { nameEn = "x", nameAr = "ع" }),
-            ("targetMinutes", new { nameEn = "x", nameAr = "ع", prefix = "H", targetMinutes = 0 }),
-            ("targetMinutes", new { nameEn = "x", nameAr = "ع", prefix = "H", targetMinutes = -5 }),
-            ("sortOrder", new { nameEn = "x", nameAr = "ع", prefix = "H", sortOrder = -1 }),
+            ("name", new { name = "", translations = new { ar = "ع" }, prefix = "H" }),
+            ("name", new { name = "   ", translations = new { ar = "ع" }, prefix = "H" }),
+            ("name", new { name = new string('x', 201), translations = new { ar = "ع" }, prefix = "H" }),
+            ("translations", new { name = "x", translations = new { ar = new string('ع', 201) }, prefix = "H" }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "h" }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "HB" }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "1" }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "" }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "  " }),
+            ("prefix", new { name = "x", translations = new { ar = "ع" } }),
+            ("targetMinutes", new { name = "x", translations = new { ar = "ع" }, prefix = "H", targetMinutes = 0 }),
+            ("targetMinutes", new { name = "x", translations = new { ar = "ع" }, prefix = "H", targetMinutes = -5 }),
+            ("sortOrder", new { name = "x", translations = new { ar = "ع" }, prefix = "H", sortOrder = -1 }),
         };
 
         foreach (var (field, body) in cases)
@@ -168,14 +167,41 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     {
         using var setup = await SetupHost.StartAsync(postgres);
 
-        var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { nameEn = "  Cards  ", nameAr = " البطاقات ", prefix = " H " });
+        var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "  Cards  ", translations = new { ar = " البطاقات " }, prefix = " H " });
 
         reply.Status.ShouldBe(201);
         reply.Json.GetProperty("prefix").GetString().ShouldBe("H");
-        reply.Json.GetProperty("nameEn").GetString().ShouldBe("Cards");
-        reply.Json.GetProperty("nameAr").GetString().ShouldBe("البطاقات");
+        reply.Json.GetProperty("name").GetString().ShouldBe("Cards");
+        reply.Json.GetProperty("translations").GetProperty("ar").GetString().ShouldBe("البطاقات");
         reply.Json.GetProperty("targetMinutes").ValueKind.ShouldBe(JsonValueKind.Null);
         reply.Json.GetProperty("isActive").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Translations_are_optional_empty_means_absent_and_other_languages_are_refused_for_now()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+
+        var none = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cards", prefix = "H" });
+        var empty = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Loans", translations = new { ar = "  " }, prefix = "J" });
+        var french = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cartes", translations = new { fr = "Cartes" }, prefix = "K" });
+        var english = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cards", translations = new { en = "Cards" }, prefix = "K" });
+        var withArabic = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cards", translations = new { ar = " البطاقات " }, prefix = "L" });
+
+        none.Status.ShouldBe(201);
+        none.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+        none.Body.ShouldNotContain("nameEn");
+        none.Body.ShouldNotContain("nameAr");
+        empty.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+        foreach (var refused in new[] { french, english })
+        {
+            refused.Status.ShouldBe(400);
+            refused.Code.ShouldBe("translations.unsupported_language");
+            refused.Json.GetProperty("errors").TryGetProperty("translations", out _).ShouldBeTrue(refused.Body);
+        }
+
+        withArabic.Json.GetProperty("translations").GetProperty("ar").GetString().ShouldBe("البطاقات");
+        (await setup.GetAsync(SetupUser.CompanyAdminC1, Url)).Json.GetArrayLength().ShouldBe(9);
     }
 
     // ---- AC-6
@@ -236,14 +262,14 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         var before = await GetAsync(setup, SeedIds.Service(3));
 
         var reply = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Service(3)}",
-            new { nameEn = "Loans", nameAr = "القروض", prefix = "C", targetMinutes = 20, sortOrder = 3, isActive = true, version = before.GetProperty("version").GetString() });
+            new { name = "Loans", translations = new { ar = "القروض" }, prefix = "C", targetMinutes = 20, sortOrder = 3, isActive = true, version = before.GetProperty("version").GetString() });
 
         reply.Status.ShouldBe(200);
-        reply.Json.GetProperty("nameEn").GetString().ShouldBe("Loans");
+        reply.Json.GetProperty("name").GetString().ShouldBe("Loans");
         reply.Json.GetProperty("targetMinutes").GetInt32().ShouldBe(20);
         reply.Json.GetProperty("version").GetString().ShouldNotBe(before.GetProperty("version").GetString());
         var after = await GetAsync(setup, SeedIds.Service(3));
-        after.GetProperty("nameAr").GetString().ShouldBe("القروض");
+        after.GetProperty("translations").GetProperty("ar").GetString().ShouldBe("القروض");
         after.GetProperty("version").GetString().ShouldBe(reply.Json.GetProperty("version").GetString());
     }
 
@@ -259,7 +285,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         first.Status.ShouldBe(200);
         second.Status.ShouldBe(409);
         second.Code.ShouldBe("request.conflict");
-        (await GetAsync(setup, SeedIds.Service(3))).GetProperty("nameEn").GetString().ShouldBe("First");
+        (await GetAsync(setup, SeedIds.Service(3))).GetProperty("name").GetString().ShouldBe("First");
         (await setup.AuditRowsAsync()).Count.ShouldBe(1);
     }
 
@@ -282,11 +308,11 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
         var bodies = new object[]
         {
-            new { nameEn = "x", nameAr = "ع", prefix = "C", sortOrder = 3, isActive = true },
-            new { nameEn = "x", nameAr = "ع", prefix = "C", sortOrder = 3, isActive = true, version = "" },
-            new { nameEn = "x", nameAr = "ع", prefix = "C", sortOrder = 3, isActive = true, version = "   " },
-            new { nameEn = "x", nameAr = "ع", prefix = "C", sortOrder = 3, isActive = true, version = "not-a-version" },
-            new { nameEn = "x", nameAr = "ع", prefix = "C", sortOrder = 3, isActive = true, version = "12345678901234567890" },
+            new { name = "x", translations = new { ar = "ع" }, prefix = "C", sortOrder = 3, isActive = true },
+            new { name = "x", translations = new { ar = "ع" }, prefix = "C", sortOrder = 3, isActive = true, version = "" },
+            new { name = "x", translations = new { ar = "ع" }, prefix = "C", sortOrder = 3, isActive = true, version = "   " },
+            new { name = "x", translations = new { ar = "ع" }, prefix = "C", sortOrder = 3, isActive = true, version = "not-a-version" },
+            new { name = "x", translations = new { ar = "ع" }, prefix = "C", sortOrder = 3, isActive = true, version = "12345678901234567890" },
         };
 
         foreach (var body in bodies)
@@ -403,7 +429,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         using var setup = await SetupHost.StartAsync(postgres);
         var foreign = $"{Url}/{SeedIds.Service(2)}";
         var unknown = $"{Url}/{Guid.NewGuid()}";
-        var body = new { nameEn = "Hacked", nameAr = "ع", prefix = "B", sortOrder = 2, isActive = true, version = "AAAAAA" };
+        var body = new { name = "Hacked", translations = new { ar = "ع" }, prefix = "B", sortOrder = 2, isActive = true, version = "AAAAAA" };
 
         var results = new List<(ApiReply Foreign, ApiReply Unknown)>
         {
@@ -422,9 +448,9 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
             foreignReply.Json.GetProperty("detail").GetString().ShouldBe(unknownReply.Json.GetProperty("detail").GetString());
         }
 
-        (await GetAsync(setup, SeedIds.Service(2))).GetProperty("nameEn").GetString().ShouldBe("Service 2");
+        (await GetAsync(setup, SeedIds.Service(2))).GetProperty("name").GetString().ShouldBe("Service 2");
         var c2List = await setup.GetAsync(SetupUser.CompanyAdminC2, Url);
-        c2List.Json.EnumerateArray().Select(i => i.GetProperty("nameEn").GetString()).ShouldBe(["Service X"]);
+        c2List.Json.EnumerateArray().Select(i => i.GetProperty("name").GetString()).ShouldBe(["Service X"]);
         (await setup.AuditCountAsync()).ShouldBe(0);
     }
 }

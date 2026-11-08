@@ -24,12 +24,12 @@ public sealed class RequirePermissionAttribute(string permission) : AuthorizeAtt
 
 public sealed record PermissionRequirement(string Permission) : IAuthorizationRequirement;
 
-public sealed class PermissionAuthorizationHandler(IPermissionResolver resolver, ICurrentUser currentUser)
+public sealed class PermissionAuthorizationHandler(IPermissionResolver resolver, ICurrentUser currentUser, IHttpContextAccessor httpContextAccessor)
     : AuthorizationHandler<PermissionRequirement>
 {
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)
     {
-        if (await resolver.HasPermissionAsync(currentUser, requirement.Permission, CancellationToken.None))
+        if (await resolver.HasPermissionAsync(currentUser, requirement.Permission, httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None))
         {
             context.Succeed(requirement);
         }

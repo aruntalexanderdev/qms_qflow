@@ -1,6 +1,6 @@
 # Bank QMS – Project Specification
 
-Nov 7, 2026 (updated Nov 8, 2026: roles and permissions, password policy, companies, active flags; ADR-008, ADR-009) · @dev.webandapk
+Nov 7, 2026 (updated Nov 8, 2026: roles and permissions, password policy, companies, active flags, localisation; ADR-008, ADR-009, ADR-010) · @dev.webandapk
 
 A multi-branch bank queue management system: .NET + PostgreSQL backend, Angular web app, Android token dispenser on Sunmi POS devices. Phase 1 uses printed tokens; phase 2 adds SMS and WhatsApp.
 
@@ -29,9 +29,9 @@ Three applications share one backend: the .NET API with PostgreSQL, the Angular 
 | API docs | OpenAPI / Swagger | Versioned routes `/api/v1/...` |
 | Testing | xUnit, FluentAssertions, Testcontainers for PostgreSQL | Queue engine fully unit-tested |
 | Web frontend | Angular 22 (latest stable), TypeScript 6.0, Node.js 24 LTS; standalone components, signals | Angular Material (M3), themed from `docs/design/tokens.json` (ADR-001) |
-| Web i18n | ngx-translate, Arabic and English, RTL switch | Language per user and per display |
+| Web i18n | ngx-translate with one translation file per language; English is the default and required, other languages are configurable (ADR-010) | Only the company's enabled languages are offered (switch hidden when one); RTL by language direction; language per user and per display |
 | Web real-time | @microsoft/signalr client | Auto-reconnect |
-| Display voice | Pre-recorded Arabic and English audio clips | Joined as "Token" + letters + digits + "counter" + number; more reliable than browser speech |
+| Display voice | Pre-recorded audio clips per language (phase 1: English) | Joined as "Token" + letters + digits + "counter" + number; more reliable than browser speech |
 | Android app | Kotlin, Jetpack Compose, Retrofit + OkHttp | Kiosk (lock-task) mode, one activity |
 | Printing | Sunmi built-in printer SDK | ESC/POS fallback for other printers |
 | Hosting | Docker containers, HTTPS. First deployment: **Azure** (Container Apps, Azure Database for PostgreSQL Flexible Server, Key Vault, Container Registry), see ADR-006 | In-country Azure region; on-premise Docker (Nginx reverse proxy) stays supported |
@@ -414,7 +414,7 @@ Layout for Token Dispenser 1 in the example; Dispenser 2 is the same with Servic
 
 ```
 +---------------------------------------------------+
-|  [Bank logo]                 [English | العربية]  |
+|  [Bank logo]              [Language toggle, if 2+] |
 |                                                   |
 |  Phone No (Optional):  [+971 v] [ Mobile No     ] |
 |                                                   |
@@ -429,6 +429,7 @@ Layout for Token Dispenser 1 in the example; Dispenser 2 is the same with Servic
 +---------------------------------------------------+
 ```
 
+- **Language toggle:** shown only when the dispenser has two or more languages; labels are the languages' own names (e.g. "English"); texts and layout direction switch on the device with no server call (ADR-010). Phase 1: English only, no toggle.
 - **Phone row:** shown by mode; label "(Optional)" or "(Required)"; country code dropdown (default +971, list set per company), numeric keypad.
 - **Service type buttons:** from the dispenser mapping, grouped by zone when the dispenser covers more than one zone; a full or closed service is greyed out with the reason.
 - **Priority type buttons:** only the priority types Available for the selected service in the branch mapping (and VIP only when "Show VIP" is on). With only one (e.g. Service 1 Normal only), the row is hidden and that priority is used. Default selection is Normal.
@@ -439,9 +440,9 @@ Layout for Token Dispenser 1 in the example; Dispenser 2 is the same with Servic
 **Settings per dispenser** (inherit company default → branch default → dispenser):
 
 - Branch, installed zone, zone + service mapping (section 4.4), button order.
-- Token mode; country code list and default; min/max digits; consent text (English and Arabic).
-- Languages: Arabic, English, or both with a toggle; default language.
-- Ticket template: name, logo (image URL on the deployment's own server), header and footer (Arabic + English), large token number, service, zone, people ahead, estimated wait, date and time, fee line for a paid priority. The fee-line text is editable per template in English and Arabic, with `{amount}` replaced by the fee and currency; default "VIP service fee: {amount} – payable at the counter" ("VIP service fee: AED 50.00 – payable at the counter"). The dispenser's fee notice uses the same text from its template.
+- Token mode; country code list and default; min/max digits; consent text (English, with optional translations for the company's other enabled languages).
+- Languages: one or more of the company's enabled languages, with a toggle when more than one; default language (new dispensers: the company default, English).
+- Ticket template: name, logo (image URL on the deployment's own server), header and footer (English, optional translations), large token number, service, zone, people ahead, estimated wait, date and time, fee line for a paid priority. The ticket prints in the language the customer selected on the dispenser; untranslated texts fall back to English (ADR-010). The fee-line text is editable per template in English with optional translations, with `{amount}` replaced by the fee and currency; default "VIP service fee: {amount} – payable at the counter" ("VIP service fee: AED 50.00 – payable at the counter"). The dispenser's fee notice uses the same text from its template.
 - Confirmation seconds; idle banner image (URL on the deployment's own server).
 - Show VIP on the dispenser: **yes (default)** / no. When no, VIP tokens are issued only by staff from `/counter/issue`. Staff can issue VIP tokens either way.
 
@@ -468,7 +469,7 @@ One Angular app with permission-based routes; displays run on the same app under
 
 | Default role | Scope | Access |
 | --- | --- | --- |
-| Company Admin | Company (all branches) | Service types, priority types, company service mapping, branches (details, hours, calendar, settings, fee override), branch setup, flows, users, roles, password policy, templates, all reports |
+| Company Admin | Company (all branches) | Company languages, service types, priority types, company service mapping, branches (details, hours, calendar, settings, fee override), branch setup, flows, users, roles, password policy, templates, all reports |
 | Branch Manager / Supervisor | Assigned branches | Branch service mapping, zones, counters, counter mapping, devices and dispenser settings; read-only: service and priority types, company mapping, branch details, flows, templates; live dashboard, branch reports |
 | Counter Staff | Assigned counters | Counter console only |
 
@@ -479,10 +480,11 @@ Screens:
 
 | Area | Route | Screens and main actions |
 | --- | --- | --- |
-| Login | `/login` | Username + password, language choice; change an expired password |
+| Login | `/login` | Username + password, language choice (only when more than one language is offered); change an expired password |
 | Admin – Company | `/admin/companies` | Super Admin: list, create, edit, activate / deactivate, create the company's first Company Admin |
-| Admin – Service types | `/admin/service-types` | Name (AR/EN), one-letter prefix (unique per company), target minutes |
-| Admin – Priority types | `/admin/priority-types` | Name (AR/EN), one-letter prefix, priority level (1 = highest), paid (yes/no), fee amount |
+| Admin – Languages | `/admin/languages` | Company Admin: enable languages from those the deployment ships (English is the default and always on; phase 1 ships English only) (ADR-010) |
+| Admin – Service types | `/admin/service-types` | Name (English, optional translations), one-letter prefix (unique per company), target minutes |
+| Admin – Priority types | `/admin/priority-types` | Name (English, optional translations), one-letter prefix, priority level (1 = highest), paid (yes/no), fee amount |
 | Admin – Company service mapping | `/admin/service-mapping` | Grid: service type × allowed priority types (section 4.1) |
 | Admin – Branches | `/admin/branches` | Details, working hours, holidays, special hours, branch settings (recall limit, skip default), fee override per paid priority type |
 | Admin – Branch service mapping | `/admin/branches/:id/services` | Grid: service + priority, max tokens per day, Available / Not Available (section 4.2) |
@@ -490,46 +492,47 @@ Screens:
 | Admin – Service flows | `/admin/branches/:id/flows` | From service → to service, mode Auto / Ask / None |
 | Admin – Devices | `/admin/branches/:id/devices` | Register dispenser or display, registration code, token mode and settings, zone + service mapping (section 4.4), screen preview, live status |
 | Admin – Users | `/admin/users` | Users, one or more roles, branch and counter assignment, active flag, set password |
-| Admin – Roles | `/admin/roles` | Roles (name AR/EN, scope, active); permission grid: module × action from the catalog |
+| Admin – Roles | `/admin/roles` | Roles (name with optional translations, scope, active); permission grid: module × action from the catalog |
 | Admin – Password policy | `/admin/password-policy` | Length, character classes, expiry, history, lockout |
-| Admin – Ticket templates | `/admin/templates` | Name, header, footer (AR/EN), logo URL, fee-line text (AR/EN), preview |
+| Admin – Ticket templates | `/admin/templates` | Name, header, footer, logo URL, fee-line text (English, optional translations each), preview per language |
 | Counter console | `/counter` | Select counter → Call Next, Call specific, Recall, Start, Complete, Complete & send, Skip, Transfer, Pause, Close; shows current token with priority badge and "Fee to collect" badge (amount) for a paid priority, Mark Paid / Waived, Change to Normal, Cancel (fee refused); waiting count per mapped service + priority, today's served count |
 | Issue token (staff) | `/counter/issue` | Staff or greeter issues a token for a walk-in or VIP (fee notice shown for a paid priority); option to print on a chosen dispenser |
 | Supervisor dashboard | `/dashboard` | Live per queue (zone + service + priority): waiting count, longest wait, average wait; counters with status and current token; tokens issued vs daily limit; offline devices; alerts when wait exceeds target; move, cancel or reinstate tokens |
 | Reports | `/reports` | Tokens by service / priority / zone / counter / staff / hour; average wait and service time; no-shows; VIP fees Paid / Waived (by staff, by day); priority changes; date range, Excel export |
-| Zone display | `/display/zone` | Latest call large, last 5 calls, now-serving per counter in that zone, voice, AR/EN, optional banner |
+| Zone display | `/display/zone` | Latest call large, last 5 calls, now-serving per counter in that zone, voice, in the company's enabled languages, optional banner |
 | Counter display | `/display/counter` | Counter number and current token only |
 
 Counter console rules: buttons enabled by token state (e.g. Complete only while Serving, and only after a Due fee is marked Paid or Waived); keyboard shortcuts for Call Next (F2), Recall (F3), Complete (F4); stays in sync across tabs through SignalR.
 
 ## 9. Database schema (PostgreSQL)
 
-All tables have `id` (uuid), `created_at`, `updated_at`; every master record (company, branch, zone, counter, service type, priority type, device, role) has `is_active`: inactive rows are hidden from dispensers, consoles and displays but keep their history, and are deleted only when unused. Tenant tables carry `company_id` (also branch-level tables, so foreign keys can include it and no row can reference another company's data). Names in snake\_case; text fields needing two languages use `name_en` and `name_ar`.
+All tables have `id` (uuid), `created_at`, `updated_at`; every master record (company, branch, zone, counter, service type, priority type, device, role) has `is_active`: inactive rows are hidden from dispensers, consoles and displays but keep their history, and are deleted only when unused. Tenant tables carry `company_id` (also branch-level tables, so foreign keys can include it and no row can reference another company's data). Names in snake\_case. **Translated text** (ADR-010): a user-facing text field is stored as `<field>` (the default-language value, English, required) plus `<field>_translations` (jsonb object of language code → text, default `{}`, never containing the default language); a missing translation falls back to the default value. Translation keys must be languages enabled for the company.
 
 | Table | Key columns |
 | --- | --- |
-| `company` | name\_en, name\_ar, code, logo\_url, currency\_code (ISO 4217, e.g. AED), is\_active |
-| `service_type` | company\_id, name\_en, name\_ar, prefix (1 letter, unique per company), target\_minutes, sort\_order, is\_active |
-| `priority_type` | company\_id, name\_en, name\_ar, prefix (1 letter, unique per company), priority\_level (1 = highest), is\_paid, fee\_amount (numeric(12,2), required when is\_paid), is\_active |
+| `language` | code (BCP-47, unique, e.g. en, ar), native\_name, direction (ltr / rtl), is\_available (shipped by this release), sort\_order — global registry, not a tenant table; seed: en (available), ar (not available) (ADR-010) |
+| `company` | name, name\_translations, code, logo\_url, currency\_code (ISO 4217, e.g. AED), default\_language (FK `language.code`, `en`, fixed in phase 1), enabled\_languages (text[], includes the default; only available languages), is\_active |
+| `service_type` | company\_id, name, name\_translations, prefix (1 letter, unique per company), target\_minutes, sort\_order, is\_active |
+| `priority_type` | company\_id, name, name\_translations, prefix (1 letter, unique per company), priority\_level (1 = highest), is\_paid, fee\_amount (numeric(12,2), required when is\_paid), is\_active |
 | `company_service_priority` | company\_id, service\_type\_id, priority\_type\_id (company service mapping, 4.1) |
-| `branch` | company\_id, name\_en, name\_ar, code, timezone, is\_active |
+| `branch` | company\_id, name, name\_translations, code, timezone, is\_active |
 | `branch_hours` | branch\_id, day\_of\_week, open\_time, close\_time (close after open; branches never open past midnight) |
 | `branch_calendar` | branch\_id, date\_from, date\_to, type (Holiday / SpecialHours), open\_time, close\_time |
 | `branch_setting` | branch\_id, recall\_limit, skip\_default (NoShow / Hold), block\_when\_no\_counter, wait\_alert\_minutes |
 | `branch_priority_fee` | branch\_id, priority\_type\_id, fee\_amount (optional per-branch override of the company fee) |
 | `branch_service_priority` | branch\_id, service\_type\_id, priority\_type\_id, max\_tokens\_per\_day, is\_available (branch service mapping, 4.2) |
-| `zone` | branch\_id, name\_en, name\_ar, sort\_order, is\_active |
-| `counter` | branch\_id, zone\_id, name, number, status (Open / Paused / Closed), current\_user\_id, is\_active |
+| `zone` | branch\_id, name, name\_translations, sort\_order, is\_active |
+| `counter` | branch\_id, zone\_id, name, name\_translations, number, status (Open / Paused / Closed), current\_user\_id, is\_active |
 | `counter_service_priority` | branch\_id, counter\_id, service\_type\_id, priority\_type\_id (counter mapping, 4.3) |
 | `service_flow` | branch\_id, from\_service\_type\_id, to\_service\_type\_id, mode (Auto / Ask / None); at most one flow per from-service per branch |
 | `device` | branch\_id, zone\_id (installed zone; empty for a lobby display covering all zones), type (Dispenser / ZoneDisplay / CounterDisplay), name, device\_key\_hash, registration\_code, registration\_code\_expires\_at (24 h, ADR-004), counter\_id (counter display), last\_seen\_at, printer\_status, is\_active |
-| `dispenser_setting` | device\_id, token\_mode, country\_codes, default\_country\_code, phone\_min, phone\_max, languages, default\_language, ticket\_template\_id, confirm\_seconds, show\_vip (default true), consent\_text\_en, consent\_text\_ar, idle\_banner\_url |
+| `dispenser_setting` | device\_id, token\_mode, country\_codes, default\_country\_code, phone\_min, phone\_max, languages (subset of the company's enabled languages), default\_language, ticket\_template\_id, confirm\_seconds, show\_vip (default true), consent\_text, consent\_text\_translations, idle\_banner\_url |
 | `dispenser_zone_service` | branch\_id, device\_id, zone\_id, service\_type\_id, sort\_order (dispenser mapping, 4.4) |
-| `ticket_template` | company\_id, name (unique per company), header\_en, header\_ar, footer\_en, footer\_ar, logo\_url, fee\_line\_en, fee\_line\_ar (with `{amount}`), show\_wait, show\_people\_ahead |
+| `ticket_template` | company\_id, name (unique per company; admin label, not translated), header, header\_translations, footer, footer\_translations, logo\_url, fee\_line, fee\_line\_translations (each text with `{amount}`), show\_wait, show\_people\_ahead |
 | `token` | branch\_id, business\_date, number (e.g. VB0001), priority\_prefix, service\_prefix, sequence, priority\_type\_id, current\_service\_type\_id, current\_zone\_id, status, customer\_country\_code, customer\_phone, is\_printed, issued\_device\_id, issued\_by\_user\_id, issued\_at, closed\_at, fee\_amount (snapshot at issue, null if not paid), fee\_status (None / Due / Paid / Waived), fee\_settled\_by\_user\_id, fee\_settled\_at, fee\_note |
 | `token_visit` | branch\_id, token\_id, service\_type\_id, priority\_type\_id, zone\_id, counter\_id, user\_id, queued\_at, called\_at, recall\_count, is\_front, started\_at, ended\_at, outcome (Completed / Transferred / NoShow / Held / Cancelled), note |
 | `token_sequence` | branch\_id, business\_date, priority\_type\_id, service\_type\_id, last\_sequence (row-locked when issuing) |
-| `role` | company\_id, name\_en, name\_ar, branch\_scope (Company / Assigned), is\_system, system\_code (CompanyAdmin / BranchManager / CounterStaff for the seeded defaults), is\_active, sort\_order (ADR-009) |
+| `role` | company\_id, name, name\_translations, branch\_scope (Company / Assigned), is\_system, system\_code (CompanyAdmin / BranchManager / CounterStaff for the seeded defaults), is\_active, sort\_order (ADR-009) |
 | `role_permission` | company\_id, role\_id, permission (catalog code `<module>.<action>`) |
 | `user_role` | company\_id, user\_id, role\_id (one or more roles per user) |
 | `password_policy` | company\_id (one row per company; no row = defaults), min\_length, require\_upper, require\_lower, require\_digit, require\_symbol, expiry\_days (0 = never), history\_count, lockout\_threshold, lockout\_minutes |
@@ -538,19 +541,21 @@ All tables have `id` (uuid), `created_at`, `updated_at`; every master record (co
 | `message_log` (phase 2) | token\_id, channel (Sms / WhatsApp), template\_code, to\_phone, status, provider\_ref, sent\_at, error |
 | `messaging_setting` (phase 2) | company\_id, channel, provider, credentials (encrypted), is\_enabled |
 
-Users use ASP.NET Identity tables (user extra columns: company\_id (empty for Super Admin), display\_name, language, is\_active, password\_changed\_at, created\_at, updated\_at; user names unique across all companies; the only Identity role is the system role SuperAdmin, company roles live in `role` / `user_role`), plus `user_branch` (user\_id, company\_id, branch\_id), `user_counter` (user\_id, company\_id, counter\_id) . In both tables `company_id` equals the user's company and the branch's or counter's company. A user is therefore only assigned within their own company, and Super Admin is never assigned (ADR-003 Amendment 1) and `refresh_token` (user\_id, token\_hash, family\_id, expires\_at, created\_at, revoked\_at, replaced\_by\_id, created\_ip; ADR-004).
+Users use ASP.NET Identity tables (user extra columns: company\_id (empty for Super Admin), display\_name, language (FK `language.code`; one of the languages offered to the user, ADR-010), is\_active, password\_changed\_at, created\_at, updated\_at; user names unique across all companies; the only Identity role is the system role SuperAdmin, company roles live in `role` / `user_role`), plus `user_branch` (user\_id, company\_id, branch\_id), `user_counter` (user\_id, company\_id, counter\_id) . In both tables `company_id` equals the user's company and the branch's or counter's company. A user is therefore only assigned within their own company, and Super Admin is never assigned (ADR-003 Amendment 1) and `refresh_token` (user\_id, token\_hash, family\_id, expires\_at, created\_at, revoked\_at, replaced\_by\_id, created\_ip; ADR-004).
 
-Keys and indexes: unique `token (branch_id, business_date, number)`; unique `token_sequence (branch_id, business_date, priority_type_id, service_type_id)`; unique on every mapping table's columns; `token_visit (zone_id, service_type_id, priority_type_id, is_front, queued_at) where ended_at is null`; unique `branch_priority_fee (branch_id, priority_type_id)`; unique `service_flow (branch_id, from_service_type_id)`; unique `role (company_id, name_en)` and `(company_id, name_ar)`; unique `role_permission (role_id, permission)`; unique `user_role (user_id, role_id)`; unique `ticket_template (company_id, name)`; unique `password_policy (company_id)`. Foreign keys enforce the validation chain in section 4 (branch mapping references company mapping, counter mapping references branch mapping).
+Keys and indexes: unique `token (branch_id, business_date, number)`; unique `token_sequence (branch_id, business_date, priority_type_id, service_type_id)`; unique on every mapping table's columns; `token_visit (zone_id, service_type_id, priority_type_id, is_front, queued_at) where ended_at is null`; unique `branch_priority_fee (branch_id, priority_type_id)`; unique `service_flow (branch_id, from_service_type_id)`; unique `role (company_id, lower(name))`; unique `language (code)`; unique `role_permission (role_id, permission)`; unique `user_role (user_id, role_id)`; unique `ticket_template (company_id, name)`; unique `password_policy (company_id)`. Foreign keys enforce the validation chain in section 4 (branch mapping references company mapping, counter mapping references branch mapping).
 
 ## 10. API and real-time events
 
-REST under `/api/v1`, JSON, JWT for users and `X-Device-Key` header for devices; errors as RFC 7807 problem details. Every user endpoint requires a permission `<module>.<action>` (ADR-009) plus branch scope; Super Admin endpoints require the Super Admin role. Setup conventions (verbs, `version`, delete, audit): ADR-008.
+REST under `/api/v1`, JSON, JWT for users and `X-Device-Key` header for devices; errors as RFC 7807 problem details. Setup APIs exchange translated text as `name` + `translations` (or `<field>` + `<field>Translations`); other APIs return text resolved for the requested language (ADR-010). Every user endpoint requires a permission `<module>.<action>` (ADR-009) plus branch scope; Super Admin endpoints require the Super Admin role. Setup conventions (verbs, `version`, delete, audit): ADR-008.
 
 | Method | Route | Used by | Purpose |
 | --- | --- | --- | --- |
 | POST | `/auth/login`, `/auth/refresh`, `/auth/logout` | Web | User login (403 `auth.password_expired` when the password has expired) |
 | POST | `/auth/change-password` | Web | Change own password (also an expired one): userName, currentPassword, newPassword → session |
-| GET / PUT | `/auth/me`, `/auth/me/language` | Web | Current user with roles, effective permissions, branch scope and assignments; save own language |
+| GET / PUT | `/auth/me`, `/auth/me/language` | Web | Current user with roles (names resolved for `Accept-Language`), effective permissions, branch scope and assignments; save own language (must be offered, ADR-010) |
+| GET | `/languages` | Web (also anonymous) | Languages offered to the caller: anonymous / Super Admin → available in the deployment; company user → the company's enabled languages; with `defaultLanguage` and each language's direction (ADR-010) |
+| GET / PUT | `/company-languages` | Admin | Enabled languages of the caller's company (default English always included) |
 | CRUD | `/companies` | Super Admin | Companies, activate / deactivate (`isActive`) |
 | POST | `/companies/{id}/admin-users` | Super Admin | Create a Company Admin user of that company (first admin) |
 | CRUD | `/service-types`, `/priority-types`, `/company-service-mapping` | Admin | Company setup and mapping (4.1) |
@@ -572,9 +577,9 @@ REST under `/api/v1`, JSON, JWT for users and `X-Device-Key` header for devices;
 | POST | `/devices/{id}/registration-code` | Admin | New registration code; revokes the device key |
 | GET / PUT | `/devices/{id}/dispenser-settings`, `/devices/{id}/zone-service-mapping` | Admin | Token mode, settings and dispenser mapping (4.4) |
 | POST | `/device/register` | Dispenser, display | Exchange registration code for device key |
-| GET | `/device/config` | Dispenser, display | Settings, zone + service buttons, Available priority types per service (with paid flag and fee), open / full state |
+| GET | `/device/config` | Dispenser, display | Settings, languages (code, name, direction), zone + service buttons, Available priority types per service (with paid flag and fee), open / full state; every translated text as an object keyed by each of the device's languages, already resolved with English fallback |
 | POST | `/device/status` | Dispenser | Heartbeat, printer status |
-| POST | `/tokens` | Dispenser, staff | Issue token: serviceTypeId, zoneId, priorityTypeId, countryCode?, phone? → token number, fee (amount, status) if paid, print data |
+| POST | `/tokens` | Dispenser, staff | Issue token: serviceTypeId, zoneId, priorityTypeId, countryCode?, phone?, language? (one of the dispenser's languages, default its default language) → token number, fee (amount, status) if paid, print data in that language |
 | POST | `/counters/{id}/open`, `/pause`, `/resume`, `/close` | Counter | Counter session |
 | POST | `/counters/{id}/call-next` | Counter | Queue engine picks token |
 | POST | `/counters/{id}/call/{tokenId}` | Counter | Call a specific token |
@@ -604,7 +609,7 @@ SignalR hub `/hubs/qms`; clients join groups `branch:{id}`, `zone:{id}`, `counte
 
 Bank IT will review security and hosting, so these are requirements, not extras.
 
-- **Languages:** Arabic and English in web, dispenser, displays, tickets and voice; full RTL layout when Arabic is selected.
+- **Languages (localisation, ADR-010):** English is the default language of the whole application. Further languages are configurable: a release ships a language (translation files, Android strings, voice clips), the Company Admin enables it, and users and dispensers choose among the enabled languages. Master data has a required English value and optional translations with English fallback. **Phase 1 ships English only**; the mechanism is built and tested. Full RTL layout whenever an rtl language (e.g. Arabic) is enabled and selected.
 - **Hosting:** customer data stays in-country; first deployment on Azure in an in-country region (ADR-006), also deployable on the bank's own servers (Docker). No external CDN calls from displays or dispensers.
 - **Security:** HTTPS only; passwords hashed by Identity; JWT access token 15 minutes, refresh token rotated; device keys stored hashed; permission and branch checks on every endpoint (ADR-009); password policy per company (length, character classes, expiry, history, lockout); rate limit on `POST /tokens` per device; OWASP top-10 checks; optional Active Directory / LDAP sign-in later.
 - **Privacy:** phone numbers masked in UI except for the serving counter; phone numbers deleted or anonymised after a configurable number of days.
@@ -621,18 +626,18 @@ Phase 1 delivers printed-token operation end to end in eight milestones; give Cl
 | Milestone | Scope | Done when |
 | --- | --- | --- |
 | M1 Foundation | Solution structure, docker-compose (api, web, postgres), EF Core DbContext, full schema migration, Identity + JWT, Serilog, Swagger, seed data (Company 1 and Branch 1 exactly as in section 4, including Service 3 VIP and the VIP fee) | `docker compose up` runs; login works; Swagger lists auth endpoints |
-| M2 Setup API | Companies (Super Admin), configurable roles and permissions, password policy; CRUD and mapping endpoints for service types, priority types, company mapping, branches, hours, calendar, branch mapping, zones, counters, counter mapping, flows, users, devices, dispenser mapping and settings, templates; validation chain from section 4 | All setup endpoints tested; invalid mapping rows rejected; permission and branch checks enforced |
+| M2 Setup API | Localisation model (language registry, company languages, translated fields replacing `*_en` / `*_ar`; STORY-051, right after STORY-005), companies (Super Admin), configurable roles and permissions, password policy; CRUD and mapping endpoints for service types, priority types, company mapping, branches, hours, calendar, branch mapping, zones, counters, counter mapping, flows, users, devices, dispenser mapping and settings, templates; validation chain from section 4 | All setup endpoints tested; invalid mapping rows rejected; permission and branch checks enforced |
 | M3 Queue engine | Token numbering (`VB0001` format), issue rules, daily limit, Call Next by priority level, call specific, recall, start, complete (with flow), skip, transfer, cancel, reinstate, VIP fee (Paid / Waived, change to Normal); SignalR hub and events | Unit tests pass for every rule in section 6, including two counters calling at once and the daily limit |
-| M4 Admin web | Angular shell, login, AR/EN + RTL, all admin screens in section 8, including the mapping grids | An admin can set up Branch 1 from section 4 in the browser |
+| M4 Admin web | Angular shell, login, language switch for enabled languages + RTL by direction, all admin screens in section 8, including the mapping grids | An admin can set up Branch 1 from section 4 in the browser |
 | M5 Counter console | Counter console and staff issue-token screen, VIP fee collection | A staff user serves a token from call to complete and transfer, and settles a VIP fee |
-| M6 Displays | Zone display and counter display, voice clips, device registration | A call shows on the right zone display within 1 second with voice |
+| M6 Displays | Zone display and counter display, voice clips per enabled language (phase 1: English), device registration | A call shows on the right zone display within 1 second with voice |
 | M7 Android dispenser | Kotlin app: registration, config, one-screen UI from section 7, issue, Sunmi print, heartbeat, kiosk mode | Dispenser 1 and 2 from section 4.4 issue correct tokens (including VIP with fee line) in all three print modes on a supported Sunmi device (section 3.2) |
 | M8 Dashboard and reports | Supervisor live dashboard, wait alerts, limit usage, reports (including VIP fees) with Excel export | Numbers match `token_visit` data for a test day |
 
 Phase 2 — messaging:
 
 - Messaging adapters behind one `IMessageSender` interface (SMS provider, WhatsApp Business API), settings per company.
-- Bilingual templates: token issued, "you are next" when N ahead (default 3), called to counter, feedback link.
+- Message templates per enabled language (English required): token issued, "you are next" when N ahead (default 3), called to counter, feedback link.
 - Background queue with retry; delivery status in `message_log`.
 - Enable PhoneOnly dispenser mode; feedback rating stored per token.
 
@@ -655,8 +660,9 @@ The defaults below are what Claude Code builds unless you change them. Rows mark
 | Token reset | Daily per branch | No |
 | Dispenser offline | Shows "out of service"; no offline tokens in v1 | No |
 | Displays | One per zone plus counter displays; optional lobby display | Per device |
-| Languages | Arabic and English from phase 1 | Per device and user |
+| Languages | English default; other languages configurable; phase 1 ships English only (see Resolved: localisation) | Company enables; per device and user |
 | Skip behaviour | Default No-show after recall limit; Hold optional | Per branch |
+| Ticket in two languages | Open, to decide when a second language is enabled: a ticket prints in one language (the customer's selection) in phase 1 (ADR-010 §11) | — |
 | **Resolved:** sequence per priority | Each priority + service pair has its own sequence per branch per business date: `NB0001` = Normal + Service B, `VB0001` = VIP + Service B | No |
 | **Resolved:** VIP on dispenser | Customers pick VIP on the dispenser (service → priority → Print Token). "Show VIP" per dispenser, default yes. Staff can also issue VIP from `/counter/issue` | Per dispenser |
 | **Resolved:** VIP fee | VIP is paid. Phase 1: fee shown on the dispenser and ticket, collected at the counter (Paid / Waived before Complete); refusal → change to Normal or cancel. Card / online payment later | Fee per company, override per branch |
@@ -670,9 +676,10 @@ The defaults below are what Claude Code builds unless you change them. Rows mark
 | **Resolved:** roles and permissions | Roles are configurable per company: permissions per module and action (view, create, edit, delete, print, feature operations) from a system catalog; Company Admin, Branch Manager / Supervisor and Counter Staff seeded per company as editable defaults with the section 8 rights; Super Admin fixed; one or more roles per user (union); branch / counter scope still applies; changes take effect on the next request (ADR-009, STORY-048, 2026-11-08) | Per company |
 | **Resolved:** password policy | Per company: min length (default 12), upper + lower + digit (default on), symbol (default off), expiry days (default 0 = never), history count, lockout threshold / duration (default 5 / 15 min) (ADR-009, STORY-049, 2026-11-08) | Per company |
 | **Resolved:** active flag | Company, branch, zone, counter, service type, priority type and device have `is_active`; inactive masters are hidden from dispensers and consoles but keep history; delete only when unused (ADR-008 Amendment 1, 2026-11-08) | Per record |
-| **Resolved:** dispenser consent and banner | `consent_text_en`, `consent_text_ar`, `idle_banner_url` per dispenser from phase 1 (2026-11-08) | Per dispenser |
-| **Resolved:** ticket templates | Templates have a `name`; logo is an image URL on the deployment's own server (upload later); fee-line text editable per template in English and Arabic, default "VIP service fee: {amount} – payable at the counter" (2026-11-08) | Per template |
+| **Resolved:** dispenser consent and banner | `consent_text` (+ translations, ADR-010), `idle_banner_url` per dispenser from phase 1 (2026-11-08) | Per dispenser |
+| **Resolved:** ticket templates | Templates have a `name`; logo is an image URL on the deployment's own server (upload later); fee-line text editable per template in English with optional translations (ADR-010), default "VIP service fee: {amount} – payable at the counter" (2026-11-08) | Per template |
 | **Resolved:** service flows | One flow per from-service per branch (2026-11-08) | No |
 | **Resolved:** branch calendar | Overlapping calendar entries are rejected (2026-11-08) | No |
 | **Resolved:** user assignments and self-protection | A user's assigned counters must be in one of their assigned branches; a Company Admin cannot demote, deactivate or delete their own account; usernames unique across all companies (2026-11-08) | No |
 | **Resolved:** setup API conventions | ADR-008 accepted with changes: authorization is permission-based (ADR-009), `is_active` on all masters (2026-11-08) | — |
+| **Resolved:** localisation | English is the default language (fixed `en` in phase 1). Languages are configurable: a language registry lists what the release ships; the Company Admin enables languages; UI texts come from translation files maintained by the team (no in-app editor). Master data text = required English value + optional translations (`<field>_translations` jsonb) with English fallback, replacing every `*_en` / `*_ar` column (STORY-051, M2, right after STORY-005). Phase 1 ships and enables English only; the Arabic UI file is kept but not offered. Tickets print in the customer's selected language; voice clips per language (ADR-010, 2026-11-08) | Company (enabled languages), user, dispenser |

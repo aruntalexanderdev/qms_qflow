@@ -10,8 +10,8 @@ namespace Qms.Application.PriorityTypes;
 /// </summary>
 public sealed record PriorityTypeDto(
     Guid Id,
-    string NameEn,
-    string NameAr,
+    string Name,
+    IReadOnlyDictionary<string, string> Translations,
     string Prefix,
     int PriorityLevel,
     bool IsPaid,
@@ -25,7 +25,7 @@ public sealed record PriorityTypeDto(
 
     public static PriorityTypeDto From(
         Guid id, string nameEn, string nameAr, string prefix, int priorityLevel, bool isPaid, decimal? feeAmount, string currencyCode, bool isActive, uint rowVersion) =>
-        new(id, nameEn, nameAr, prefix.Trim(), priorityLevel, isPaid, feeAmount, currencyCode.Trim(), isActive, RowVersionCodec.Encode(rowVersion));
+        new(id, nameEn, LocalizedText.FromStorage(nameAr), prefix.Trim(), priorityLevel, isPaid, feeAmount, currencyCode.Trim(), isActive, RowVersionCodec.Encode(rowVersion));
 
     /// <summary>The currency of the current company (the tenant filter on <c>company</c> leaves exactly one row).</summary>
     internal static Task<string> CurrencyOfCompanyAsync(IQmsDbContext db, CancellationToken cancellationToken) =>

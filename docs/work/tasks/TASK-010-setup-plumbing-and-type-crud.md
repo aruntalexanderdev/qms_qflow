@@ -6,7 +6,7 @@
 | Story | STORY-005 |
 | Stage | 3 Backend |
 | Agent | backend-developer |
-| Status | To do |
+| Status | Done |
 | Estimate | L |
 | Created | 2026-11-08 |
 
@@ -49,12 +49,12 @@ Build the ADR-008 plumbing used by all M2 stories (part A), then the CRUD endpoi
 - ADR-008 must be accepted by the product owner before the stage 3 merge (section 10 of the story).
 
 ## 5. Done checklist
-- [ ] Code follows common project rules
-- [ ] Tests added and passing (list them below)
-- [ ] Bilingual text added (en + ar) if user-facing — N/A, API returns codes only
-- [ ] No business logic outside `Qms.Application`
-- [ ] Spec / ADR updated if behaviour changed (spec 10 item routes after PO acceptance)
-- [ ] Handoff written in the story's Stage log
+- [x] Code follows common project rules
+- [x] Tests added and passing (list them below)
+- [x] Bilingual text added (en + ar) if user-facing — N/A, API returns codes only
+- [x] No business logic outside `Qms.Application`
+- [x] Spec / ADR updated if behaviour changed (spec 10 item routes after PO acceptance) — not edited by stage 3; see notes
+- [x] Handoff written in the story's Stage log
 
 ## 6. Tests
 - Unit (`Qms.Tests`): validators (every case of AC-5 and AC-17), audit decorator (AC-31), version helpers (AC-32), error catalog incl. "every catalog name exists in model or migration" (AC-29), `BranchScope` (AC-30), notifier trigger rules (AC-33), architecture tests (AC-34).
@@ -62,4 +62,26 @@ Build the ADR-008 plumbing used by all M2 stories (part A), then the CRUD endpoi
 - Existing tests stay green: `dotnet test backend/Qms.slnx`.
 
 ## 7. Notes / result
-<Filled by the agent when done.>
+Done by backend-developer, 2026-11-08. No schema change; Persistence/ touched once (see decisions).
+
+**Tests added** (`Qms.Tests`; 254 existing + 123 new = 377 green):
+- `Setup/ServiceTypesApiTests`, `Setup/PriorityTypesApiTests`: AC-1 to AC-24 (list/filter/get, create + Location, every validation case, prefix unique + concurrent race, update, stale/missing/garbage version, deactivate, delete unused, in-use per reference kind, cross-company 404, translations rules).
+- `Setup/AccessAndAuditTests`: AC-25 role matrix (CA, BM-B1/B2, CS, SA, anonymous), AC-26/27 audit rows and failed writes, AC-33 notifier trigger rules, AC-37 problem+json format.
+- `Setup/PlumbingTests`: AC-28 enums, AC-29 error catalog (test-host raises each error; real unique, check and FK errors; catalog names exist in the migrated schema; every FK into service_type/priority_type is in the catalog), AC-30 branch scope, AC-35 `SetupTestData`.
+- `Application/AuditDecoratorTests` (AC-31, AC-27, post-commit), `Application/BranchScopeTests`, `Application/SetupPlumbingUnitTests` (version helpers AC-32, validators AC-5/AC-17, permission map and resolver, catalog defaults, localized text, production notifier no-op), `Architecture/ArchitectureTests` (AC-34 and controllers).
+
+**Files**
+- Application: `Common/IQmsDbContext, AuditedAttribute (+NotAudited), AuditDecorator (+AuditRules), PostCommitActions, IBranchScope, IDeviceConfigNotifier, ErrorCodes, RowVersionCodec, CommonRules, LocalizedText, Unit`, `Common/DependencyInjection` (audit decorator in chain), `Auth/Permissions` (constants, `RolePermissionMap`, `IPermissionResolver`), `ServiceTypes/*`, `PriorityTypes/*`.
+- Infrastructure: `Scope/BranchScope`, `Errors/PostgresErrorCatalog`, `Notifications/NoOpDeviceConfigNotifier`, `Authorization/StaticRolePermissionResolver`, `DependencyInjection`; `Persistence/QmsDbContext` (only `: IQmsDbContext` + `BeginTransactionAsync`).
+- Api: `Auth/RequirePermission`, `Controllers/ServiceTypesController, PriorityTypesController`, `Common/ProblemDetailsSetup` (DbUpdateException via catalog), `Common/ResultExtensions` (created/no-content), `Program` (string enums).
+- Tests support: `SetupTestData`, `SetupHost`, `SetupReferences`, `SetupTestEndpoints`, `QmsApiFactory` (recording notifier, SQL log).
+
+**Decisions / deviations from ADR-008**
+1. Authorization is permission based (product owner change, ADR-009): `[RequirePermission(Permissions.X.Y)]` + one handler + `IPermissionResolver` backed by a static role map reproducing the section 9 matrix. The named policies `SetupRead`/`BranchSetup` of the task text do not exist. Handler passes `RequestAborted`. `BranchScope` keeps the only `IsInRole(CompanyAdmin)`.
+2. `IDeviceConfigNotifier.ConfigChangedAsync(DeviceConfigChange(CompanyId, BranchId?, DeviceId?))` instead of a bare id: type names/fees are company-wide. Called through `IPostCommitActions`, which `AuditDecorator` runs after the commit (the handler itself runs inside the decorator transaction).
+3. Product owner change: names are `name` + `translations` (only `ar` accepted; other languages 400 `translations.unsupported_language`; empty = absent). Temporary mapping in `LocalizedText` (`name`->`name_en`, `ar`->`name_ar`, absent -> empty string since `name_ar` is NOT NULL). Validation runner now returns a shared specific dotted error code instead of `validation.failed` (ADR-008 section 6).
+4. `IBranchScope.EnsureAccessAsync` also answers 404 itself (company-admin: branch must exist in tenant; manager not assigned: exists -> 403 else 404), so a handler that forgets the pre-load is still safe.
+5. Update compares the client version with the loaded row first (409 even if values are unchanged, because EF sends no UPDATE then) and also sets `OriginalValue`. Delete loads the row, then removes it.
+6. Version string = base64url of the 4 xmin bytes (6 chars); set version = SHA-256 of sorted (id, xmin) pairs, 22 chars.
+7. Pre-checks for delete also cover branch/counter mappings and token visits/sequences. `PostgresErrorCatalog` lists 12 FK names (service/priority type references) + 4 user-assignment FKs + the 2 prefix indexes.
+8. Not done: the optional live curl run (covered by the integration tests on the real host).

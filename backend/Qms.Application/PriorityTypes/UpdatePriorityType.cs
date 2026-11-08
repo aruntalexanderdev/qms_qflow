@@ -7,7 +7,7 @@ namespace Qms.Application.PriorityTypes;
 /// <summary>Replaces every editable field. Deactivate or reactivate with <c>IsActive</c>; change the fee with <c>FeeAmount</c>.</summary>
 [Audited("priority_type", "update")]
 public sealed record UpdatePriorityTypeCommand(
-    Guid Id, string? NameEn, string? NameAr, string? Prefix, int PriorityLevel, bool IsPaid, decimal? FeeAmount, bool IsActive, string? Version)
+    Guid Id, string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int PriorityLevel, bool IsPaid, decimal? FeeAmount, bool IsActive, string? Version)
     : IPriorityTypeFields;
 
 public sealed class UpdatePriorityTypeValidator : PriorityTypeFieldsValidator<UpdatePriorityTypeCommand>
@@ -44,8 +44,7 @@ public sealed class UpdatePriorityTypeHandler(
 
         db.Entry(row).Property(r => r.RowVersion).OriginalValue = version;
 
-        var nameEn = command.NameEn!.Trim();
-        var nameAr = command.NameAr!.Trim();
+        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
         var fee = command.IsPaid ? command.FeeAmount : null;
         var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != command.IsActive
             || row.IsPaid != command.IsPaid || row.FeeAmount != fee;

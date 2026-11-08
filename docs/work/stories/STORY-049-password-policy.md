@@ -31,6 +31,8 @@ To be completed by the BA. The policy screen `/admin/password-policy` is M4 (STO
 ## 7. Data and API impact
 **Spec:** sections 8, 9, 10, 11, 13 (changed 2026-11-08 with approval, ADR-009).
 
+**Amendment 2026-11-08 (localisation, ADR-010):** this story has no translated data. Web texts (`auth.password_expired`, every `password.*` code, the change-password form) are added to `en.json`. Other languages follow through their translation files when they ship (rules §7), so `ar.json` is not required. Not a schema or API change.
+
 **Database (stage 2)**
 - New `password_policy` (company_id unique, min_length 8–128 default 12, require_upper true, require_lower true, require_digit true, require_symbol false, expiry_days 0–365 default 0, history_count 0–24 default 0, lockout_threshold 3–20 default 5, lockout_minutes 1–1440 default 15; check constraints for the ranges). Tenant entity with `xmin`.
 - New `password_history` (company_id, user_id, password_hash, created_at; index `(user_id, created_at desc)`; raw-SQL FK `fk_password_history_user_company` `(user_id, company_id)` → `asp_net_users (id, company_id)` cascade).
@@ -49,7 +51,7 @@ To be completed by the BA. The policy screen `/admin/password-policy` is M4 (STO
 - Audit: policy update. Change-password is not a setup change: not audited (like login), never logs passwords.
 
 **Web (stage 4)**
-- Login page: on 403 `auth.password_expired`, show a change-password form (current, new, repeat) calling `POST /auth/change-password` through the `SessionCoordinator` (ADR-007 A.1: it is the only code calling auth endpoints; run under the same Web Lock as login). Translations en + ar for `auth.password_expired` and every `password.*` code. Component tests.
+- Login page: on 403 `auth.password_expired`, show a change-password form (current, new, repeat) calling `POST /auth/change-password` through the `SessionCoordinator` (ADR-007 A.1: it is the only code calling auth endpoints; run under the same Web Lock as login). Translations in `en.json` (rules §7, ADR-010) for `auth.password_expired` and every `password.*` code. Component tests.
 
 **Android / displays:** none.
 
@@ -82,3 +84,10 @@ Notes for next stage:
 - Runs after STORY-048 (permissions) and before STORY-011, which validates passwords with `IPasswordPolicyValidator`.
 - STORY-047 may run before this story: without a `password_policy` row the defaults apply, which the Identity options already enforce.
 Open questions: forced change after admin reset (low); none blocking.
+
+### Stage 0 — Architecture review (amendment: localisation) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (section 7); ADR-010 (new); ADR-007 Amendment 1; ADR-008 Amendment 2; ADR-009 Amendment 1; `docs/PROJECT_SPEC.md` §2, §7–§13 (approved by the product owner 2026-11-08)
+Notes for next stage:
+- Stage 4 adds texts to `en.json` only (rules §7); `ar.json` is kept but not offered. No other change.
+Open questions: none.

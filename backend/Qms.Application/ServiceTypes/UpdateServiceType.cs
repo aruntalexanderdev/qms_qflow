@@ -7,14 +7,14 @@ namespace Qms.Application.ServiceTypes;
 /// <summary>Replaces every editable field (no partial update). Deactivate or reactivate with <c>IsActive</c>.</summary>
 [Audited("service_type", "update")]
 public sealed record UpdateServiceTypeCommand(
-    Guid Id, string? NameEn, string? NameAr, string? Prefix, int? TargetMinutes, int SortOrder, bool IsActive, string? Version);
+    Guid Id, string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? TargetMinutes, int SortOrder, bool IsActive, string? Version);
 
 public sealed class UpdateServiceTypeValidator : AbstractValidator<UpdateServiceTypeCommand>
 {
     public UpdateServiceTypeValidator()
     {
-        RuleFor(command => command.NameEn).BilingualName();
-        RuleFor(command => command.NameAr).BilingualName();
+        RuleFor(command => command.Name).LocalizedName();
+        RuleFor(command => command.Translations).LocalizedTranslations();
         RuleFor(command => command.Prefix).PrefixLetter();
         RuleFor(command => command.TargetMinutes).GreaterThan(0).When(command => command.TargetMinutes is not null);
         RuleFor(command => command.SortOrder).SortOrder();
@@ -50,8 +50,7 @@ public sealed class UpdateServiceTypeHandler(
         // The UPDATE then carries "AND xmin = version": a save racing between the load and here fails with a concurrency error (409).
         db.Entry(row).Property(r => r.RowVersion).OriginalValue = version;
 
-        var nameEn = command.NameEn!.Trim();
-        var nameAr = command.NameAr!.Trim();
+        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
         var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != command.IsActive;
         row.NameEn = nameEn;
         row.NameAr = nameAr;

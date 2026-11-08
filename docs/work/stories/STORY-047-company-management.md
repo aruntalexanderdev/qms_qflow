@@ -31,8 +31,16 @@ To be completed by the BA. The `/admin/companies` screen is M4 (STORY-050).
 ## 7. Data and API impact
 **Spec:** sections 4, 5.1, 8, 9, 10, 11, 13 (companies resolved 2026-11-08). No queue rule changes.
 
+**Amendment 2026-11-08 (localisation, ADR-010). It supersedes the conflicting lines below.**
+- `company` stores `name` + `name_translations`, `default_language` and `enabled_languages` (all built by STORY-051).
+- The companies API exchanges `name` (required) and `translations` (optional) through `LocalizedTextRules`. Because the Super Admin acts on another company, translation keys are checked against **that** company's enabled languages, and on create against `{en}`.
+- A new company gets `defaultLanguage = en` and `enabledLanguages = {en}`. The Super Admin does not set languages here; the Company Admin enables them through `/company-languages` (STORY-051). The DTO returns `defaultLanguage` and `enabledLanguages` read-only.
+- Company create also seeds the default roles with English names and no translations (ADR-009 Amendment 1).
+- `POST /companies/{id}/admin-users`: `language` must be one of the target company's enabled languages (400 `language.not_enabled`); when omitted, the company default is used.
+- Now depends on STORY-051 as well.
+
 **Database**
-- Tables: `company` (name_en, name_ar, code unique globally, logo_url, currency_code `ck_company_currency_code`, is_active), `role` / `role_permission` (seeded on create), `asp_net_users` + `user_role` (first admin), `password_policy` (none written; defaults apply), `audit_log`; in-use reads of every tenant table for delete.
+- Tables: `company` (name, name_translations, default_language, enabled_languages, code unique globally, logo_url, currency_code `ck_company_currency_code`, is_active), `role` / `role_permission` (seeded on create), `asp_net_users` + `user_role` (first admin), `password_policy` (none written; defaults apply), `audit_log`; in-use reads of every tenant table for delete.
 - **Schema change: none.** All `company` columns and the unique code exist (STORY-002).
 
 **Backend**
@@ -40,7 +48,7 @@ To be completed by the BA. The `/admin/companies` screen is M4 (STORY-050).
 |---|---|---|---|
 | GET | `/api/v1/companies` | Super Admin | all companies, sorted by `code`, `?isActive=`; no paging (ADR-008 §4) |
 | GET | `/api/v1/companies/{id}` | Super Admin | 404 `company.not_found` |
-| POST | `/api/v1/companies` | Super Admin | `{ nameEn, nameAr, code, logoUrl?, currencyCode, isActive }` → 201; creates the three default roles in the same transaction; 409 `company.code_taken` |
+| POST | `/api/v1/companies` | Super Admin | `{ name, translations?, code, logoUrl?, currencyCode, isActive }` → 201 (ADR-010; company starts with `en` / `{en}`); creates the three default roles in the same transaction; 409 `company.code_taken` |
 | PUT | `/api/v1/companies/{id}` | Super Admin | all fields + `version`; `isActive` false = deactivate (activate / deactivate per spec §8) |
 | DELETE | `/api/v1/companies/{id}` | Super Admin | only while unused: no branch, service type, priority type, template, user, token … → else 409 `company.in_use`; deletes its own default roles first |
 | POST | `/api/v1/companies/{id}/admin-users` | Super Admin | `{ userName, displayName, password, language }` → 201 user DTO (no password); user gets the company's `CompanyAdmin` system role; usernames unique across companies → 409 `user.user_name_taken`; password policy of the target company → 400 `user.password_weak` (Identity default options = ADR-009 defaults until STORY-049 adds `IPasswordPolicyValidator`; switch to it if STORY-049 is merged first); also usable later to restore access to a locked-out company (ADR-009 §7) |
@@ -84,3 +92,10 @@ Notes for next stage:
 - First `[CrossTenant]` handlers: the decorator checks the Super Admin role, then opens the cross-tenant section; new tenant rows (roles) carry `CompanyId` explicitly.
 - Super Admin user management beyond the first/rescue Company Admin is not in scope.
 Open questions: licences / global settings (out of scope), currency change (note); none blocking.
+
+### Stage 0 — Architecture review (amendment: localisation) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (sections 7); ADR-010 (new); ADR-007 Amendment 1; ADR-008 Amendment 2; ADR-009 Amendment 1; `docs/PROJECT_SPEC.md` §2, §7–§13 (approved by the product owner 2026-11-08)
+Notes for next stage:
+- Company name is localised; new companies start English-only (`en` / `{en}`); first admin language validated against the company's enabled languages. Depends on STORY-051. Stage plan unchanged (stage 2 N/A: STORY-051 adds the columns).
+Open questions: none.

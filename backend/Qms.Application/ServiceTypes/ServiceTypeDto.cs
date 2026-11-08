@@ -6,8 +6,8 @@ namespace Qms.Application.ServiceTypes;
 /// <summary>A service type as the API returns it (STORY-005, spec section 9 <c>service_type</c>). <c>Version</c> is opaque.</summary>
 public sealed record ServiceTypeDto(
     Guid Id,
-    string NameEn,
-    string NameAr,
+    string Name,
+    IReadOnlyDictionary<string, string> Translations,
     string Prefix,
     int? TargetMinutes,
     int SortOrder,
@@ -19,7 +19,7 @@ public sealed record ServiceTypeDto(
 
     public static ServiceTypeDto From(
         Guid id, string nameEn, string nameAr, string prefix, int? targetMinutes, int sortOrder, bool isActive, uint rowVersion) =>
-        new(id, nameEn, nameAr, prefix.Trim(), targetMinutes, sortOrder, isActive, RowVersionCodec.Encode(rowVersion));
+        new(id, nameEn, LocalizedText.FromStorage(nameAr), prefix.Trim(), targetMinutes, sortOrder, isActive, RowVersionCodec.Encode(rowVersion));
 }
 
 /// <summary>Stable error codes of the service type endpoints (web and Android translate them).</summary>
