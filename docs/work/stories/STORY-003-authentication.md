@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-003 |
-| Status | Database |
+| Status | Backend |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2 (Auth), 8 (roles), 10 (`/auth/*`), 11 (Security) |
@@ -310,3 +310,15 @@ Notes for next stage:
 - AC-1 to AC-8 unchanged. AC-9 to AC-22 use test-host-only endpoints or direct use-case calls; no production tenant-write endpoint exists in this story.
 - Stages 4 and 5 stay N/A.
 Open questions: product owner approval of spec section 9 (blocks the TASK-007 merge only).
+
+### Stage 2 — Database — database-architect — 2026-11-08
+Result: Done
+Changed: backend/Qms.Domain/Entities/Identity/UserBranch.cs, UserCounter.cs; backend/Qms.Infrastructure/Persistence/Configurations/MessagingAndIdentityConfigurations.cs, OrganizationConfigurations.cs; backend/Qms.Infrastructure/Persistence/Migrations/20261108025641_UserAssignmentCompany(.Designer).cs and QmsDbContextModelSnapshot.cs; backend/Qms.Tests/Persistence/UserAssignmentTests.cs, SchemaTests.cs; docs/work/tasks/TASK-007-user-assignment-company-migration.md
+Notes for next stage:
+- `UserBranch` / `UserCounter` are now `ITenantEntity` (non-null `CompanyId`, stamped from the current tenant on insert, immutable, concurrency token). With no current company the query filter returns no rows: login / token-refresh lookups of a user's branches and counters must use `IgnoreQueryFilters()` filtered by `UserId` (AppUser and RefreshToken are not tenant-filtered). Inserts with no current tenant must set `CompanyId` explicitly (the user's company); with a tenant set, a row of another company throws `TenantViolationException` before reaching the database.
+- Constraint names the API can map (SQLSTATE 23503): `fk_user_branch_user_company`, `fk_user_counter_user_company` (user of another company, Super Admin, or changing an assigned user's company), `fk_user_branch_branch_company_id_branch_id`, `fk_user_counter_counter_company_id_counter_id` (target in another company).
+- Super Admin (company_id null) can never be assigned; a user cannot change company (or become Super Admin) while assignments exist: delete assignments first.
+- Seed unchanged; no users or assignments seeded.
+- Tests that insert old-shape rows use raw SQL at InitialSchema; migration tests use `IMigrator.MigrateAsync(target)`.
+- Merge blocked until the product owner approves `company_id` on `user_branch` / `user_counter` in spec section 9 (spec not edited).
+Open questions: product owner approval of spec section 9 (blocks merge only).

@@ -1,7 +1,7 @@
 namespace Qms.Domain.Entities;
 
 /// <summary>Counter a Counter Staff user may operate (ADR-003).</summary>
-public class UserCounter : Entity
+public class UserCounter : TenantEntity
 {
     public Guid UserId { get; set; }
 
