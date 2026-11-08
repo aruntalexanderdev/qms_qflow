@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Qms.Api.Common;
 using Qms.Application.Common;
+using DependencyInjection = Qms.Infrastructure.DependencyInjection;
 using Qms.Infrastructure;
 using Serilog;
 
@@ -47,6 +48,16 @@ builder.Services.AddQmsHealthChecks();
 builder.Services.AddQmsOpenApi();
 
 var app = builder.Build();
+
+// Fail fast, before serving traffic, when the database is not configured.
+DependencyInjection.GetRequiredConnectionString(app.Configuration);
+
+// Development (and test hosts) only: apply migrations and the example data. Production/Azure use the migration
+// bundle (ADR-006) and never seed. "Database:MigrateOnStartup" lets a host opt out (tests without a database).
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Database:MigrateOnStartup", true))
+{
+    await DependencyInjection.MigrateAndSeedAsync(app.Services, app.Lifetime.ApplicationStopping);
+}
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 // Use the host logger, not the static Log.Logger, so several hosts in one process (tests) stay isolated.

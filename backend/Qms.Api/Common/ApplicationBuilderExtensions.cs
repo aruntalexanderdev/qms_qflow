@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
+using Qms.Application.Common;
 
 namespace Qms.Api.Common;
 
@@ -11,8 +12,12 @@ public static class ApplicationBuilderExtensions
 
     public static IServiceCollection AddQmsHealthChecks(this IServiceCollection services)
     {
-        // "self" proves the process answers. Dependency checks (database in STORY-002) are tagged "ready".
-        services.AddHealthChecks().AddCheck("self", () => HealthCheckResult.Healthy(), tags: [LiveTag]);
+        // "self" proves the process answers and has no dependencies (/health/live). Dependency checks are tagged "ready".
+        services.AddHealthChecks()
+            .AddCheck("self", () => HealthCheckResult.Healthy(), tags: [LiveTag])
+            .AddCheck<DatabaseHealthCheck>(DatabaseHealthCheck.Name, timeout: TimeSpan.FromSeconds(5), tags: [ReadyTag]);
+        // No signed-in caller until STORY-003; the tenant filter therefore fails closed.
+        services.AddScoped<ICurrentTenant, NoCompanyCurrentTenant>();
         return services;
     }
 

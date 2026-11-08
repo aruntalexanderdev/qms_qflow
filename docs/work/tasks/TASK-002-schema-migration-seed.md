@@ -6,7 +6,7 @@
 | Story | STORY-002 |
 | Stage | 2 Database |
 | Agent | database-architect |
-| Status | To do |
+| Status | Done |
 | Estimate | L |
 | Created | 2026-11-07 |
 
@@ -32,14 +32,26 @@ Model the full spec section 9 schema (with the Phase 0 changes and `refresh_toke
 - Provides to: TASK-003 (DbContext and seeder to register), TASK-004 (Identity tables, `refresh_token`), all M2/M3 stories.
 
 ## 5. Done checklist
-- [ ] Code follows common project rules
-- [ ] Tests added and passing (list them below)
-- [ ] Bilingual text added (en + ar) if user-facing (seeded `name_en` / `name_ar`)
-- [ ] No business logic outside `Qms.Application`
-- [ ] Spec / ADR updated if behaviour changed
-- [ ] Handoff written in the story's Stage log
+- [x] Code follows common project rules
+- [x] Tests added and passing (list them below)
+- [x] Bilingual text added (en + ar) if user-facing (seeded `name_en` / `name_ar`)
+- [x] No business logic outside `Qms.Application`
+- [x] Spec / ADR updated if behaviour changed
+- [x] Handoff written in the story's Stage log
 
 ## 6. Tests
-- …
+All in `backend/Qms.Tests/Persistence/` (Testcontainers PostgreSQL 18, one container per run, one database copy per test via `CREATE DATABASE ... TEMPLATE`). 61 new tests, whole suite 98 passed / 0 failed / 0 skipped.
+- `SchemaTests` (AC-1): migration applies to an empty database and nothing is pending; no model changes missing from the migration; every spec section 9 table and column (with Phase 0 columns and `refresh_token`) exists in snake_case, no unexpected tables; column types (uuid, timestamptz, date, `numeric(12,2)`, enums as text, jsonb); `show_vip` default true; the partial queue index definition.
+- `SeedTests` (AC-2): 8 / 7 / 7 / 5 mapping rows exactly as spec 4.1-4.4, services and prefixes, priority types (VIP paid 50.00, Normal free), currency AED, Branch 1 timezone, hours, settings, ticket template, bilingual names, dispenser settings, running twice creates no duplicates, a second run does not overwrite later edits, no users or roles.
+- `MappingChainTests` (AC-3, AC-4): branch row for Service 4 VIP rejected (FK to company mapping); counter row for Service 6 Normal rejected (FK to branch mapping); valid counter row accepted; Not Available pair keeps its counter rows and can be mapped again; deleting a used mapping row is restricted; counter zone, dispenser zone and mapping company must belong to the same branch / company.
+- `ConstraintTests` (AC-5, AC-6): unique `token_sequence`, token number, priority and service prefix (per company), mapping natural keys, `branch_priority_fee`, counter number; fee check constraint (null, negative, update to null), valid combinations, two-decimal money; prefix, priority level, max tokens per day (0, 1, 9999, 10000) and 4-digit sequence checks.
+- `TenantAndAuditTests` (AC-7): tenant filter with two companies, no company returns nothing, `IgnoreQueryFilters`, company stamped on insert, writing or updating another company's row throws, UTC timestamps from `TimeProvider`, v7 ids.
+- `QueueSupportTests`: 25 parallel `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` issues give sequences 1..25; the Call Next query plan uses `ix_token_visit_queue` with no sort.
 
 ## 7. Notes / result
+Result: done. Migration `InitialSchema` (35 tables: 27 spec tables incl. `refresh_token`, `user_branch`, `user_counter`; 7 Identity tables; `__EFMigrationsHistory`). Design notes and the backend hand-off are in the story's Stage 2 entry.
+
+Review loop 1 (2026-11-08): stage 6 asked for tenant/branch integrity fixes (M1, M2, S1). `InitialSchema` was regenerated (never deployed). New: `token_visit.branch_id`; composite foreign keys for `token_visit` (branch, token, zone, counter), `dispenser_zone_service` and `counter_service_priority` (company + branch), `dispenser_setting` (company + device) and `message_log` (company + token); alternate keys `token (branch_id, id)`, `token (company_id, id)`, `device (company_id, id)`; `company_id` is immutable after insert and tenant checks use the original company. 19 new tests (`TenantIntegrityTests`, 5 in `TenantAndAuditTests`); suite 129 passed / 0 failed / 0 skipped. See the story's "Stage 2 — Database (review loop 1)" entry.
+
+
+Review loop 2 (2026-11-08): R2-M1 fixed. `company_id` of every tenant entity is now a concurrency token (`EntityConfiguration`), so EF writes `WHERE id = @id AND company_id = @original` for UPDATE and DELETE. A detached or stub entity with a forged `CompanyId` (`Update`, `Remove`, `Attach` + modify, `Entry.State = Modified`) affects 0 rows and fails with `DbUpdateConcurrencyException`. No migration and no snapshot change. 10 new tests in `TenantIntegrityTests`; suite 139 passed / 0 failed / 0 skipped. Correction (N8): the database does not check that a visit's counter is in the visit's zone because that rule belongs to Call Next / Transfer in Application (M3: STORY-016, STORY-018), not because a forwarded token may have no counter yet (a null counter is already allowed by MATCH SIMPLE).

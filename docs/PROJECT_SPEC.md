@@ -493,7 +493,7 @@ Counter console rules: buttons enabled by token state (e.g. Complete only while 
 
 ## 9. Database schema (PostgreSQL)
 
-All tables have `id` (uuid), `created_at`, `updated_at`; tenant tables carry `company_id`. Names in snake\_case; text fields needing two languages use `name_en` and `name_ar`.
+All tables have `id` (uuid), `created_at`, `updated_at`; tenant tables carry `company_id` (also branch-level tables, so foreign keys can include it and no row can reference another company's data). Names in snake\_case; text fields needing two languages use `name_en` and `name_ar`.
 
 | Table | Key columns |
 | --- | --- |
@@ -502,27 +502,27 @@ All tables have `id` (uuid), `created_at`, `updated_at`; tenant tables carry `co
 | `priority_type` | company\_id, name\_en, name\_ar, prefix (1 letter, unique per company), priority\_level (1 = highest), is\_paid, fee\_amount (numeric(12,2), required when is\_paid), is\_active |
 | `company_service_priority` | company\_id, service\_type\_id, priority\_type\_id (company service mapping, 4.1) |
 | `branch` | company\_id, name\_en, name\_ar, code, timezone, is\_active |
-| `branch_hours` | branch\_id, day\_of\_week, open\_time, close\_time |
+| `branch_hours` | branch\_id, day\_of\_week, open\_time, close\_time (close after open; branches never open past midnight) |
 | `branch_calendar` | branch\_id, date\_from, date\_to, type (Holiday / SpecialHours), open\_time, close\_time |
 | `branch_setting` | branch\_id, recall\_limit, skip\_default (NoShow / Hold), block\_when\_no\_counter, wait\_alert\_minutes |
 | `branch_priority_fee` | branch\_id, priority\_type\_id, fee\_amount (optional per-branch override of the company fee) |
 | `branch_service_priority` | branch\_id, service\_type\_id, priority\_type\_id, max\_tokens\_per\_day, is\_available (branch service mapping, 4.2) |
 | `zone` | branch\_id, name\_en, name\_ar, sort\_order |
 | `counter` | branch\_id, zone\_id, name, number, status (Open / Paused / Closed), current\_user\_id |
-| `counter_service_priority` | counter\_id, service\_type\_id, priority\_type\_id (counter mapping, 4.3) |
+| `counter_service_priority` | branch\_id, counter\_id, service\_type\_id, priority\_type\_id (counter mapping, 4.3) |
 | `service_flow` | branch\_id, from\_service\_type\_id, to\_service\_type\_id, mode (Auto / Ask / None) |
-| `device` | branch\_id, zone\_id (installed zone), type (Dispenser / ZoneDisplay / CounterDisplay), name, device\_key\_hash, registration\_code, counter\_id (counter display), last\_seen\_at, printer\_status |
+| `device` | branch\_id, zone\_id (installed zone; empty for a lobby display covering all zones), type (Dispenser / ZoneDisplay / CounterDisplay), name, device\_key\_hash, registration\_code, registration\_code\_expires\_at (24 h, ADR-004), counter\_id (counter display), last\_seen\_at, printer\_status |
 | `dispenser_setting` | device\_id, token\_mode, country\_codes, default\_country\_code, phone\_min, phone\_max, languages, default\_language, ticket\_template\_id, confirm\_seconds, show\_vip (default true) |
-| `dispenser_zone_service` | device\_id, zone\_id, service\_type\_id, sort\_order (dispenser mapping, 4.4) |
+| `dispenser_zone_service` | branch\_id, device\_id, zone\_id, service\_type\_id, sort\_order (dispenser mapping, 4.4) |
 | `ticket_template` | company\_id, header\_en, header\_ar, footer\_en, footer\_ar, logo\_url, show\_wait, show\_people\_ahead |
 | `token` | branch\_id, business\_date, number (e.g. VB0001), priority\_prefix, service\_prefix, sequence, priority\_type\_id, current\_service\_type\_id, current\_zone\_id, status, customer\_country\_code, customer\_phone, is\_printed, issued\_device\_id, issued\_by\_user\_id, issued\_at, closed\_at, fee\_amount (snapshot at issue, null if not paid), fee\_status (None / Due / Paid / Waived), fee\_settled\_by\_user\_id, fee\_settled\_at, fee\_note |
-| `token_visit` | token\_id, service\_type\_id, priority\_type\_id, zone\_id, counter\_id, user\_id, queued\_at, called\_at, recall\_count, is\_front, started\_at, ended\_at, outcome (Completed / Transferred / NoShow / Held / Cancelled), note |
+| `token_visit` | branch\_id, token\_id, service\_type\_id, priority\_type\_id, zone\_id, counter\_id, user\_id, queued\_at, called\_at, recall\_count, is\_front, started\_at, ended\_at, outcome (Completed / Transferred / NoShow / Held / Cancelled), note |
 | `token_sequence` | branch\_id, business\_date, priority\_type\_id, service\_type\_id, last\_sequence (row-locked when issuing) |
 | `audit_log` | company\_id, user\_id, device\_id, entity, entity\_id, action, data (jsonb), at |
 | `message_log` (phase 2) | token\_id, channel (Sms / WhatsApp), template\_code, to\_phone, status, provider\_ref, sent\_at, error |
 | `messaging_setting` (phase 2) | company\_id, channel, provider, credentials (encrypted), is\_enabled |
 
-Users use ASP.NET Identity tables, plus `user_branch` (user\_id, branch\_id) and `user_counter` (user\_id, counter\_id).
+Users use ASP.NET Identity tables (user extra columns: company\_id (empty for Super Admin), display\_name, language, is\_active, created\_at, updated\_at), plus `user_branch` (user\_id, branch\_id), `user_counter` (user\_id, counter\_id) and `refresh_token` (user\_id, token\_hash, family\_id, expires\_at, created\_at, revoked\_at, replaced\_by\_id, created\_ip; ADR-004).
 
 Keys and indexes: unique `token (branch_id, business_date, number)`; unique `token_sequence (branch_id, business_date, priority_type_id, service_type_id)`; unique on every mapping table's columns; `token_visit (zone_id, service_type_id, priority_type_id, is_front, queued_at) where ended_at is null`; unique `branch_priority_fee (branch_id, priority_type_id)`. Foreign keys enforce the validation chain in section 4 (branch mapping references company mapping, counter mapping references branch mapping).
 
@@ -634,3 +634,4 @@ The defaults below are what Claude Code builds unless you change them. Rows mark
 | **Resolved:** hosting | First deployment on Azure, in-country region (ADR-006) | — |
 | **Resolved:** background jobs | Hosted services in phase 1; no Hangfire (ADR-005) | — |
 | **Resolved:** dispenser devices | Sunmi V2 / V2 Pro / V2s / V3, T2s / K2; `minSdk` 25, `targetSdk` latest | — |
+| **Resolved:** opening hours | Branches never open past midnight: each day's close time is after its open time (confirmed 2026-11-08) | No |

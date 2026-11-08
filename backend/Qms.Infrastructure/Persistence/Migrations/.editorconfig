@@ -1,0 +1,3 @@
+# EF Core generates these files; do not restyle them (analyzers skip generated code).
+[*.cs]
+generated_code = true
