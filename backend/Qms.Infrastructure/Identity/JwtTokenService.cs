@@ -1,0 +1,56 @@
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
+using Qms.Application.Auth;
+
+namespace Qms.Infrastructure.Identity;
+
+/// <summary>
+/// Access token: JWT, HMAC-SHA256, 15 minutes, claims <c>sub</c>, <c>company_id</c> (absent for a Super Admin),
+/// <c>role</c>, <c>name</c>, <c>lang</c> (ADR-004). Time comes from <see cref="TimeProvider"/>.
+/// </summary>
+public sealed class JwtTokenService(IOptions<JwtOptions> options, TimeProvider timeProvider) : ITokenService
+{
+    public static class ClaimNames
+    {
+        public const string Subject = "sub";
+        public const string CompanyId = "company_id";
+        public const string Role = "role";
+        public const string Name = "name";
+        public const string Language = "lang";
+    }
+
+    private readonly JsonWebTokenHandler _handler = new();
+
+    public AccessToken CreateAccessToken(CurrentUserDto user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        var settings = options.Value;
+        var now = timeProvider.GetUtcNow();
+        var expires = now.AddMinutes(settings.AccessTokenMinutes);
+
+        var claims = new Dictionary<string, object>
+        {
+            [ClaimNames.Subject] = user.Id.ToString(),
+            [ClaimNames.Role] = user.Role,
+            [ClaimNames.Name] = user.Name,
+            [ClaimNames.Language] = user.Language,
+        };
+        if (user.CompanyId is { } companyId)
+        {
+            claims[ClaimNames.CompanyId] = companyId.ToString();
+        }
+
+        var token = _handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = settings.Issuer,
+            Audience = settings.Audience,
+            Claims = claims,
+            IssuedAt = now.UtcDateTime,
+            NotBefore = now.UtcDateTime,
+            Expires = expires.UtcDateTime,
+            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(settings.SigningKeyBytes), SecurityAlgorithms.HmacSha256),
+        });
+        return new AccessToken(token, expires);
+    }
+}

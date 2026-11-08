@@ -2,7 +2,7 @@
 
 REST API, SignalR hub, queue engine and background jobs for the Bank QMS. Spec: [`docs/PROJECT_SPEC.md`](../docs/PROJECT_SPEC.md) sections 2, 6, 9, 10.
 
-> Status: foundation scaffolded (STORY-001). Use cases, database and auth arrive with later M1 stories.
+> Status: foundation (STORY-001), database (STORY-002) and sign-in (STORY-003) are in place. Admin use cases arrive with later stories.
 
 ## Versions
 
@@ -104,19 +104,40 @@ dotnet user-secrets --project backend/Qms.Api set "ConnectionStrings:Qms" "Host=
 
 In containers, pass configuration as environment variables (for example `ConnectionStrings__Qms`, `Jwt__SigningKey`). `docker-compose.yml` builds `ConnectionStrings__Qms` for the `api` service from the `POSTGRES_*` values in `.env`.
 
-The API fails at startup with a clear message when `ConnectionStrings:Qms` is missing.
+The API fails at startup with a clear message when `ConnectionStrings:Qms` or `Jwt:SigningKey` is missing (the key must be at least 32 characters).
+
+### Authentication settings (STORY-003, ADR-004)
+
+| Setting | Where | Notes |
+| --- | --- | --- |
+| `Jwt:Issuer`, `Jwt:Audience` | `appsettings.json` | Not secret. Defaults `qms-api` / `qms-clients`. |
+| `Jwt:SigningKey` | user-secrets / env `Jwt__SigningKey` / Key Vault | **Secret**, at least 32 characters, required in every environment. |
+| `Seed:SuperAdmin:UserName` / `:Password` | user-secrets / env `Seed__SuperAdmin__*` | Development and test only. Skipped when empty. Optional `:DisplayName`, `:Language` (`en`/`ar`). |
+| `Seed:CompanyAdmin:UserName` / `:Password` | user-secrets / env `Seed__CompanyAdmin__*` | Same, for the Company Admin of Company 1. |
+| `RateLimiting:Login:PermitLimit` / `:WindowSeconds` | optional | Defaults 10 per 60 s per client address on `POST /api/v1/auth/login`. |
+
+```bash
+dotnet user-secrets --project backend/Qms.Api set "Jwt:SigningKey" "$(openssl rand -base64 48)"
+dotnet user-secrets --project backend/Qms.Api set "Seed:SuperAdmin:UserName" "superadmin"
+dotnet user-secrets --project backend/Qms.Api set "Seed:SuperAdmin:Password" "<choose a password>"
+dotnet user-secrets --project backend/Qms.Api set "Seed:CompanyAdmin:UserName" "admin1"
+dotnet user-secrets --project backend/Qms.Api set "Seed:CompanyAdmin:Password" "<choose a password>"
+```
+
+With docker compose the same values come from `JWT_SIGNING_KEY` and `SEED_*` in `.env` (see `.env.example`). Never commit real values.
 
 ## Database at runtime
 
 - `QmsDbContext` is registered by `AddInfrastructure` (Npgsql, snake_case, `AuditableEntityInterceptor`) together with `DevSeeder`. Npgsql retry-on-failure is off on purpose: it forbids user-started transactions unless each is wrapped in an execution strategy, and the queue engine uses explicit transactions with `FOR UPDATE SKIP LOCKED`.
 - **Development only**, the API runs `MigrateAsync()` and then `DevSeeder.SeedAsync()` at startup (Company 1 / Branch 1 from spec section 4). Set `Database:MigrateOnStartup=false` to skip it. Other environments never migrate or seed; Azure applies migrations with a bundle (ADR-006).
-- `ICurrentTenant` is `NoCompanyCurrentTenant` until STORY-003 adds claims: no company, so tenant queries return nothing (fail closed). Seeder, system jobs and `[CrossTenant]` handlers use `IgnoreQueryFilters()`.
+- `ICurrentTenant` and `ITenantScope` are one scoped `RequestTenantContext` (`Qms.Api/Auth`): the company is the `company_id` claim of the signed-in user. With no company, tenant queries return nothing and tenant writes throw `TenantViolationException` (`NoTenant`) unless a cross-tenant section is open (ADR-003 Amendment 1). Only the seeder (`MigrateAndSeedAsync`), background jobs and `CrossTenantDecorator` (handlers marked `[CrossTenant]`, Super Admin only) call `BeginCrossTenant()`; they read other companies' rows with `IgnoreQueryFilters()`.
+- Development start-up also seeds the four roles and, when `Seed:*` is configured, the Super Admin and the Company 1 Company Admin (`IdentitySeeder`).
 - `GET /health/live` has no dependencies. `GET /health/ready` runs the `postgresql` check (a connection test through the context, 5 s timeout) and returns 503 when the database is down.
 - Run the API locally against a throwaway database:
 
 ```bash
 docker run -d --name qms-pg -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=qms -p 127.0.0.1:5432:5432 postgres:18
-ConnectionStrings__Qms="Host=localhost;Database=qms;Username=postgres;Password=dev" ASPNETCORE_ENVIRONMENT=Development dotnet run --project backend/Qms.Api
+ConnectionStrings__Qms="Host=localhost;Database=qms;Username=postgres;Password=dev" Jwt__SigningKey="$(openssl rand -base64 48)" ASPNETCORE_ENVIRONMENT=Development dotnet run --project backend/Qms.Api
 ```
 
 ## Testing notes
@@ -124,3 +145,14 @@ ConnectionStrings__Qms="Host=localhost;Database=qms;Username=postgres;Password=d
 - xUnit v2 is used on purpose: xunit v3 on .NET SDK 10 needs the Microsoft.Testing.Platform runner opt-in in a `global.json` at the directory where `dotnet test` runs, which does not work for `dotnet test backend/Qms.slnx` from the repository root (and CI). Revisit when the repo can opt in.
 - Shouldly is the assertion library (FluentAssertions v8+ needs a commercial licence).
 - Test-only endpoints, handlers and validators live in `Qms.Tests/Support` and are added only to the test host (`QmsApiFactory`). `QmsApiFactory` without a connection string skips the Development migrate-and-seed and the database readiness check, so those tests do not need Docker; pass `connectionString:` (Testcontainers) for tests that do.
+
+## Auth endpoints (`/api/v1/auth`)
+
+| Method | Route | Auth | Result |
+| --- | --- | --- | --- |
+| POST | `/login` | anonymous, 10/min per address | 200 `{ accessToken, tokenType, expiresIn, expiresAt, user }` + refresh cookie; 401 `auth.invalid_credentials` / `auth.locked_out` |
+| POST | `/refresh` | anonymous (cookie) | 200 as login with a rotated cookie; 401 `auth.refresh_invalid` / `auth.refresh_reused` |
+| POST | `/logout` | anonymous (cookie) | 204, cookie cleared, token family revoked |
+| GET | `/me` | bearer | 200 `{ id, userName, name, role, companyId, language, branchIds, counterIds }` |
+
+The refresh cookie is `qms_refresh`, `HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth`, 7 days. Every other endpoint needs a bearer token unless it says `[AllowAnonymous]` (fallback policy). Errors are problem details with a stable `code`.

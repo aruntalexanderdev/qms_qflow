@@ -1,4 +1,5 @@
 using FluentValidation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Qms.Api.Common;
 using Qms.Application.Common;
@@ -46,6 +47,7 @@ public sealed class GetThingHandler : IQueryHandler<GetThingQuery, string>
 }
 
 [Route(ApiRoutes.Prefix + "/test")]
+[AllowAnonymous]
 public sealed class TestThingsController : QmsControllerBase
 {
     [HttpGet("boom")]

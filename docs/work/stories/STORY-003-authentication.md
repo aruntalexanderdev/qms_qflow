@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-003 |
-| Status | Backend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2 (Auth), 8 (roles), 10 (`/auth/*`), 11 (Security) |
@@ -256,8 +256,8 @@ No screen in this story; the login page is STORY-004. Error codes are translated
 - `/auth/login` answers within 300 ms at p95 under normal load (excluding lockout delay).
 
 ## 10. Open questions
-- [ ] Depends on ADR-004 (Proposed), accepted with the Phase 0 PR.
-- [ ] Product owner: approve adding `company_id` to `user_branch` and `user_counter` in spec section 9 (ADR-003 Amendment 1, spec impact). This follows the section 9 tenant-table rule. It does not block analysis or starting stage 2, but it blocks merging the stage 2 migration (TASK-007) until approved.
+- [x] ADR-004 accepted (Phase 0 PR merged 2026-11-07).
+- [x] Approved by the product owner on 2026-11-08 and written into spec section 9 (commit 61929cf). Original question: approve adding `company_id` to `user_branch` and `user_counter` in spec section 9 (ADR-003 Amendment 1, spec impact). This follows the section 9 tenant-table rule. It does not block analysis or starting stage 2, but it blocks merging the stage 2 migration (TASK-007) until approved.
 
 ## 11. Stage log
 
@@ -322,3 +322,40 @@ Notes for next stage:
 - Tests that insert old-shape rows use raw SQL at InitialSchema; migration tests use `IMigrator.MigrateAsync(target)`.
 - Merge blocked until the product owner approves `company_id` on `user_branch` / `user_counter` in spec section 9 (spec not edited).
 Open questions: product owner approval of spec section 9 (blocks merge only).
+
+### Stage 3 — Backend — backend-developer — 2026-11-08
+Result: Done
+Changed:
+- Application: `backend/Qms.Application/Auth/**` (Login, RefreshSession, Logout, GetCurrentUser, ports, `Roles`, `AuthErrors`, `UserErrors`, DTOs); `Common/` `ICurrentUser`, `ITenantScope`, `CrossTenantSection`, `CrossTenantAttribute`, `CrossTenantDecorator`, `ICurrentTenant.IsCrossTenant`, `DependencyInjection` (decorator chain, optional type filter).
+- Infrastructure: `Identity/**` (`JwtOptions`, `JwtTokenService`, `RefreshTokenStore`, `RefreshTokenHasher`, `UserAccounts`, `IdentitySeeder`), `DependencyInjection.cs` (Identity, options, seeding in a cross-tenant section); named in TASK-008 and outside the usual stage-3 folders: `Persistence/QmsDbContext.cs`, `TenantViolationException.cs`, `QmsDbContextFactory.cs`.
+- Api: `Auth/**` (`HttpContextCurrentUser`, `RequestTenantContext`, `RefreshCookie`, `AuthenticationSetup`), `Controllers/AuthController.cs`, `Common/ProblemDetailsSetup.cs` (S5), `Common/ApplicationBuilderExtensions.cs` (tenant removed, OpenAPI Bearer), `Program.cs`, `appsettings.json` (`Jwt:Issuer/Audience`), `Qms.Api.csproj` (JwtBearer, `UserSecretsId`); `NoCompanyCurrentTenant.cs` deleted.
+- Packages: `Microsoft.AspNetCore.Authentication.JwtBearer` 10.0.14, `Microsoft.IdentityModel.JsonWebTokens` 8.19.2 (`backend/Directory.Packages.props`).
+- Config and docs: `.env.example`, `docker-compose.yml` (`JWT_SIGNING_KEY` required, `SEED_*` optional), `CLAUDE.md`, `backend/README.md`, TASK-004, TASK-008.
+- Tests: `backend/Qms.Tests/Auth/**` (5 files), `Support/AuthHost.cs`, `TenantTestEndpoints.cs`, `TestAccounts.cs`; updated `QmsApiFactory`, `TestThings`, `Persistence/PostgresFixture.cs`, `UserAssignmentTests.cs` (one assertion).
+Notes for next stage:
+- Stages 4 and 5 are N/A (see section 8). The orchestrator logs them. Next real consumers: STORY-004 (Angular shell), STORY-011.
+- API contract for the web app (all under `/api/v1/auth`, problem details with a stable `code`):
+  - `POST /login` body `{ "userName": "...", "password": "..." }` gives 200 `{ "accessToken", "tokenType": "Bearer", "expiresIn": 900, "expiresAt", "user": { "id", "userName", "name", "role", "companyId" (null for Super Admin), "language", "branchIds": [], "counterIds": [] } }` and `Set-Cookie: qms_refresh=...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` (7 days). Errors: 400 `validation.failed`, 401 `auth.invalid_credentials`, 401 `auth.locked_out`, 429 `request.rate_limited` (10/min per address, `Retry-After`).
+  - `POST /refresh` (no body; the browser sends the cookie) gives the same 200 body and a rotated cookie. 401 `auth.refresh_invalid` (missing, unknown, expired token or inactive user) or `auth.refresh_reused` (family revoked); the cookie is cleared on every 401.
+  - `POST /logout` (no body, no bearer needed) gives 204 and clears the cookie.
+  - `GET /me` (bearer) gives the `user` object above; 401 `auth.unauthorized`.
+  - The access token has claims `sub`, `company_id` (absent for Super Admin), `role` (`SuperAdmin` | `CompanyAdmin` | `BranchManager` | `CounterStaff`), `name`, `lang`, `iss` `qms-api`, `aud` `qms-clients`. SignalR: pass it as `access_token` on `/hubs/*`.
+  - Any other endpoint returns 401 problem details (`auth.unauthorized`) without a valid token and 403 `auth.forbidden` for a role it does not allow. Cross-company access is 404 `resource.not_found`; a lost update is 409 `request.conflict`.
+  - Web and the API must be served from one origin (ADR-004/006); the cookie is `Secure`, so local web development needs https or `localhost`.
+- Configuration: `Jwt:SigningKey` (>= 32 characters) is required everywhere; `Seed:SuperAdmin:*` and `Seed:CompanyAdmin:*` are read only in Development. See `backend/README.md`, "Authentication settings". The local stack needs `JWT_SIGNING_KEY` in `.env`.
+- For STORY-011 and later: actor columns only from `ICurrentUser.UserId`; validate request-supplied user ids with `IUserDirectory.IsInCompanyAsync`; map residual 23503 on the four user-assignment constraint names (not mapped yet, no endpoint can hit them); only `[CrossTenant]` handlers, the seeder and jobs open a cross-tenant section.
+- Follow-ups: rate limiter needs forwarded headers behind a proxy (hosting story); access tokens of deactivated users live up to 15 minutes; password policy is the Identity default.
+- AC evidence: AC-1..AC-8 and AC-9..AC-12, AC-17..AC-22 have integration tests (`Qms.Tests/Auth`); AC-13..AC-16, AC-23 are covered by TASK-007's tests. Manual check with curl against a throwaway `postgres:18` (login, me, refresh, reuse, logout, lockout, Swagger) passed.
+Open questions: product owner approval of spec section 9 (`company_id` on `user_branch` / `user_counter`, and the `refresh_token` table from ADR-004) still blocks merge only; ADR-004 is still `Proposed`.
+
+### Stage 4 — Frontend — frontend-developer — 2026-11-08
+Result: N/A — Auth contract and error codes are consumed by STORY-004 (stage plan)
+Changed: none
+Notes for next stage: none
+Open questions: none
+
+### Stage 5 — Android — android-developer — 2026-11-08
+Result: N/A — No device API change (stage plan)
+Changed: none
+Notes for next stage: Ready for code review (stage 6).
+Open questions: none

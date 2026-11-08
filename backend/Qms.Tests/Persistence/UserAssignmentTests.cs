@@ -117,11 +117,13 @@ public sealed class UserAssignmentTests(PostgresFixture postgres)
             (await db.ShouldBeRejectedAsync(SqlState.ForeignKeyViolation)).ShouldBe("fk_user_counter_user_company");
         }
 
-        // company_id is NOT NULL, so a row without a company cannot be written either (no tenant: nothing is stamped).
+        // company_id is NOT NULL, and with no company nothing is stamped: the write guard refuses a new tenant row
+        // that has no company even inside a cross-tenant section (ADR-003 Amendment 1), before the database is reached.
         await using (var db = PostgresFixture.CreateContext(world.ConnectionString))
         {
             db.UserBranches.Add(new UserBranch { CompanyId = Guid.Empty, UserId = world.SuperAdmin, BranchId = SeedIds.Branch1 });
-            await db.ShouldBeRejectedAsync(SqlState.ForeignKeyViolation);
+            var exception = await Should.ThrowAsync<TenantViolationException>(() => db.SaveChangesAsync());
+            exception.Reason.ShouldBe(TenantViolationReason.NoTenant);
         }
     }
 
