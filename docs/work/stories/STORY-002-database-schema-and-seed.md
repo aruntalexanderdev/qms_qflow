@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-002 |
-| Status | Code Review |
+| Status | Database |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 4 (4.1–4.4), 9, 11 (time, audit), 13 |
@@ -238,3 +238,34 @@ Notes for next stage: no DI or wiring change; stage 3 is unaffected. Callers tha
 Verification (Release): `dotnet build backend/Qms.slnx -c Release --no-incremental` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` run twice: Passed 129, Failed 0, Skipped 0 (both runs; 110 before, 19 new). The model-drift test is green.
 Open questions: none new. S2/S3 stay tracked for STORY-003, S4 waits for the product owner, N-items untouched. Spec section 9 additions list (architect): add `token_visit.branch_id`.
 
+
+### Stage 6 — Code review (round 2) — code-reviewer — 2026-11-08
+Result: Changes requested
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release --no-incremental` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` Passed 129, Failed 0, Skipped 0, 33 s) · web N/A · android N/A
+ACs checked: AC-1 ✅ (the regenerated single `20261108021220_InitialSchema` applies cleanly to an empty PostgreSQL 18), AC-2 ✅ (seed code unchanged since 461435f, seed tests green), AC-3 ✅, AC-4 ✅, AC-5 ✅, AC-6 ✅, AC-7 ✅ (query filter; the database backstop is now closed, see below), AC-8 ✅
+Reviewed: `git diff 461435f HEAD -- backend` (commit 91d08b3).
+
+Verified by hand: I applied `dotnet ef migrations script` output to a scratch postgres:18 with Company 1 (branches B1 and B1b) and Company 2 (branch B2), each with zone, counter, dispenser, service type, priority type and token. Every one of these 11 statements is now REJECTED by the intended named constraint, and a valid visit (own token, zone and counter) is accepted:
+- round-1 proof (a) `dispenser_zone_service` of Company 1 on Company 2's branch, device and zone → `fk_dispenser_zone_service_branch_company_id_branch_id`;
+- round-1 proof (b) `token_visit` of a Company 1 token in a Company 2 zone → `fk_token_visit_zones_branch_id_zone_id` (with `branch_id` = B1) and `fk_token_visit_branch_company_id_branch_id` (with `branch_id` = B2);
+- round-1 proof (c) `dispenser_setting` of Company 1 on Company 2's device → `fk_dispenser_setting_device_company_id_device_id`;
+- new: visit with a counter of another branch of the same company (insert, and UPDATE of an existing valid visit) → `fk_token_visit_counter_branch_id_counter_id`; an all-Company-2 visit pointing at a Company 1 token → `fk_token_visit_token_branch_id_token_id`; a Company 2 `dispenser_setting` with a Company 1 ticket template → `fk_dispenser_setting_ticket_templates_…`; `counter_service_priority` carrying Company 2's id on a Branch 1 counter → `fk_counter_service_priority_branch_company_id_branch_id`; `message_log` of Company 1 for a Company 2 token → `fk_message_log_tokens_company_id_token_id`; UPDATE of a token's `company_id` → `fk_token_branch_company_id_branch_id`.
+- FK scan from `pg_constraint`: every table with `branch_id` has a `(company_id, branch_id)` FK to `branch`, except `user_branch`. The only single-column FKs between non-company tables are the six to `asp_net_users` plus `user_branch.branch_id` and `user_counter.counter_id`. That is exactly stage 2's list.
+- Stage 2's justifications: (1) FKs to `asp_net_users`: these hold. A composite key would block Super Admin (`company_id` NULL) as issuer, settler or server, so Application validation in STORY-003 is the right place. This is tracked with S3. (2) `audit_log`: this holds. It references no tenant rows except `company`, and `entity_id` is polymorphic. (3) Visit counter not tied to the visit's zone: I accept the decision, because the rule belongs to Call Next / Transfer in Application and a database rule could block a later spec flow. The stated reason is not quite right, though (see N8).
+- `ix_token_visit_queue` is unchanged: `(zone_id, service_type_id, priority_type_id, is_front DESC, queued_at) WHERE ended_at IS NULL`, which matches spec §9. Leaving `branch_id` out of it is correct.
+
+M1 ✅ fixed. M2 ✅ fixed (all four tables, plus one rejection test each, plus positive controls).
+S1 is partly fixed. The tracked path is correct and tested: the original value is checked; Modified and Deleted rows are judged by their original company; `RejectCompanyChanges` runs with `AutoDetectChangesEnabled` off, so it fires before EF's key-modification error; it also works with no current company; and normal tracked updates and detached `Update()` of own rows still work (I checked both by hand against the scratch database). But the `AfterSaveBehavior = Throw` backstop opened a new gap, see R2-M1.
+
+Must fix
+- R2-M1 [stage 2] backend/Qms.Infrastructure/Persistence/Configurations/EntityConfiguration.cs:66-67 and backend/Qms.Infrastructure/Persistence/QmsDbContext.cs:182-194 — a disconnected (detached) entity of another company can still be updated or deleted. The tenant check trusts the entity's in-memory `CompanyId` as the "original" value, and the SQL is `WHERE id = @id` only. Proven against the scratch database with Company 1 as the current tenant. I loaded Company 2's row with `AsNoTracking()` (an API handler would simply build it from route id + DTO), set `CompanyId = Company1`, and called `db.Update(row)` / `db.Remove(row)`. Each SaveChanges SUCCEEDED and changed Company 2's data: the service type was renamed, the counter was renamed, and the dispenser device was DELETED. This change made it worse. Before it, `counter`, `device` and the other tables without a `company_id` key had `company_id` in the UPDATE SET list, so the composite `(company_id, branch_id)` FK rejected the forged row. Now `AfterSaveBehavior = Throw` drops `company_id` from SET, and that database backstop is gone for every tenant table. `Update(id-from-route)` is the usual IDOR pattern, and it is one handler away from STORY-003 / M2 admin endpoints. → Mark `CompanyId` as a concurrency token as well (`.IsConcurrencyToken()` in `EntityConfiguration`). EF then emits `WHERE id = @id AND company_id = @original` for every UPDATE and DELETE of a tenant row. A forged detached row hits 0 rows and gets `DbUpdateConcurrencyException`, so the database decides, whatever pattern the handler uses. Keep `AfterSaveBehavior = Throw` and `RejectCompanyChanges`. Add tests: detached `Update()` and detached `Remove()` of another company's row with a forged `CompanyId` both throw and leave the row unchanged (for one table with `company_id` in a key, e.g. `service_type`, and one without, e.g. `counter`); detached `Update()` of an own row still succeeds. Check that the model-drift test stays green (a concurrency token is not a schema change, so no migration is expected).
+
+Should fix
+- none new. S2 and S3 stay tracked for STORY-003; S4 waits for the product owner (not blockers, as agreed).
+
+Nice to have
+- N8 [stage 2] TASK-002 / the loop-1 handoff explains "visit counter vs zone not enforced" with "a forwarded token may be queued in a zone before any counter calls it". That case is already covered by MATCH SIMPLE (null counter). The real reason is that the counter-in-zone rule belongs to Call Next / Transfer in Application. Please correct the note so M3 picks up the rule there.
+- N1–N7 from round 1 are unchanged.
+
+Status: stays `Code Review` (Changes requested). Owning stage of the first Must fix: stage 2 (database-architect), then back to stage 6 (round 3; loop 2 of 3).
+Open questions: none
