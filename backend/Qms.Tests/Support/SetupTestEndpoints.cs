@@ -107,6 +107,42 @@ public sealed class SetupTestController : QmsControllerBase
         throw new DbUpdateException("An error occurred while saving the entity changes.", postgres);
     }
 
+    /// <summary>AC-11 / AC-29: deletes a service type WITHOUT the in-use pre-check, so the foreign key error reaches the exception handler.</summary>
+    [HttpDelete("service-types/{id:guid}/unchecked")]
+    public async Task<IActionResult> DeleteServiceTypeUnchecked(Guid id, [FromServices] IQmsDbContext db, CancellationToken cancellationToken)
+    {
+        db.ServiceTypes.Remove(await db.ServiceTypes.FirstAsync(s => s.Id == id, cancellationToken));
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("priority-types/{id:guid}/unchecked")]
+    public async Task<IActionResult> DeletePriorityTypeUnchecked(Guid id, [FromServices] IQmsDbContext db, CancellationToken cancellationToken)
+    {
+        db.PriorityTypes.Remove(await db.PriorityTypes.FirstAsync(p => p.Id == id, cancellationToken));
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>AC-29: inserts a service type WITHOUT the prefix pre-check, so the unique index error reaches the exception handler.</summary>
+    [HttpPost("service-types/unchecked")]
+    public async Task<IActionResult> CreateServiceTypeUnchecked(
+        [FromQuery] string prefix, [FromServices] IQmsDbContext db, [FromServices] ICurrentTenant tenant, CancellationToken cancellationToken)
+    {
+        db.ServiceTypes.Add(new Qms.Domain.Entities.ServiceType { CompanyId = tenant.CompanyId!.Value, NameEn = "x", NameAr = "x", Prefix = prefix });
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>AC-29: a check constraint violation (target minutes 0) that no validator stopped.</summary>
+    [HttpPost("service-types/unchecked-invalid")]
+    public async Task<IActionResult> CreateInvalidServiceTypeUnchecked([FromServices] IQmsDbContext db, [FromServices] ICurrentTenant tenant, CancellationToken cancellationToken)
+    {
+        db.ServiceTypes.Add(new Qms.Domain.Entities.ServiceType { CompanyId = tenant.CompanyId!.Value, NameEn = "x", NameAr = "x", Prefix = "Y", TargetMinutes = 0 });
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     [HttpGet("branch-scope/{branchId:guid}")]
     public async Task<IActionResult> BranchScope(
         Guid branchId,

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Qms.Infrastructure.Persistence.Seed;
 using Qms.Tests.Persistence;
 using Qms.Tests.Support;
@@ -249,7 +250,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         paidAgain.Status.ShouldBe(200);
         paidAgain.Json.GetProperty("feeAmount").GetDecimal().ShouldBe(55m);
         await using var db = setup.Host.OpenContext();
-        db.BranchPriorityFees.Count(f => f.PriorityTypeId == SeedIds.Vip).ShouldBe(1);
+        db.BranchPriorityFees.IgnoreQueryFilters().Count(f => f.PriorityTypeId == SeedIds.Vip).ShouldBe(1);
     }
 
     // ---- AC-21, AC-22
