@@ -242,4 +242,181 @@ public sealed class TenantIntegrityTests(PostgresFixture postgres)
 
         (await db.SaveChangesAsync()).ShouldBe(1);
     }
+
+    // ---- R2-M1: detached entities with a forged CompanyId. company_id is a concurrency token, so the database
+    // statement is "WHERE id = @id AND company_id = @original" and a forged row matches 0 rows.
+
+    private static async Task<ServiceType> ForgedServiceTypeAsync(QmsDbContext db, Guid foreignCompany)
+    {
+        var row = await db.ServiceTypes.IgnoreQueryFilters().AsNoTracking().SingleAsync(s => s.CompanyId == foreignCompany);
+        row.CompanyId = SeedIds.Company1;
+        return row;
+    }
+
+    private static async Task<Counter> ForgedCounterAsync(QmsDbContext db, Guid counterId)
+    {
+        var row = await db.Counters.IgnoreQueryFilters().AsNoTracking().SingleAsync(c => c.Id == counterId);
+        row.CompanyId = SeedIds.Company1;
+        return row;
+    }
+
+    private async Task AssertForeignRowsUntouchedAsync(World world)
+    {
+        await using var check = PostgresFixture.CreateContext(world.ConnectionString);
+        var service = await check.ServiceTypes.IgnoreQueryFilters().SingleAsync(s => s.CompanyId == world.Company2);
+        service.NameEn.ShouldBe("Other service");
+        (await check.Counters.IgnoreQueryFilters().SingleAsync(c => c.Id == world.Counter2)).Name.ShouldBe("Counter X");
+        (await check.Devices.IgnoreQueryFilters().AnyAsync(d => d.Id == world.Device2)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_detached_service_type_of_another_company_cannot_be_updated()
+    {
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        var forged = await ForgedServiceTypeAsync(db, world.Company2);
+        forged.NameEn = "Hijacked";
+
+        db.ServiceTypes.Update(forged);
+
+        await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        await AssertForeignRowsUntouchedAsync(world);
+    }
+
+    [Fact]
+    public async Task A_detached_service_type_of_another_company_cannot_be_removed()
+    {
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        db.ServiceTypes.Remove(await ForgedServiceTypeAsync(db, world.Company2));
+
+        await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        await AssertForeignRowsUntouchedAsync(world);
+    }
+
+    [Fact]
+    public async Task A_detached_counter_of_another_company_cannot_be_updated()
+    {
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        var forged = await ForgedCounterAsync(db, world.Counter2);
+        forged.Name = "Hijacked";
+
+        db.Counters.Update(forged);
+
+        await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        await AssertForeignRowsUntouchedAsync(world);
+    }
+
+    [Fact]
+    public async Task A_detached_counter_of_another_company_cannot_be_removed()
+    {
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        db.Counters.Remove(await ForgedCounterAsync(db, world.Counter2));
+
+        await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        await AssertForeignRowsUntouchedAsync(world);
+    }
+
+    [Fact]
+    public async Task A_stub_counter_with_the_id_of_another_companys_counter_cannot_be_removed()
+    {
+        // The IDOR pattern: new Counter { Id = idFromRoute, CompanyId = current }.
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        db.Counters.Remove(new Counter { Id = world.Counter2, CompanyId = SeedIds.Company1, Name = "stub" });
+
+        await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        await AssertForeignRowsUntouchedAsync(world);
+    }
+
+    [Fact]
+    public async Task An_attached_and_modified_row_of_another_company_with_a_forged_company_is_rejected()
+    {
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        var forged = await ForgedCounterAsync(db, world.Counter2);
+
+        db.Counters.Attach(forged);
+        forged.Name = "Hijacked";
+
+        await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        await AssertForeignRowsUntouchedAsync(world);
+    }
+
+    [Fact]
+    public async Task A_row_of_another_company_set_to_modified_through_the_entry_with_a_forged_company_is_rejected()
+    {
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        var forged = await ForgedCounterAsync(db, world.Counter2);
+        forged.Name = "Hijacked";
+
+        db.Entry(forged).State = EntityState.Modified;
+
+        await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+        await AssertForeignRowsUntouchedAsync(world);
+    }
+
+    [Fact]
+    public async Task A_detached_device_of_another_company_cannot_be_removed_and_its_settings_stay()
+    {
+        // Cascade path: dispenser_setting goes away with its device, so a forged device delete must not start it.
+        var world = await WorldAsync();
+        await using (var setup = PostgresFixture.CreateContext(world.ConnectionString))
+        {
+            setup.DispenserSettings.Add(new DispenserSetting { CompanyId = world.Company2, DeviceId = world.Device2 });
+            await setup.SaveChangesAsync();
+        }
+
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        var forged = await db.Devices.IgnoreQueryFilters().AsNoTracking().SingleAsync(d => d.Id == world.Device2);
+        forged.CompanyId = SeedIds.Company1;
+        db.Devices.Remove(forged);
+
+        await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+
+        await using var check = PostgresFixture.CreateContext(world.ConnectionString);
+        (await check.Devices.IgnoreQueryFilters().AnyAsync(d => d.Id == world.Device2)).ShouldBeTrue();
+        (await check.DispenserSettings.IgnoreQueryFilters().AnyAsync(s => s.DeviceId == world.Device2)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_detached_row_of_the_current_company_can_still_be_updated_and_removed()
+    {
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        var own = await db.Counters.AsNoTracking().SingleAsync(c => c.Id == SeedIds.Counter(4));
+        own.Name = "Renamed";
+        db.Counters.Update(own);
+        (await db.SaveChangesAsync()).ShouldBe(1);
+
+        db.ChangeTracker.Clear();
+        var stub = new Counter { Id = world.CounterB, CompanyId = SeedIds.Company1, Name = "stub" };
+        await using var other = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        other.Counters.Remove(stub);
+        (await other.SaveChangesAsync()).ShouldBe(1);
+
+        await using var check = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        (await check.Counters.SingleAsync(c => c.Id == SeedIds.Counter(4))).Name.ShouldBe("Renamed");
+        (await check.Counters.AnyAsync(c => c.Id == world.CounterB)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Bulk_update_and_delete_only_touch_the_current_company()
+    {
+        // ExecuteUpdate / ExecuteDelete respect the global query filter: even an id of another company matches nothing.
+        var world = await WorldAsync();
+        await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+
+        (await db.Counters.Where(c => c.Id == world.Counter2).ExecuteUpdateAsync(s => s.SetProperty(c => c.Name, "Hijacked"))).ShouldBe(0);
+        (await db.Counters.Where(c => c.Id == world.Counter2).ExecuteDeleteAsync()).ShouldBe(0);
+        (await db.Devices.Where(d => d.Id == world.Device2).ExecuteDeleteAsync()).ShouldBe(0);
+        (await db.ServiceTypes.ExecuteUpdateAsync(s => s.SetProperty(x => x.NameEn, "Bulk"))).ShouldBe(6);
+
+        await AssertForeignRowsUntouchedAsync(world);
+        await using var check = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        (await check.ServiceTypes.CountAsync(s => s.NameEn == "Bulk")).ShouldBe(6);
+    }
 }

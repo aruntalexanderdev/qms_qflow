@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-002 |
-| Status | Database |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 4 (4.1–4.4), 9, 11 (time, audit), 13 |
@@ -269,3 +269,21 @@ Nice to have
 
 Status: stays `Code Review` (Changes requested). Owning stage of the first Must fix: stage 2 (database-architect), then back to stage 6 (round 3; loop 2 of 3).
 Open questions: none
+
+
+### Stage 2 — Database (review loop 2) — database-architect — 2026-11-08
+Result: Done
+Changed:
+- `backend/Qms.Infrastructure/Persistence/Configurations/EntityConfiguration.cs` (`CompanyId` is `.IsConcurrencyToken()`; `AfterSaveBehavior = Throw` kept).
+- `backend/Qms.Tests/Persistence/TenantIntegrityTests.cs` (10 new tests).
+- Task: TASK-002 notes. No migration, no snapshot change (a concurrency token is model metadata only; the model-drift test is green).
+Fixes:
+- R2-M1: EF now emits `UPDATE ... WHERE id = @id AND company_id = @originalCompanyId` and the same for `DELETE`. For a detached entity the "original" value is whatever the caller set, so a forged row (another company's id with `CompanyId` overwritten to the current company) matches 0 rows and SaveChanges throws `DbUpdateConcurrencyException`; the database decides, whatever pattern the handler uses. Kept: `RejectCompanyChanges`, the original-company tenant check for tracked rows, and `AfterSaveBehavior = Throw`.
+- Exception type: I kept EF's `DbUpdateConcurrencyException` and did not translate it to `TenantViolationException`. A 0-row result cannot be told apart from a genuine concurrent delete/update of an own-company row, and mapping both to a tenant error would mask real conflicts. Stage 3 should map `DbUpdateConcurrencyException` to 409 (or 404) in the problem-details handler; it is never a success.
+- Own-company detached rows still work (`Update`, stub `Remove`). Cascade check: a forged device delete fails before any cascade, `dispenser_setting` stays.
+Tests added (all in `TenantIntegrityTests`; database unchanged afterwards, asserted on a fresh context): detached `Update()` and `Remove()` of another company's `service_type` and `counter`; stub `new Counter { Id, CompanyId = current }` removed; `Attach` + modify; `Entry(x).State = Modified`; forged `Remove` of a device with a `dispenser_setting` (both stay); detached `Update()` and stub `Remove()` of own-company rows succeed; `ExecuteUpdate`/`ExecuteDelete` (counter, device, service_type) affect 0 foreign rows and exactly the 6 own service types. Proof the tests bite: with `IsConcurrencyToken()` removed 8 of them fail (the `Update`/`Remove`/stub/`Attach`/`Entry` cases and the device cascade case); with it, all pass.
+N8: corrected in TASK-002: the counter-in-zone rule belongs to Call Next / Transfer in Application (M3: STORY-016, STORY-018), not the database. The loop-1 line above ("a forwarded token may be queued in a zone before any counter calls it") is superseded by this note.
+Notes for next stage: stage 3 must treat `DbUpdateConcurrencyException` on tenant rows as a conflict/not found and must still load rows through the filtered DbSets (the filter remains the first line of defence). Bulk `ExecuteUpdate/ExecuteDelete` respect the global filter; with `IgnoreQueryFilters()` they do not, so keep that to `[CrossTenant]` code.
+Verification (Release): `dotnet build backend/Qms.slnx -c Release --no-incremental` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` run twice: Passed 139, Failed 0, Skipped 0 (both runs; 129 before, 10 new).
+Open questions: none
+

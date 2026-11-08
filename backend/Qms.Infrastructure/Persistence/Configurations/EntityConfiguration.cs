@@ -21,8 +21,12 @@ internal abstract class EntityConfiguration<TEntity>(string tableName) : IEntity
         {
             // company_id is required and points at company (the composite keys below add the same-company guarantee).
             // The company of a row never changes after insert (backstop for the check in QmsDbContext).
-            builder.Property(nameof(ITenantEntity.CompanyId)).IsRequired()
-                .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+            // company_id is also a concurrency token: EF then writes "WHERE id = @id AND company_id = @original" for every
+            // UPDATE and DELETE, so a detached row with a forged CompanyId (Update/Remove/Attach of an id taken from
+            // a route) matches 0 rows and fails with DbUpdateConcurrencyException instead of touching another company's row.
+            // This is not a schema change (no migration).
+            var companyId = builder.Property(nameof(ITenantEntity.CompanyId)).IsRequired().IsConcurrencyToken();
+            companyId.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
             builder.HasOne<Company>().WithMany().HasForeignKey(nameof(ITenantEntity.CompanyId));
         }
 
