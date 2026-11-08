@@ -204,6 +204,97 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         (await setup.GetAsync(SetupUser.CompanyAdminC1, Url)).Json.GetArrayLength().ShouldBe(9);
     }
 
+    [Fact]
+    public async Task Ac4_empty_translations_create_a_type_with_no_translations()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+
+        var emptyObject = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cards", translations = new { }, prefix = "H" });
+        var emptyArabic = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Loans", translations = new { ar = "" }, prefix = "J" });
+
+        foreach (var reply in new[] { emptyObject, emptyArabic })
+        {
+            reply.Status.ShouldBe(201, reply.Body);
+            reply.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+        }
+    }
+
+    [Fact]
+    public async Task Ac5_a_missing_name_is_400_on_name()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+
+        var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { prefix = "H" });
+
+        reply.Status.ShouldBe(400);
+        reply.Json.GetProperty("errors").TryGetProperty("name", out _).ShouldBeTrue(reply.Body);
+    }
+
+    [Fact]
+    public async Task Ac7_put_with_empty_translations_clears_the_arabic_text_and_other_languages_are_refused()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+        var url = $"{Url}/{SeedIds.Service(3)}";
+        var current = await GetAsync(setup, SeedIds.Service(3));
+        object Body(JsonElement from, object translations) => new
+        {
+            name = "Loans", translations, prefix = "C", targetMinutes = 20, sortOrder = 3, isActive = true, version = from.GetProperty("version").GetString(),
+        };
+
+        var french = await setup.PutAsync(SetupUser.CompanyAdminC1, url, Body(current, new { fr = "Prêts" }));
+        var english = await setup.PutAsync(SetupUser.CompanyAdminC1, url, Body(current, new { en = "Loans" }));
+        var cleared = await setup.PutAsync(SetupUser.CompanyAdminC1, url, Body(current, new { }));
+
+        french.Status.ShouldBe(400);
+        french.Code.ShouldBe("translation.language_not_enabled");
+        french.Json.GetProperty("errors").TryGetProperty("translations.fr", out _).ShouldBeTrue(french.Body);
+        english.Status.ShouldBe(400);
+        english.Code.ShouldBe("translation.default_language_key");
+        english.Json.GetProperty("errors").TryGetProperty("translations.en", out _).ShouldBeTrue(english.Body);
+        cleared.Status.ShouldBe(200, cleared.Body);
+        cleared.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+        (await GetAsync(setup, SeedIds.Service(3))).GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Translation_keys_that_differ_only_by_case_are_rejected()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+
+        var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cards", translations = new Dictionary<string, string> { ["ar"] = "أ", ["AR"] = "ب" }, prefix = "H" });
+
+        reply.Status.ShouldBe(400);
+        reply.Json.GetProperty("errors").TryGetProperty("translations.ar", out _).ShouldBeTrue(reply.Body);
+    }
+
+    [Fact]
+    public async Task Put_never_defaults_a_missing_field()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+        var url = $"{Url}/{SeedIds.Service(3)}";
+        var version = (await GetAsync(setup, SeedIds.Service(3))).GetProperty("version").GetString();
+        var bodies = new (string Field, object Body)[]
+        {
+            ("isActive", new { name = "x", prefix = "C", sortOrder = 3, version }),
+            ("sortOrder", new { name = "x", prefix = "C", isActive = true, version }),
+        };
+
+        foreach (var (field, body) in bodies)
+        {
+            var reply = await setup.PutAsync(SetupUser.CompanyAdminC1, url, body);
+
+            reply.Status.ShouldBe(400, field);
+            reply.Code.ShouldBe("validation.failed");
+            reply.Json.GetProperty("errors").TryGetProperty(field, out _).ShouldBeTrue(reply.Body);
+        }
+
+        var after = await GetAsync(setup, SeedIds.Service(3));
+        after.GetProperty("isActive").GetBoolean().ShouldBeTrue();
+        after.GetProperty("name").GetString().ShouldBe("Service 3");
+        after.GetProperty("version").GetString().ShouldBe(version);
+        (await setup.AuditCountAsync()).ShouldBe(0);
+    }
+
     // ---- AC-6
 
     [Fact]

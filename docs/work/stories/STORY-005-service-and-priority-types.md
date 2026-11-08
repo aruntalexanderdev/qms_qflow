@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-005 |
-| Status | Backend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 4 (entities), 4.1 (priority types table), 5.1 step 2, 6 (Paid priority), 8 (Company Admin; `/admin/service-types`, `/admin/priority-types`), 9 (`service_type`, `priority_type`, `audit_log`), 10 (`/service-types`, `/priority-types`), 11 (Audit, Security), 12 (M2) |
@@ -355,3 +355,11 @@ Nice to have
 - N4 An architecture test that `IgnoreQueryFilters()` appears only in `[CrossTenant]` handlers and the Infrastructure scope/identity classes would keep ADR-003's greppable escape hatch enforced.
 - N5 A `PUT` whose values equal the stored row (matching version) writes an audit row and sends no UPDATE. This is acceptable; say so in ADR-008 §11.
 - N6 [stage 1] TASK-010 §3 and story §7 still describe role policies (`SetupRead`, `BranchSetup`) and `nameEn`/`nameAr` DTOs. Mark them superseded by ADR-009/ADR-010 so STORY-006+ readers are not misled.
+
+### Stage 3 — Backend (review loop 1) — backend-developer — 2026-11-08
+Result: Done
+Changed: backend/Qms.Application (Common: PostCommitActions, AuditDecorator, IAuditCompanyTarget, LocalizedText, CommonRules; ServiceTypes/PriorityTypes update commands), backend/Qms.Api (nullable PUT request fields, ProblemDetailsSetup bare PostgresException), backend/Qms.Tests (new tests, setup template database, architecture reflection tests). Task: TASK-010 section 7.
+Notes for next stage:
+- M1 tests added; S1 to S7, N1, N2 done (details in TASK-010 section 7). 392 tests green, suite 4m29s -> 2m40s.
+- ADR-008 additions for the architect: (1) PUT is full replacement and never defaults a missing field (nullable request fields + `Sent()` validator, 400 validation.failed); (2) post-commit actions only from audited commands, run with their own token and 30 s timeout; (3) cross-tenant audited commands implement `IAuditCompanyTarget`; (4) test fixture: `SetupHost.StartAsync(postgres)` clones a prebuilt template database.
+Open questions: none

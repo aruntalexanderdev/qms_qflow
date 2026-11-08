@@ -140,6 +140,7 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         var cases = new (string Field, object Body)[]
         {
             ("name", new { name = "", translations = new { ar = "ع" }, prefix = "P", priorityLevel = 1, isPaid = false }),
+            ("name", new { prefix = "P", priorityLevel = 1, isPaid = false }),
             ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "p", priorityLevel = 1, isPaid = false }),
             ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "PV", priorityLevel = 1, isPaid = false }),
             ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "7", priorityLevel = 1, isPaid = false }),
@@ -193,6 +194,79 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         none.Status.ShouldBe(201);
         none.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
         none.Body.ShouldNotContain("nameEn");
+    }
+
+    [Fact]
+    public async Task Ac17_the_english_key_in_translations_is_refused_with_its_own_code()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+
+        var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { en = "Senior" }, prefix = "S", priorityLevel = 1, isPaid = false });
+
+        reply.Status.ShouldBe(400);
+        reply.Code.ShouldBe("translation.default_language_key");
+        reply.Json.GetProperty("errors").TryGetProperty("translations.en", out _).ShouldBeTrue(reply.Body);
+        (await setup.AuditCountAsync()).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Ac7_put_with_empty_translations_clears_the_arabic_text_and_other_languages_are_refused()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+        var url = $"{Url}/{SeedIds.Vip}";
+        var version = (await GetAsync(setup, SeedIds.Vip)).GetProperty("version").GetString();
+        object Body(object translations) => new { name = "VIP", translations, prefix = "V", priorityLevel = 1, isPaid = true, feeAmount = 50, isActive = true, version };
+
+        var french = await setup.PutAsync(SetupUser.CompanyAdminC1, url, Body(new { fr = "x" }));
+        var english = await setup.PutAsync(SetupUser.CompanyAdminC1, url, Body(new { en = "x" }));
+        var cleared = await setup.PutAsync(SetupUser.CompanyAdminC1, url, Body(new { }));
+
+        french.Code.ShouldBe("translation.language_not_enabled");
+        english.Code.ShouldBe("translation.default_language_key");
+        cleared.Status.ShouldBe(200, cleared.Body);
+        cleared.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Ac4_empty_translations_create_a_priority_type_with_no_translations()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+
+        var emptyObject = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", translations = new { }, prefix = "S", priorityLevel = 1, isPaid = false });
+        var emptyArabic = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Gift", translations = new { ar = "" }, prefix = "Q", priorityLevel = 1, isPaid = false });
+
+        emptyObject.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+        emptyArabic.Status.ShouldBe(201);
+        emptyArabic.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Put_never_defaults_a_missing_field_a_dropped_ispaid_cannot_make_vip_free()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+        var url = $"{Url}/{SeedIds.Vip}";
+        var version = (await GetAsync(setup, SeedIds.Vip)).GetProperty("version").GetString();
+        var bodies = new (string Field, object Body)[]
+        {
+            ("isPaid", new { name = "VIP", prefix = "V", priorityLevel = 1, isActive = true, version }),
+            ("isActive", new { name = "VIP", prefix = "V", priorityLevel = 1, isPaid = true, feeAmount = 50, version }),
+            ("priorityLevel", new { name = "VIP", prefix = "V", isPaid = true, feeAmount = 50, isActive = true, version }),
+            ("feeAmount", new { name = "VIP", prefix = "V", priorityLevel = 1, isPaid = true, isActive = true, version }),
+        };
+
+        foreach (var (field, body) in bodies)
+        {
+            var reply = await setup.PutAsync(SetupUser.CompanyAdminC1, url, body);
+
+            reply.Status.ShouldBe(400, field);
+            reply.Json.GetProperty("errors").TryGetProperty(field, out _).ShouldBeTrue(reply.Body);
+        }
+
+        var after = await GetAsync(setup, SeedIds.Vip);
+        after.GetProperty("isPaid").GetBoolean().ShouldBeTrue();
+        after.GetProperty("feeAmount").GetDecimal().ShouldBe(50m);
+        after.GetProperty("isActive").GetBoolean().ShouldBeTrue();
+        (await setup.AuditCountAsync()).ShouldBe(0);
     }
 
     // ---- AC-18

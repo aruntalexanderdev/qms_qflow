@@ -8,6 +8,7 @@ using Npgsql;
 using Qms.Api.Common;
 using Qms.Application.Common;
 using Qms.Domain.Enums;
+using Qms.Infrastructure.Persistence;
 
 namespace Qms.Tests.Support;
 
@@ -140,6 +141,16 @@ public sealed class SetupTestController : QmsControllerBase
     {
         db.ServiceTypes.Add(new Qms.Domain.Entities.ServiceType { CompanyId = tenant.CompanyId!.Value, NameEn = "x", NameAr = "x", Prefix = "Y", TargetMinutes = 0 });
         await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>S7: raw SQL throws the PostgresException itself (no DbUpdateException around it): a duplicate prefix.</summary>
+    [HttpPost("raw-sql-duplicate")]
+    public async Task<IActionResult> RawSqlDuplicate([FromServices] QmsDbContext db, CancellationToken cancellationToken)
+    {
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO service_type (id, company_id, name_en, name_ar, prefix, sort_order, is_active, created_at, updated_at) VALUES ({Guid.NewGuid()}, {Qms.Infrastructure.Persistence.Seed.SeedIds.Company1}, 'raw', 'raw', 'A', 0, true, now(), now())",
+            cancellationToken);
         return NoContent();
     }
 

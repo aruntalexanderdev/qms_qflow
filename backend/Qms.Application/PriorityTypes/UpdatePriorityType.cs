@@ -7,13 +7,14 @@ namespace Qms.Application.PriorityTypes;
 /// <summary>Replaces every editable field. Deactivate or reactivate with <c>IsActive</c>; change the fee with <c>FeeAmount</c>.</summary>
 [Audited("priority_type", "update")]
 public sealed record UpdatePriorityTypeCommand(
-    Guid Id, string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int PriorityLevel, bool IsPaid, decimal? FeeAmount, bool IsActive, string? Version)
+    Guid Id, string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? PriorityLevel, bool? IsPaid, decimal? FeeAmount, bool? IsActive, string? Version)
     : IPriorityTypeFields;
 
 public sealed class UpdatePriorityTypeValidator : PriorityTypeFieldsValidator<UpdatePriorityTypeCommand>
 {
     public UpdatePriorityTypeValidator()
     {
+        RuleFor(command => command.IsActive).Sent();
         RuleFor(command => command.Version).RowVersionText();
     }
 }
@@ -45,16 +46,18 @@ public sealed class UpdatePriorityTypeHandler(
         db.Entry(row).Property(r => r.RowVersion).OriginalValue = version;
 
         var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
-        var fee = command.IsPaid ? command.FeeAmount : null;
-        var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != command.IsActive
-            || row.IsPaid != command.IsPaid || row.FeeAmount != fee;
+        var isPaid = command.IsPaid!.Value;
+        var isActive = command.IsActive!.Value;
+        var fee = isPaid ? command.FeeAmount : null;
+        var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != isActive
+            || row.IsPaid != isPaid || row.FeeAmount != fee;
         row.NameEn = nameEn;
         row.NameAr = nameAr;
         row.Prefix = prefix;
-        row.PriorityLevel = command.PriorityLevel;
-        row.IsPaid = command.IsPaid;
+        row.PriorityLevel = command.PriorityLevel!.Value;
+        row.IsPaid = isPaid;
         row.FeeAmount = fee;
-        row.IsActive = command.IsActive;
+        row.IsActive = isActive;
         await db.SaveChangesAsync(cancellationToken);
 
         if (devicesAffected)

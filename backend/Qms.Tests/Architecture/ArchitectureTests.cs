@@ -107,17 +107,54 @@ public sealed class ArchitectureTests
         result.IsSuccessful.ShouldBeTrue(string.Join(", ", result.FailingTypeNames ?? []));
     }
 
-    [Theory]
-    [InlineData(typeof(Qms.Api.Controllers.ServiceTypesController))]
-    [InlineData(typeof(Qms.Api.Controllers.PriorityTypesController))]
-    public void Every_setup_action_declares_a_permission(Type controller)
+    [Fact]
+    public void Every_controller_action_declares_a_permission_or_is_explicitly_exempt()
     {
-        var actions = controller.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly);
+        // Controllers that rely on the authentication-only fallback policy on purpose (own session endpoints).
+        var authenticationOnly = new HashSet<string> { nameof(Qms.Api.Controllers.AuthController) };
+        var controllers = typeof(Program).Assembly.GetTypes()
+            .Where(type => type is { IsAbstract: false, IsPublic: true } && typeof(Microsoft.AspNetCore.Mvc.ControllerBase).IsAssignableFrom(type))
+            .ToList();
 
-        actions.Count().ShouldBe(5);
-        foreach (var action in actions)
+        controllers.Count.ShouldBeGreaterThanOrEqualTo(3);
+        foreach (var controller in controllers.Where(type => !authenticationOnly.Contains(type.Name)))
         {
-            action.GetCustomAttributes(typeof(Qms.Api.Auth.RequirePermissionAttribute), inherit: true).ShouldNotBeEmpty(action.Name);
+            var actions = controller.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly);
+            actions.ShouldNotBeEmpty(controller.Name);
+            foreach (var action in actions)
+            {
+                var protectedByPermission = action.IsDefined(typeof(Qms.Api.Auth.RequirePermissionAttribute), inherit: true)
+                    || controller.IsDefined(typeof(Qms.Api.Auth.RequirePermissionAttribute), inherit: true);
+                var anonymous = action.IsDefined(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), inherit: true)
+                    || controller.IsDefined(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), inherit: true);
+                (protectedByPermission || anonymous).ShouldBeTrue($"{controller.Name}.{action.Name} needs [RequirePermission] or [AllowAnonymous]");
+            }
+        }
+    }
+
+    [Fact]
+    public void The_role_map_grants_the_module_view_whenever_it_grants_any_other_action_of_the_module()
+    {
+        foreach (var role in Qms.Application.Auth.Roles.All)
+        {
+            var granted = Qms.Application.Auth.RolePermissionMap.For(role);
+            foreach (var permission in granted)
+            {
+                var module = permission[..permission.LastIndexOf('.')];
+                granted.ShouldContain(module + ".view", $"{role} holds {permission}");
+            }
+        }
+    }
+
+    [Fact]
+    public void Every_granted_permission_is_in_the_catalog()
+    {
+        foreach (var role in Qms.Application.Auth.Roles.All)
+        {
+            foreach (var permission in Qms.Application.Auth.RolePermissionMap.For(role))
+            {
+                Qms.Application.Auth.Permissions.All.ShouldContain(permission);
+            }
         }
     }
 

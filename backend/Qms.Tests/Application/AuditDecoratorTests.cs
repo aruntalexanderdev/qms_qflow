@@ -48,17 +48,17 @@ namespace Qms.Tests.Application
             public async ValueTask DisposeAsync() => await Provider.DisposeAsync();
         }
 
-        private async Task<Harness> StartAsync(string role = Roles.CompanyAdmin)
+        private async Task<Harness> StartAsync(string role = Roles.CompanyAdmin, bool withoutCompany = false)
         {
             var connectionString = await postgres.NewDatabaseAsync(seeded: true);
             var log = new EventLog();
-            var user = new FakeUser(SeedIds.Company1, role);
+            var user = new FakeUser(withoutCompany ? null : SeedIds.Company1, role);
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton(log);
             services.AddSingleton<TimeProvider>(new FixedTimeProvider(Now));
             services.AddSingleton<ICurrentUser>(user);
-            services.AddSingleton(new LoggingTenant(SeedIds.Company1, log));
+            services.AddSingleton(new LoggingTenant(withoutCompany ? null : SeedIds.Company1, log));
             services.AddSingleton<ICurrentTenant>(p => p.GetRequiredService<LoggingTenant>());
             services.AddSingleton<ITenantScope>(p => p.GetRequiredService<LoggingTenant>());
             services.AddScoped<QmsDbContext>(provider =>
@@ -210,6 +210,59 @@ namespace Qms.Tests.Application
         }
 
         [Fact]
+        public async Task A_cross_tenant_command_names_the_company_of_its_audit_row()
+        {
+            await using var harness = await StartAsync(Roles.SuperAdmin, withoutCompany: true);
+            using var scope = harness.Provider.CreateScope();
+
+            var result = await scope.ServiceProvider.GetRequiredService<ICommandHandler<TargetedCommand, TestDto>>()
+                .HandleAsync(new TargetedCommand(SeedIds.Company1), CancellationToken.None);
+
+            result.IsSuccess.ShouldBeTrue();
+            var row = (await harness.AuditAsync()).Single();
+            row.CompanyId.ShouldBe(SeedIds.Company1);
+            row.EntityName.ShouldBe("company");
+        }
+
+        [Fact]
+        public async Task A_command_with_no_company_and_no_target_fails_loudly_and_writes_nothing()
+        {
+            await using var harness = await StartAsync(Roles.SuperAdmin, withoutCompany: true);
+            using var scope = harness.Provider.CreateScope();
+
+            await Should.ThrowAsync<InvalidOperationException>(() => scope.ServiceProvider.GetRequiredService<ICommandHandler<CrossTenantAuditedCommand, TestDto>>()
+                .HandleAsync(new CrossTenantAuditedCommand("ok"), CancellationToken.None));
+
+            (await harness.AuditAsync()).ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Enqueueing_without_an_audited_command_to_run_the_queue_throws()
+        {
+            await using var harness = await StartAsync();
+            using var scope = harness.Provider.CreateScope();
+
+            await Should.ThrowAsync<InvalidOperationException>(() => scope.ServiceProvider.GetRequiredService<ICommandHandler<EnqueueingPlainCommand, int>>()
+                .HandleAsync(new EnqueueingPlainCommand(), CancellationToken.None));
+            await Should.ThrowAsync<InvalidOperationException>(() => scope.ServiceProvider.GetRequiredService<ICommandHandler<EnqueueingOptedOutCommand, int>>()
+                .HandleAsync(new EnqueueingOptedOutCommand(), CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task Post_commit_actions_get_their_own_token_so_a_cancelled_request_does_not_skip_them()
+        {
+            await using var harness = await StartAsync();
+            using var scope = harness.Provider.CreateScope();
+            using var requestCancelled = new CancellationTokenSource();
+
+            var result = await scope.ServiceProvider.GetRequiredService<ICommandHandler<CancelAfterCommitCommand, int>>()
+                .HandleAsync(new CancelAfterCommitCommand(requestCancelled), requestCancelled.Token);
+
+            result.IsSuccess.ShouldBeTrue();
+            harness.Log.Events.ShouldContain("post-commit:token-alive");
+        }
+
+        [Fact]
         public async Task Post_commit_actions_run_after_the_commit_and_are_dropped_when_the_command_fails()
         {
             await using var harness = await StartAsync();
@@ -266,7 +319,7 @@ namespace Qms.Tests.Application.AuditFixtures
         }
     }
 
-    public sealed class LoggingTenant(Guid companyId, EventLog log) : ICurrentTenant, ITenantScope
+    public sealed class LoggingTenant(Guid? companyId, EventLog log) : ICurrentTenant, ITenantScope
     {
         private readonly CrossTenantSection _section = new();
 
@@ -357,6 +410,58 @@ namespace Qms.Tests.Application.AuditFixtures
         {
             log.Add("handler");
             return Task.FromResult<Result<TestDto>>(new TestDto(Guid.NewGuid()));
+        }
+    }
+
+    [Audited("company", "update")]
+    public sealed record TargetedCommand(Guid AuditCompanyId) : IAuditCompanyTarget;
+
+    [CrossTenant]
+    public sealed class TargetedHandler : ICommandHandler<TargetedCommand, TestDto>
+    {
+        public Task<Result<TestDto>> HandleAsync(TargetedCommand command, CancellationToken cancellationToken) =>
+            Task.FromResult<Result<TestDto>>(new TestDto(command.AuditCompanyId));
+    }
+
+    public sealed record EnqueueingPlainCommand;
+
+    public sealed class EnqueueingPlainHandler(IPostCommitActions postCommit) : ICommandHandler<EnqueueingPlainCommand, int>
+    {
+        public Task<Result<int>> HandleAsync(EnqueueingPlainCommand command, CancellationToken cancellationToken)
+        {
+            postCommit.Enqueue(_ => Task.CompletedTask);
+            return Task.FromResult<Result<int>>(1);
+        }
+    }
+
+    [Audited("test_entity", "create")]
+    [NotAudited]
+    public sealed record EnqueueingOptedOutCommand;
+
+    public sealed class EnqueueingOptedOutHandler(IPostCommitActions postCommit) : ICommandHandler<EnqueueingOptedOutCommand, int>
+    {
+        public Task<Result<int>> HandleAsync(EnqueueingOptedOutCommand command, CancellationToken cancellationToken)
+        {
+            postCommit.Enqueue(_ => Task.CompletedTask);
+            return Task.FromResult<Result<int>>(1);
+        }
+    }
+
+    [Audited("test_entity", "create")]
+    public sealed record CancelAfterCommitCommand([property: NotAudited] CancellationTokenSource Request);
+
+    public sealed class CancelAfterCommitHandler(IPostCommitActions postCommit, EventLog log) : ICommandHandler<CancelAfterCommitCommand, int>
+    {
+        public Task<Result<int>> HandleAsync(CancelAfterCommitCommand command, CancellationToken cancellationToken)
+        {
+            postCommit.Enqueue(token =>
+            {
+                // The client disconnects right after the commit; the action must still see a live token.
+                command.Request.Cancel();
+                log.Add(token.IsCancellationRequested ? "post-commit:token-cancelled" : "post-commit:token-alive");
+                return Task.CompletedTask;
+            });
+            return Task.FromResult<Result<int>>(1);
         }
     }
 

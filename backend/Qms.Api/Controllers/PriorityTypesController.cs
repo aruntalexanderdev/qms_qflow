@@ -9,11 +9,11 @@ namespace Qms.Api.Controllers;
 
 /// <summary>Body of <c>POST /priority-types</c>. No <c>companyId</c> and no currency: both come from the company.</summary>
 public sealed record CreatePriorityTypeRequest(
-    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int PriorityLevel, bool IsPaid, decimal? FeeAmount, bool IsActive = true);
+    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? PriorityLevel, bool? IsPaid, decimal? FeeAmount, bool IsActive = true);
 
 /// <summary>Body of <c>PUT /priority-types/{id}</c>: every editable field and the <c>version</c> that was read.</summary>
 public sealed record UpdatePriorityTypeRequest(
-    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int PriorityLevel, bool IsPaid, decimal? FeeAmount, bool IsActive, string? Version);
+    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? PriorityLevel, bool? IsPaid, decimal? FeeAmount, bool? IsActive, string? Version);
 
 /// <summary>Priority types of the company (spec sections 4.1 and 10, ADR-008). Thin: bind, call the handler, map the result.</summary>
 [Route(ApiRoutes.Prefix + "/priority-types")]

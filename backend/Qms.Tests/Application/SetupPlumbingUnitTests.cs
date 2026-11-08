@@ -89,6 +89,8 @@ public sealed class SetupPlumbingUnitTests
         ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = null }).ShouldBeEmpty();
         ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = new string('ع', 201) }).ShouldBe(["Translations.ar"]);
         ServiceFields(translations: new Dictionary<string, string?> { ["fr"] = "x" }).ShouldBe(["Translations.fr"]);
+        ServiceFields(translations: new Dictionary<string, string?> { ["en"] = "x" }).ShouldBe(["Translations.en"]);
+        ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = "x", ["AR"] = "y" }).ShouldBe(["Translations.ar"]);
         foreach (var prefix in new[] { "h", "HB", "1", "", "  ", null, "É", "-" })
         {
             ServiceFields(prefix: prefix).ShouldBe(["Prefix"], prefix ?? "null");
@@ -101,8 +103,8 @@ public sealed class SetupPlumbingUnitTests
 
     // ---- AC-17
 
-    private static string[] PriorityFields(string? prefix = "P", int level = 1, bool paid = false, decimal? fee = null, string? nameEn = "Premium") =>
-        [.. new CreatePriorityTypeValidator().Validate(new CreatePriorityTypeCommand(nameEn, new Dictionary<string, string?> { ["ar"] = "مميز" }, prefix, level, paid, fee, true)).Errors.Select(e => e.PropertyName)];
+    private static string[] PriorityFields(string? prefix = "P", int? level = 1, bool? paid = false, decimal? fee = null, string? nameEn = "Premium", IReadOnlyDictionary<string, string?>? translations = null) =>
+        [.. new CreatePriorityTypeValidator().Validate(new CreatePriorityTypeCommand(nameEn, translations ?? new Dictionary<string, string?> { ["ar"] = "مميز" }, prefix, level, paid, fee, true)).Errors.Select(e => e.PropertyName)];
 
     [Fact]
     public void Ac17_priority_type_rules()
@@ -117,6 +119,11 @@ public sealed class SetupPlumbingUnitTests
             PriorityFields(prefix: prefix).ShouldBe(["Prefix"], prefix);
         }
 
+        PriorityFields(nameEn: null).ShouldBe(["Name"]);
+        PriorityFields(translations: new Dictionary<string, string?> { ["en"] = "x" }).ShouldBe(["Translations.en"]);
+        PriorityFields(translations: new Dictionary<string, string?>()).ShouldBeEmpty();
+        PriorityFields(level: null).ShouldBe(["PriorityLevel"]);
+        PriorityFields(paid: null).ShouldBe(["IsPaid"]);
         PriorityFields(level: 0).ShouldBe(["PriorityLevel"]);
         PriorityFields(level: -1).ShouldBe(["PriorityLevel"]);
         PriorityFields(paid: true).ShouldBe(["FeeAmount"]);
@@ -208,7 +215,6 @@ public sealed class LocalizedTextTests
         LocalizedText.ToStorage("Cards", new Dictionary<string, string?> { ["ar"] = "  " }).ShouldBe(("Cards", string.Empty));
         LocalizedText.FromStorage("البطاقات")["ar"].ShouldBe("البطاقات");
         LocalizedText.FromStorage("").ShouldBeEmpty();
-        LocalizedText.UnsupportedLanguages(new Dictionary<string, string?> { ["ar"] = "x", ["fr"] = "y" }).ShouldBe(["fr"]);
     }
 
     [Fact]

@@ -81,6 +81,18 @@ public sealed class PlumbingTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task A_bare_postgres_exception_from_raw_sql_goes_through_the_same_catalog()
+    {
+        using var setup = await SetupHost.StartAsync(postgres);
+
+        var reply = await setup.CallAsync(SetupUser.CompanyAdminC1, HttpMethod.Post, $"{Test}/raw-sql-duplicate");
+
+        reply.Status.ShouldBe(409, reply.Body);
+        reply.Code.ShouldBe("service_type.prefix_taken");
+        reply.Body.ShouldNotContain("INSERT");
+    }
+
+    [Fact]
     public async Task Ac29_a_real_check_violation_is_400_request_invalid()
     {
         using var setup = await SetupHost.StartAsync(postgres);

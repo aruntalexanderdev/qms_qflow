@@ -56,6 +56,10 @@ public sealed class AuthHost : IDisposable
 
     public HttpClient Client { get; }
 
+    /// <summary>Starts the host on an existing database (a clone of a template).</summary>
+    public static AuthHost StartOn(string connectionString, string environment = "Development") =>
+        new(new QmsApiFactory(environment, connectionString: connectionString), connectionString);
+
     public static async Task<AuthHost> StartAsync(
         PostgresFixture postgres, string environment = "Development", IReadOnlyDictionary<string, string?>? extraConfiguration = null)
     {

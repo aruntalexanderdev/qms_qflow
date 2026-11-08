@@ -13,7 +13,7 @@ public sealed record CreateServiceTypeRequest(
 
 /// <summary>Body of <c>PUT /service-types/{id}</c>: every editable field and the <c>version</c> that was read.</summary>
 public sealed record UpdateServiceTypeRequest(
-    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? TargetMinutes, int SortOrder, bool IsActive, string? Version);
+    string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? TargetMinutes, int? SortOrder, bool? IsActive, string? Version);
 
 /// <summary>Service types of the company (spec section 10, ADR-008). Thin: bind, call the handler, map the result.</summary>
 [Route(ApiRoutes.Prefix + "/service-types")]

@@ -9,7 +9,7 @@ namespace Qms.Application.Common;
 /// (<c>name</c> + <c>name_translations</c> jsonb): <c>name</c> is stored in <c>name_en</c>, <c>translations["ar"]</c> in
 /// <c>name_ar</c> (empty text when absent), and any other language is refused. This class is the only place that knows the
 /// mapping; the migration story changes only <see cref="ToStorage"/>, <see cref="FromStorage"/> and
-/// <see cref="UnsupportedLanguages"/>.
+/// the language checks in <see cref="LocalizedTranslations"/>.
 /// </summary>
 public static class LocalizedText
 {
@@ -38,6 +38,11 @@ public static class LocalizedText
                 return;
             }
 
+            foreach (var duplicate in translations.Keys.GroupBy(key => key?.Trim().ToLowerInvariant() ?? string.Empty).Where(group => group.Count() > 1))
+            {
+                context.AddFailure(context.PropertyPath + "." + duplicate.Key, "The language is given more than once.");
+            }
+
             foreach (var (key, text) in translations)
             {
                 var code = key?.Trim().ToLowerInvariant() ?? string.Empty;
@@ -56,9 +61,6 @@ public static class LocalizedText
                 }
             }
         });
-
-    public static IReadOnlyList<string> UnsupportedLanguages(IReadOnlyDictionary<string, string?> translations) =>
-        [.. translations.Keys.Where(key => !string.Equals(key?.Trim(), Arabic, StringComparison.OrdinalIgnoreCase))];
 
     /// <summary>The two stored columns for a validated name and translations.</summary>
     public static (string NameEn, string NameAr) ToStorage(string name, IReadOnlyDictionary<string, string?>? translations)

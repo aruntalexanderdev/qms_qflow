@@ -57,6 +57,7 @@ public sealed class AuditDecorator<TCommand, TResult> : ICommandHandler<TCommand
 
         Result<TResult> result;
         var committed = false;
+        _postCommit.BeginCollecting();
         try
         {
             await using (var transaction = await _db.BeginTransactionAsync(cancellationToken))
@@ -68,8 +69,11 @@ public sealed class AuditDecorator<TCommand, TResult> : ICommandHandler<TCommand
                     return result;
                 }
 
+                // A tenant user is audited in its own company; a cross-tenant command (Super Admin) names the target company.
                 var companyId = _currentTenant.CompanyId
-                    ?? throw new InvalidOperationException("An audited command ran without a current company.");
+                    ?? (command as IAuditCompanyTarget)?.AuditCompanyId
+                    ?? (result.Value as IAuditCompanyTarget)?.AuditCompanyId
+                    ?? throw new InvalidOperationException("An audited command ran without a current company; implement IAuditCompanyTarget.");
                 _db.AuditLogs.Add(new AuditLog
                 {
                     CompanyId = companyId,
@@ -95,7 +99,7 @@ public sealed class AuditDecorator<TCommand, TResult> : ICommandHandler<TCommand
         }
 
         // After the commit and outside the transaction scope: a failing action can never undo the change.
-        await _postCommit.RunAsync(_logger, cancellationToken);
+        await _postCommit.RunAsync(_logger);
         return result;
     }
 

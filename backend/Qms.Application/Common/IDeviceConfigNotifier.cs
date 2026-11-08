@@ -15,3 +15,12 @@ public interface IDeviceConfigNotifier
 {
     Task ConfigChangedAsync(DeviceConfigChange change, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// For an <c>[Audited]</c> command that runs without a current company (a Super Admin in a cross-tenant section): names the
+/// company the audit row belongs to. Implement it on the command or on the result; a current tenant always wins.
+/// </summary>
+public interface IAuditCompanyTarget
+{
+    Guid AuditCompanyId { get; }
+}

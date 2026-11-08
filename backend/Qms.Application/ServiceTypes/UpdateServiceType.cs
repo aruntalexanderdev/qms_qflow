@@ -7,7 +7,7 @@ namespace Qms.Application.ServiceTypes;
 /// <summary>Replaces every editable field (no partial update). Deactivate or reactivate with <c>IsActive</c>.</summary>
 [Audited("service_type", "update")]
 public sealed record UpdateServiceTypeCommand(
-    Guid Id, string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? TargetMinutes, int SortOrder, bool IsActive, string? Version);
+    Guid Id, string? Name, IReadOnlyDictionary<string, string?>? Translations, string? Prefix, int? TargetMinutes, int? SortOrder, bool? IsActive, string? Version);
 
 public sealed class UpdateServiceTypeValidator : AbstractValidator<UpdateServiceTypeCommand>
 {
@@ -17,7 +17,9 @@ public sealed class UpdateServiceTypeValidator : AbstractValidator<UpdateService
         RuleFor(command => command.Translations).LocalizedTranslations();
         RuleFor(command => command.Prefix).PrefixLetter();
         RuleFor(command => command.TargetMinutes).GreaterThan(0).When(command => command.TargetMinutes is not null);
-        RuleFor(command => command.SortOrder).SortOrder();
+        RuleFor(command => command.SortOrder).Sent();
+        RuleFor(command => command.SortOrder).GreaterThanOrEqualTo(0).When(command => command.SortOrder is not null).WithMessage("'{PropertyName}' must be 0 or more.");
+        RuleFor(command => command.IsActive).Sent();
         RuleFor(command => command.Version).RowVersionText();
     }
 }
@@ -51,13 +53,13 @@ public sealed class UpdateServiceTypeHandler(
         db.Entry(row).Property(r => r.RowVersion).OriginalValue = version;
 
         var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
-        var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != command.IsActive;
+        var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != command.IsActive!.Value;
         row.NameEn = nameEn;
         row.NameAr = nameAr;
         row.Prefix = prefix;
         row.TargetMinutes = command.TargetMinutes;
-        row.SortOrder = command.SortOrder;
-        row.IsActive = command.IsActive;
+        row.SortOrder = command.SortOrder!.Value;
+        row.IsActive = command.IsActive!.Value;
         await db.SaveChangesAsync(cancellationToken);
 
         if (devicesAffected)

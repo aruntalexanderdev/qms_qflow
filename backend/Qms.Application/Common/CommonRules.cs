@@ -22,6 +22,10 @@ public static class CommonRules
     public static IRuleBuilderOptions<T, int> SortOrder<T>(this IRuleBuilder<T, int> rule) =>
         rule.GreaterThanOrEqualTo(0).WithMessage("'{PropertyName}' must be 0 or more.");
 
+    /// <summary>A field a full-replacement <c>PUT</c> must send (a missing value is never defaulted): required.</summary>
+    public static IRuleBuilderOptions<T, TProperty?> Sent<T, TProperty>(this IRuleBuilder<T, TProperty?> rule) =>
+        rule.NotNull().WithMessage("'{PropertyName}' is required.");
+
     /// <summary>A money amount (when given): 0 to 9 999 999 999.99 with at most two decimals.</summary>
     public static IRuleBuilderOptions<T, decimal?> Money<T>(this IRuleBuilder<T, decimal?> rule) =>
         rule.Must(value => value is null || (value >= 0 && value <= MoneyMax && decimal.Round(value.Value, 2) == value))

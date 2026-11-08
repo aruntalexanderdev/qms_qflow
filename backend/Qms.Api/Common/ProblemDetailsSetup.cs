@@ -76,6 +76,11 @@ public sealed partial class GlobalExceptionHandler : IExceptionHandler
                 LogDatabaseError(postgres.SqlState, postgres.ConstraintName, method, path);
                 outcome = (ResultExtensions.StatusFor(mapped.Type), "The request conflicts with existing data or is not valid.", mapped.Code);
                 break;
+            case PostgresException postgres when PostgresErrorCatalog.Map(postgres.SqlState, postgres.ConstraintName) is { } mapped:
+                // Raw SQL throws the PostgresException itself. Constraint name and SQLSTATE only: the message of the exception carries SQL and values.
+                LogDatabaseError(postgres.SqlState, postgres.ConstraintName, method, path);
+                outcome = (ResultExtensions.StatusFor(mapped.Type), "The request conflicts with existing data or is not valid.", mapped.Code);
+                break;
             case TenantViolationException { Reason: TenantViolationReason.OtherCompany or TenantViolationReason.CompanyChanged } violation:
                 // Not the exception itself: its message names the entity type. The reason is enough for the security log.
                 LogTenantViolation(violation.Reason, method, path);

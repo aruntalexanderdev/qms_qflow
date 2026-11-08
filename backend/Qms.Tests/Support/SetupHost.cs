@@ -28,7 +28,8 @@ public sealed class SetupHost : IDisposable
 
     public static async Task<SetupHost> StartAsync(PostgresFixture postgres)
     {
-        var host = await AuthHost.StartAsync(postgres);
+        // A clone of the template with the setup data already in it; EnsureAsync then only finds what exists.
+        var host = AuthHost.StartOn(await postgres.NewSetupDatabaseAsync());
         return new SetupHost(host, await SetupTestData.EnsureAsync(host));
     }
 
