@@ -57,7 +57,7 @@ Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an
 ### M4 Admin web
 | Story | Title |
 | --- | --- |
-| STORY-023 | Company setup screens: service types, priority types (fee), company mapping grid |
+| STORY-023 | Company setup screens: service types, priority types (fee), company mapping grid (**first**: STORY-004 review S7 — interceptor must fail the request when the pre-request refresh returns `signed-out`/`user-changed`; plus N8, N9) |
 | STORY-024 | Branch screens: details, hours, calendar, settings, fee override, branch mapping grid |
 | STORY-025 | Zones, counters, counter mapping grid, service flows |
 | STORY-026 | Devices screen with dispenser preview, ticket templates, users |

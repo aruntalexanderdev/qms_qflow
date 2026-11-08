@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | Code Review |
+| Status | QA |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -465,4 +465,55 @@ Notes for next stage:
 - Consequences: "response lost" now covers a reload or tab close during a refresh; new accepted limit: a hidden tab's grace timer may be throttled to about 1 s.
 - Numbering A.1–A.8 kept, so the existing code comments (A.4, A.6) still point to the right items.
 - ADR-004 unchanged. S6 is closed; returns to stage 6 for the rest of the review.
+Open questions: none
+
+### Stage 6 — Code review (round 2) — code-reviewer — 2026-11-08
+Result: Approved
+Builds/tests: backend N/A (not touched) · web ✅ (`npm ci`; `npm run lint` clean, ESLint + Stylelint; `npm test -- --watch=false` 13 files / 88 tests green, 3 runs stable; `npm run build` green, 453.34 kB initial / 114.48 kB transfer, no warnings) · android N/A
+Scope reviewed: `git diff 6e7fe4f HEAD -- frontend docs/adr/ADR-007-web-session-handling.md` (commits 01a7712, 08be692).
+Also checked by the reviewer, with Playwright + Chromium against the production build and a stubbed API (real Web Locks and BroadcastChannel). Evidence is in the session scratchpad `review2/`.
+- M1: a Tab-focused language button shows the full ring on all four sides, for both buttons, in en and ar (`focus-lang-en.png`, `focus-lang2-en.png`, `focus-lang-ar.png`, `focus-lang2-ar.png`). `.switch` computes `overflow: visible`, and the outer corners are rounded with logical radii.
+- S1 drawer (800px wide, en and ar):
+  - opening with Enter moves focus to the first nav link;
+  - `.shell__column` gets `inert`;
+  - Tab and Shift+Tab stay in the drawer (only one live link today);
+  - Escape, a backdrop click and a link click each close it and return focus to the menu button, with `inert` removed;
+  - resizing to desktop while the drawer is open leaves no `inert` behind.
+  Desktop (1280px): the sidebar is 280px at the inline start (right in ar), the trap is inactive, and the Tab order is normal (`shell-desktop-en.png`).
+- axe-core (wcag2a, wcag2aa, wcag21a, wcag21aa, best-practice) on login, shell and drawer, en and ar: no violations; the round-1 `region` finding is gone.
+- S2:
+  - The polling loop and the 3 ms threshold are gone. Contention comes from the `ifAvailable` probe, and the queued tab waits once (an event from `onMessage`, or one 150 ms timer). The uncontended path calls `refreshInsideLock(…, false)` and never waits.
+  - e2e, two tabs, 3 runs: start-up sends 1 refresh; both tabs navigating at the same moment with a stale token send exactly 1 refresh, and both stay signed in; sign-out in one tab ends both on `/login`.
+  - New specs cover a broadcast that arrives after the lock is released, and no wait when the lock is free.
+- S3:
+  - A refresh that returns another `user.id` clears the tab, broadcasts and navigates to `/` (`user-changed`). The interceptor's 401 path never retries on `signed-out`, on `user-changed`, or on a store user that differs from the request's user. Tested.
+  - `authGuard` handles `user-changed` correctly (store cleared, so it returns `/login`). `restore()` cannot return it (no current user at start-up).
+  - The pre-request path in the interceptor does not handle it: see S7.
+- S4: `isApiCall` requires `origin === location.origin`. Tests cover an absolute same-origin URL (bearer sent) and `https://evil.example/api/…` (no bearer, and its 401 does not trigger a refresh).
+- S5: the language buttons render 44px high and at least 44px wide. N1: `<header>`, `<aside>` and `<main>` landmarks are in place (tested). N3: the 36px tiles use `--qms-size-control-height-sm`. No raw px, hex or physical-direction CSS was added. N6: test added.
+- ADR-007: A.1–A.8 spot-checked against `session-coordinator.ts`, `session-environment.ts`, `auth.interceptor.ts`, `auth.guards.ts` and `auth.service.ts`. They match: "newer" by `validUntil`, re-checked inside the lock; the probe and the grace wait; message shapes; the user-switch rule; the no-replay rule on the 401 path; the refresh triggers; same-origin scope; a failed logout keeps the session; behaviour without Web Locks. The one gap is noted in S7.
+- AC-15 e2e: when the refresh is rejected with `auth.refresh_reused`, both tabs end on `/login` with `errors.auth.refresh_reused` shown. This holds both when one tab triggers it and when both tabs trigger it at once.
+ACs checked: AC-1 ✅, AC-2 ✅, AC-3 ✅, AC-4 ✅, AC-5 ✅, AC-6 ✅, AC-7 ✅ (no change since round 1; QA runs `docker compose up --build`), AC-8 ✅ (M1 fixed; axe clean), AC-9 ✅, AC-10 ✅, AC-11 ✅ (e2e above), AC-12 ✅, AC-13 ✅, AC-14 ✅, AC-15 ✅, AC-16 ✅ (code unchanged on that path), AC-17 ✅, AC-18 ✅
+
+Must fix
+- none
+
+Should fix
+- S7 [stage 4] frontend/src/app/core/auth/auth.interceptor.ts:60-72 — `prepare` ignores the outcome of `ensureFresh()`. If the pre-request refresh returns `user-changed`, or `signed-out` (that case already existed in round 1), the store is cleared, but the original request is still sent without a bearer. Its 401 then triggers a second refresh. A unit probe confirmed both cases (the probe spec was deleted afterwards):
+  - `user-changed`: the second refresh is `refreshed`, so the tab silently adopts the new user. ADR-007 A.4 says the tab does not adopt it itself and ends on `/login`. There is still no replay under another identity, because the request gets its 401.
+  - `refresh_reused`: the second refresh's 401 (`refresh_invalid`) resets `endedReason` to null and broadcasts `signed-out` with no reason. The login page usually captured the reason already, but that depends on timing.
+  Latent today: STORY-004 makes no data API calls, and AC-15 passes through the `authGuard` path. → In `prepare`, fail the call with a 401 `HttpErrorResponse` without sending it when the outcome is `signed-out` or `user-changed`. Add both tests. Do this before the first story that calls data endpoints, or as a follow-up task.
+
+Nice to have
+- N8 [stage 4] session-coordinator.ts:185-215, 222-237 — Only an adopted `session` message wakes the grace wait. A `signed-out` message, or a user-switch message, does not. The queued tab then waits the full 150 ms and sends its own refresh. The e2e showed one extra `refresh_invalid` 401 when both tabs hit `refresh_reused` at the same time. This is harmless, and the message still shows. → Wake waiters on any message, and skip the refresh when the tab was signed out while it was queued.
+- N9 [stage 4] Two tests are weak:
+  - `session-coordinator.spec.ts` "does not wait for a broadcast when the lock was free" checks wall-clock time against < 100 ms, which can flake on a slow CI runner. Use fake timers, or assert that no timer was scheduled.
+  - `language-switch.component.spec.ts` compares the `minBlockSize` string, not the rendered size; the Playwright check above covers the real size.
+- Still open from round 1, for follow-up: N2 (Stylelint for inline styles), N4 (`app.title` / `<title>` in ar), N5 (pin image tags; nginx resolver), N7 (72px icon rail once icons exist).
+
+Notes for next stage: QA (stage 7) runs AC-1 to AC-18 against the real stack (`docker compose up --build`, Chrome or Edge on `http://localhost:4200`). Look closely at:
+- AC-7: the image build was not verifiable in the sandbox;
+- AC-8: keyboard-only pass over the language switch and the drawer below 1024px, in en and ar;
+- AC-11 and AC-15 with two tabs.
+S7, N8 and N9 do not block. Raise them as follow-up tasks if stage 4 does not fix them before the first data-endpoint story.
 Open questions: none
