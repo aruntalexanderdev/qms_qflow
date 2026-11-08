@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-005 |
-| Status | Database |
+| Status | Backend |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 4 (entities), 4.1 (priority types table), 5.1 step 2, 6 (Paid priority), 8 (Company Admin; `/admin/service-types`, `/admin/priority-types`), 9 (`service_type`, `priority_type`, `audit_log`), 10 (`/service-types`, `/priority-types`), 11 (Audit, Security), 12 (M2) |
@@ -271,3 +271,16 @@ Notes for next stage:
 - Rules not in the DB but required by the validators: unpaid priority type must have no fee; fee max 2 decimals and 0 to 9 999 999 999.99; prefix is not upper-cased silently.
 - Defaults 1 to 7 in section 10 follow the architect's proposals; no rule was invented beyond ADR-008.
 Open questions: none blocking; product owner items in section 10 (companies story, prefix change after tokens, paid to unpaid overrides, ADR-008 acceptance before stage 3 merge).
+
+### Stage 2 — Database — database-architect — 2026-11-08
+Result: Done
+Changed: backend/Qms.Domain/Entities/Common/Entity.cs, backend/Qms.Infrastructure/Persistence/Configurations/EntityConfiguration.cs, backend/Qms.Infrastructure/Persistence/Migrations/20261108072029_RowVersion.cs (+ .Designer.cs, QmsDbContextModelSnapshot.cs), backend/Qms.Tests/Persistence/RowVersionTests.cs (new), backend/Qms.Tests/Persistence/TenantIntegrityTests.cs (one test adjusted), docs/work/tasks/TASK-009-xmin-row-version-model.md
+Notes for next stage:
+- Row version = `public uint RowVersion { get; set; }` on the Domain base class `Entity` (plain CLR property, no package dependency), mapped in `EntityConfiguration<T>` to column `xmin`, type `xid`, `IsRowVersion()` (ValueGenerated OnAddOrUpdate). Applies to all 27 entity tables (tenant and non-tenant, including refresh_token and audit_log); AppUser/AppRole keep `ConcurrencyStamp`.
+- Read: `version` string from `entity.RowVersion` (it is a uint; the DTO string is yours to encode, e.g. decimal). After `SaveChanges` EF reads the new `xmin` back into `RowVersion` (tested).
+- Write / check a client version: load the tracked entity, then `db.Entry(entity).Property(e => e.RowVersion).OriginalValue = clientVersion;` before `SaveChangesAsync`. A mismatch gives `DbUpdateConcurrencyException` (tested). Do not assign `RowVersion` itself; it is database generated.
+- UPDATE and DELETE now filter on `id`, `company_id` and `xmin` (tested through the logged SQL). `CompanyId` keeps `IsConcurrencyToken` + `AfterSaveBehavior = Throw` (N9 model test added).
+- DELETE (ADR-008: "DELETE takes no version"): load the row (tracked or AsNoTracking) before `Remove`; a hand-built stub with `RowVersion = 0` now matches 0 rows and throws `DbUpdateConcurrencyException`. I changed the existing test `A_detached_row_of_the_current_company_can_still_be_updated_and_removed` accordingly (it now reads the row first). Never delete via a stub entity.
+- Migration `RowVersion` has empty Up/Down. EF generated `AddColumn xmin` for each table (the property is new to its model); PostgreSQL rejects a column named like a system column, so I removed those operations by hand before anything was applied. The snapshot and designer carry the model; `HasPendingModelChanges` is false. Do not regenerate it. A test asserts the migration has no operations and no table has a real `xmin` column.
+- Set hash for whole-set resources: read `RowVersion` of each tracked row (sorted by id) after `SELECT ... FOR UPDATE` on the parent.
+Open questions: none. Spec section 9 unchanged (no ADR request needed).

@@ -6,7 +6,7 @@
 | Story | STORY-005 |
 | Stage | 2 Database |
 | Agent | database-architect |
-| Status | To do |
+| Status | Done |
 | Estimate | S |
 | Created | 2026-11-08 |
 
@@ -29,12 +29,12 @@ Give every entity an optimistic-concurrency row version using the PostgreSQL sys
 - Provides to: TASK-010 (stage 3) uses the row version for `version`, `PUT` conflict (409) and the set hash.
 
 ## 5. Done checklist
-- [ ] Code follows common project rules
-- [ ] Tests added and passing (list them below)
-- [ ] Bilingual text added (en + ar) if user-facing — N/A, no user-facing text
-- [ ] No business logic outside `Qms.Application`
-- [ ] Spec / ADR updated if behaviour changed
-- [ ] Handoff written in the story's Stage log
+- [x] Code follows common project rules
+- [x] Tests added and passing (list them below)
+- [x] Bilingual text added (en + ar) if user-facing — N/A, no user-facing text
+- [x] No business logic outside `Qms.Application`
+- [x] Spec / ADR updated if behaviour changed
+- [x] Handoff written in the story's Stage log
 
 ## 6. Tests
 - `SchemaTests`: `HasPendingModelChanges` false; the migration's `Up`/`Down` produce no operations; `information_schema.columns` identical before and after (no `xmin` column added by EF).
@@ -44,4 +44,8 @@ Give every entity an optimistic-concurrency row version using the PostgreSQL sys
 - Existing STORY-002 and STORY-003 tests stay green.
 
 ## 7. Notes / result
-<Filled by the agent when done.>
+Done 2026-11-08. `Entity.RowVersion` (uint) in Domain, mapped to `xmin`/`xid` with `IsRowVersion()` once in `EntityConfiguration<T>` (ADR-008 decision; Domain stays dependency-free). Migration `20261108072029_RowVersion` has empty Up/Down: EF generated AddColumn xmin per table, which PostgreSQL rejects for a system column, so the operations were removed before applying.
+
+Tests added in `backend/Qms.Tests/Persistence/RowVersionTests.cs`: every entity maps RowVersion to xmin; N9 (every ITenantEntity has CompanyId concurrency token + AfterSaveBehavior Throw); UPDATE SQL filters on company_id and xmin; stale xmin on update and on delete throws DbUpdateConcurrencyException; client version via OriginalValue; no real xmin column; RowVersion migration has no operations. `SchemaTests.The_model_has_no_changes...` still green. One existing test (`TenantIntegrityTests.A_detached_row_of_the_current_company_can_still_be_updated_and_removed`) now reads the row before removing it because DELETE filters on xmin.
+
+Result: `dotnet build backend/Qms.slnx -c Release` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` Passed 254, Failed 0, Skipped 0.

@@ -393,8 +393,9 @@ public sealed class TenantIntegrityTests(PostgresFixture postgres)
         (await db.SaveChangesAsync()).ShouldBe(1);
 
         db.ChangeTracker.Clear();
-        var stub = new Counter { Id = world.CounterB, CompanyId = SeedIds.Company1, Name = "stub" };
+        // STORY-005: DELETE also filters on xmin, so a detached row carries the row version it was read with.
         await using var other = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
+        var stub = await other.Counters.AsNoTracking().SingleAsync(c => c.Id == world.CounterB);
         other.Counters.Remove(stub);
         (await other.SaveChangesAsync()).ShouldBe(1);
 
