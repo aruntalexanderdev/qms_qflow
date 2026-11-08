@@ -193,19 +193,21 @@ No screen in this story; the screens `/admin/service-types` and `/admin/priority
 - Tests support: `SetupTestData` (§15) with Company 2, Branch 2 in Company 1, users CA-C1, CA-C2, BM-B1, BM-B2, Counter Staff, Super Admin, and a token helper.
 
 **Backend — endpoints (spec §10 + ADR-008 §2 item routes)**
-| Method | Route | Roles | Notes |
+(Amended 2026-11-08: the access column is now the permission, resolved from the role by the static map until STORY-048.)
+
+| Method | Route | Permission (roles) | Notes |
 |---|---|---|---|
-| GET | `/api/v1/service-types` | CA, BM | sorted `sortOrder`, `nameEn`; `?isActive=` |
-| GET | `/api/v1/service-types/{id}` | CA, BM | 404 `service_type.not_found` (also other company) |
-| POST | `/api/v1/service-types` | CA | 201; 409 `service_type.prefix_taken` |
-| PUT | `/api/v1/service-types/{id}` | CA | `version` required; 409 `request.conflict`; deactivate via `isActive` |
-| DELETE | `/api/v1/service-types/{id}` | CA | 409 `service_type.in_use` (company mapping, flows, dispenser mapping, tokens) |
-| GET | `/api/v1/priority-types` | CA, BM | sorted `priorityLevel`, `prefix`; includes `isPaid`, `feeAmount`, company `currencyCode` |
-| GET | `/api/v1/priority-types/{id}` | CA, BM | 404 `priority_type.not_found` |
-| POST | `/api/v1/priority-types` | CA | `feeAmount` required when `isPaid`, must be empty when not paid; 409 `priority_type.prefix_taken` |
-| PUT | `/api/v1/priority-types/{id}` | CA | same rules + `version` |
-| DELETE | `/api/v1/priority-types/{id}` | CA | 409 `priority_type.in_use` (company mapping, branch fees, tokens) |
-- DTOs: `ServiceTypeDto { id, nameEn, nameAr, prefix, targetMinutes?, sortOrder, isActive, version }`, `PriorityTypeDto { id, nameEn, nameAr, prefix, priorityLevel, isPaid, feeAmount?, currencyCode, isActive, version }`.
+| GET | `/api/v1/service-types` | `service-types.view` (CA, BM) | sorted `sortOrder`, `name`; `?isActive=` |
+| GET | `/api/v1/service-types/{id}` | `service-types.view` | 404 `service_type.not_found` (also other company) |
+| POST | `/api/v1/service-types` | `service-types.create` (CA) | 201; 409 `service_type.prefix_taken` |
+| PUT | `/api/v1/service-types/{id}` | `service-types.edit` (CA) | `version` required; 409 `request.conflict`; deactivate via `isActive` |
+| DELETE | `/api/v1/service-types/{id}` | `service-types.delete` (CA) | 409 `service_type.in_use` (company mapping, flows, dispenser mapping, tokens) |
+| GET | `/api/v1/priority-types` | `priority-types.view` (CA, BM) | sorted `priorityLevel`, `prefix`; includes `isPaid`, `feeAmount`, company `currencyCode` |
+| GET | `/api/v1/priority-types/{id}` | `priority-types.view` | 404 `priority_type.not_found` |
+| POST | `/api/v1/priority-types` | `priority-types.create` (CA) | `feeAmount` required when `isPaid`, must be empty when not paid; 409 `priority_type.prefix_taken` |
+| PUT | `/api/v1/priority-types/{id}` | `priority-types.edit` (CA) | same rules + `version` |
+| DELETE | `/api/v1/priority-types/{id}` | `priority-types.delete` (CA) | 409 `priority_type.in_use` (company mapping, branch fees, tokens) |
+- DTOs (amended 2026-11-08): `ServiceTypeDto { id, name, translations, prefix, targetMinutes?, sortOrder, isActive, version }`, `PriorityTypeDto { id, name, translations, prefix, priorityLevel, isPaid, feeAmount?, currencyCode, isActive, version }`. Requests send `name` and optional `translations`. Temporary storage mapping until STORY-051: `name` to `name_en`, `translations.ar` to `name_ar`.
 - Audit: every create/update/delete writes `audit_log` (`service_type` / `priority_type`, `create` / `update` / `delete`).
 - `IDeviceConfigNotifier` call after commit when a name, prefix, `isActive`, `isPaid` or fee changes (no-op in M2).
 - SignalR: none (M3). Background jobs: none.
@@ -233,7 +235,7 @@ No screen in this story; the screens `/admin/service-types` and `/admin/priority
 - **Concurrency:** `xmin` row version; two admins editing one row get 409, never a silent overwrite.
 - **Data:** money is `numeric(12,2)` and serialised as a JSON number with at most 2 decimals; timestamps UTC.
 - **Compatibility:** no change to existing auth contracts; enum string serialisation affects no current contract. No migration data change.
-- **Privacy / bilingual:** names always stored in both languages (rules 7).
+- **Privacy / localisation (amended 2026-11-08):** English `name` is always stored; translations are optional and, in phase 1, only `ar` is accepted (ADR-010, rules 7).
 
 ## 10. Open questions
 Decided with the architect's defaults (proposals accepted for this story unless the product owner objects; none blocks stages 2 and 3):
@@ -247,6 +249,8 @@ Decided with the architect's defaults (proposals accepted for this story unless 
 - [ ] **Product owner — companies are not in any M2 story.** Spec §10 lists `CRUD /companies` and §8 gives Super Admin "Companies, licences, global settings", and M4 has `/admin/companies`, but the backlog has no story for the companies API or for creating a new company's first Company Admin. Today only the seed creates Company 1 and its admin. Proposal: add a story to M2 (next free id STORY-047, "Companies and Company Admin provisioning", Super Admin, `[CrossTenant]`). Not blocking this story.
 - [ ] Product owner — prefix change after tokens exist. The token keeps its prefixes (`token.priority_prefix`, `service_prefix`), but if prefix `A` is moved to another service type on the same business date, the new type's sequence restarts at 0001 and its first token collides with an issued `NA0001` (unique `token (branch_id, business_date, number)`). Proposal for M2: prefixes are editable; M3 (STORY-014) maps that collision to 409. Alternative: lock the prefix once any token exists. Not blocking.
 - [ ] Product owner — a priority type changed from paid to not paid keeps its branch fee overrides (`branch_priority_fee`). Proposal: allowed; overrides are ignored while not paid and apply again if it becomes paid. Not blocking.
+- Decided 2026-11-08 (product owner): localisation (ADR-010: `name` + `translations`, Arabic no longer required) and permissions (ADR-009: `service-types.*`, `priority-types.*` from a static map). AC-1, 3, 4, 5, 7, 10, 12, 15, 16, 17, 25 are amended; BR-1, 2, 4, 12 restated.
+- [ ] **Backend (stage 3) / code review — error-code mismatch.** The built code and its tests use `translations.unsupported_language` (`LocalizedText.UnsupportedLanguageCode`) for every non-`ar` key and do not distinguish the key `en`. The decided contract (ADR-010 §5, ADR-008 §8) is `translation.language_not_enabled` (unsupported key) and `translation.default_language_key` (`en` key), errors keyed `translations.<code>`. AC-5 (k, l) and AC-17 (k, l) test the decided contract and will fail until the code is corrected; STORY-051 notes the same rename. Needs a fix by the backend stage via code review.
 - [ ] Note: ADR-008 is Proposed; the product owner accepts it (and the §10 route additions) before the stage 3 merge.
 
 ## 11. Stage log
@@ -295,4 +299,13 @@ Notes for next stage:
 - Plumbing for later M2 stories: handlers inject `IQmsDbContext`; mark commands `[Audited("entity","action")]` (+ `[NotAudited]` on secrets); load -> check version (`CommonRules.DecodeVersion`, `RowVersionCodec`, set `Entry(row).Property(r => r.RowVersion).OriginalValue`) -> change -> save; call `IBranchScope.EnsureAccessAsync` after loading the target; announce device changes with `IPostCommitActions.Enqueue(ct => notifier.ConfigChangedAsync(...))`; add constraint names to `PostgresErrorCatalog` (a test checks they exist); tests use `SetupHost.StartAsync(postgres)` (`SetupTestData`, `CallAsync(SetupUser, ...)`, `AuditRowsAsync`).
 - Product owner: master records get `is_active` on all tables (service/priority types already have it); localisation storage migration (`name`/`name_translations`) will change only `LocalizedText`.
 Open questions: none. Stages 4 and 5 are N/A (orchestrator logs them). ADR-008 and the spec section 10 item routes were not edited by this stage.
+
+### Stage 1 — Analysis (amendment: localisation + permissions) — business-analyst — 2026-11-08
+Result: Done
+Changed: this story only (BR-1, BR-2, BR-4, BR-12; AC-1, 3, 4, 5, 7, 10, 12, 15, 16, 17, 25 marked "amended 2026-11-08"; sections 6, 7, 9, 10). Status unchanged (Frontend). TASK-009 and TASK-010 not edited.
+Notes for next stage:
+- Contract for QA: names are `name` + `translations`; `translations: { "ar": "…" }` accepted (temporary until STORY-051), `{ "fr": "…" }` is 400 `translation.language_not_enabled`, `{ "en": "…" }` is 400 `translation.default_language_key`, errors keyed `translations.<code>`; Arabic is optional and empty values are dropped. Endpoints are guarded by `service-types.*` / `priority-types.*` permissions from a static map; outcomes per user are unchanged.
+- MISMATCH: the shipped code returns `translations.unsupported_language` and treats `en` like any unsupported key. The ACs follow ADR-010; expect AC-5 (k, l) and AC-17 (k, l) to fail until the backend renames the code and adds `translation.default_language_key` (see section 10).
+- TASK-010 still describes `translations.unsupported_language` and the old role wording; it was not edited by instruction.
+Open questions: backend error-code mismatch (section 10).
 - Follow-up (ADR-010): error code `translations.unsupported_language` renamed to `translation.language_not_enabled`; the `en` key gives `translation.default_language_key`; field errors are keyed `translations.<code>`.
