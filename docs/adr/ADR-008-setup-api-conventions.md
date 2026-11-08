@@ -1,6 +1,6 @@
 # ADR-008 — Setup API conventions (milestone M2)
 
-Status: Proposed
+Status: Accepted with changes (product owner, 2026-11-08) — see Amendment 1; §9 superseded by ADR-009
 Date: 2026-11-08
 Story: STORY-005 to STORY-013 (M2 Setup API)
 
@@ -53,7 +53,7 @@ All under `/api/v1`. Collections keep the spec §10 shape (nested under their pa
 - Warnings (only spec §4.4 today): a successful save returns `warnings: [{ code, … }]` next to `rows`; `GET` returns the same warnings.
 
 ### 7. Delete, deactivate and database errors
-- Every CRUD entity has `DELETE`. Entities with `is_active` (service type, priority type, branch, user) are also deactivated through `PUT`. Delete succeeds only while nothing references the row; history (tokens, visits) keeps rows forever, which is why deactivation exists.
+- Every CRUD entity has `DELETE`. Entities with `is_active` (company, service type, priority type, branch, zone, counter, device, role, user; Amendment 1) are also deactivated through `PUT`. Delete succeeds only while nothing references the row; history (tokens, visits) keeps rows forever, which is why deactivation exists.
 - Handlers pre-check references for a friendly 409 with a specific code. The database stays the backstop: `GlobalExceptionHandler` maps a `DbUpdateException` whose inner `PostgresException` is
   - 23001 / 23503 (foreign key, restrict) → **409**, code from a constraint-name catalog, default `resource.in_use`;
   - 23505 (unique) → **409**, catalog code (e.g. `service_type.prefix_taken`), default `resource.duplicate`;
@@ -68,7 +68,9 @@ All under `/api/v1`. Collections keep the spec §10 shape (nested under their pa
 - Validation failure → 400 `validation.failed` with `errors` (existing behaviour).
 
 ### 9. Authorization (spec §8)
-Declared on controllers with role policies; branch scope in handlers (§10).
+**Superseded by ADR-009 (Amendment 1).** Endpoints are protected with `[RequirePermission("<module>.<action>")]`, never with a role name; the table below is now the **default grant** of the seeded roles (ADR-009 §4), editable per company. Branch scope in handlers (§10) is unchanged.
+
+Original table (kept for reference; reproduced by the seeded default roles):
 
 | Area | Read (`GET`) | Write |
 |---|---|---|
@@ -79,7 +81,7 @@ Declared on controllers with role policies; branch scope in handlers (§10).
 | Users | Company Admin | Company Admin |
 | Own language (`PUT /auth/me/language`) | — | any signed-in user |
 
-- Super Admin has no company: every tenant setup endpoint returns **403 `auth.forbidden`** (no `[CrossTenant]` handler in M2). Counter Staff gets 403 on all setup endpoints.
+- Super Admin has no company and no company permissions: every tenant setup endpoint returns **403 `auth.forbidden`**. Its only M2 endpoints are the companies API (STORY-047, `[CrossTenant]`). Counter Staff (default role) gets 403 on all setup endpoints.
 - Not signed in → 401 `auth.unauthorized` (fallback policy, unchanged).
 
 ### 10. Branch scope (ADR-003 decision 4, first implementation)
@@ -112,7 +114,7 @@ Handlers that change what a dispenser or display shows (branch mapping, branch h
 - STORY-005 carries the shared plumbing (sections 1, 3, 5, 7, 9–12, 15) and is the first M2 story; the others build on it.
 - EF Core in `Qms.Application` couples use cases to EF's LINQ, accepted for less boilerplate; the queue engine (M3) may still use raw SQL behind the same port.
 - `version` in the body (not `If-Match`) keeps the Angular forms simple; the API is not HTTP-cache friendly, which a setup API does not need.
-- Deactivation instead of delete leaves rows with history in place; zones, counters and devices have no `is_active` (spec §9), so they are retired by leaving them unused (devices: regenerate the registration code to revoke the key).
+- Deactivation instead of delete leaves rows with history in place. Since Amendment 1 zones, counters and devices have `is_active` too, so every master record can be retired without losing history.
 
 ## Spec impact
 No business rule changes. Additions to section 10 (to be written into the spec after the product owner accepts this ADR):
@@ -120,3 +122,25 @@ No business rule changes. Additions to section 10 (to be written into the spec a
 - `POST /devices/{id}/registration-code` (new code, revokes the device key; ADR-004 §7), `POST /users/{id}/password` (admin sets a password), `PUT /auth/me/language` (ADR-007 B.4), `GET /ticket-templates/{id}/preview` (STORY-013).
 - `/branches/{id}/hours` is a whole-week `GET`/`PUT` instead of per-row CRUD.
 Section 9 is not changed by this ADR (the row version is the system column `xmin`).
+Applied to spec §10 on 2026-11-08 (Amendment 1).
+
+## Amendment 1 — Accepted with changes (product owner, 2026-11-08)
+The product owner accepted this ADR with two changes. Sections not named here stand as written.
+
+### A. Authorization becomes permission-based (replaces §9)
+- Roles are configurable per company; endpoints require permissions `<module>.<action>` resolved per request from the database (ADR-009). The §9 table is the default grant of the seeded roles Company Admin, Branch Manager / Supervisor and Counter Staff (ADR-009 §4).
+- Super Admin stays a fixed system role, checked by role on the companies API only.
+- Integration tests (§15) keep the same cases; "403 for Counter Staff" means "403 for a user without the permission". From STORY-048 on, each endpoint also gets one test proving that granting the permission to a custom role opens it and revoking it closes it on the next request.
+- Former open questions resolved by configuration: Branch Manager rights on branch details (STORY-007) and flow editing (STORY-010) keep the §9 defaults; a company may grant more.
+
+### B. `is_active` on every master record (extends §7)
+- Company, branch, zone, counter, service type, priority type and device have `is_active` (zone, counter and device are new columns: STORY-009, STORY-012). Roles have it too (ADR-009).
+- Inactive masters are hidden from dispensers, consoles and displays (M3 reads) but keep their history and stay in setup lists (`isActive` field, `?isActive=` filter). Delete is still allowed only while nothing references the row (§7 unchanged).
+- Like inactive types (§7, last bullet), new rows may not reference an inactive zone, counter or device: a counter created in or moved to an inactive zone, a dispenser row with an inactive zone, a new user assignment to an inactive counter → 400 `<entity>.inactive`. Existing rows stay valid.
+- Consistency rules (interpretation): a zone can be deactivated only when none of its counters is active (409 `zone.has_active_counters`), and never when it is the branch's last active zone (409 `zone.last_active_zone`); a counter can be deactivated only while Closed (409 `counter.not_closed`); an inactive device is refused by the device endpoints (M3 STORY-015, 403 `device.inactive`).
+
+### C. Smaller rules confirmed (product owner, 2026-11-08)
+One flow per from-service (STORY-010, now also a unique index); overlapping calendar entries rejected (STORY-007); an assigned counter must lie in one of the user's branches (STORY-011); a Company Admin cannot demote, deactivate or delete their own account (STORY-011, ADR-009 §7); usernames unique across all companies (STORY-011).
+
+### D. Spec impact (amendment)
+Spec §8, §9, §10 and §13 updated on 2026-11-08: the "Spec impact" route additions above are now in §10; §9 gains `is_active` on zone, counter and device.

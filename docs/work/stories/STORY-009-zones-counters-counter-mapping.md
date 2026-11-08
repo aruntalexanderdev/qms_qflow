@@ -31,9 +31,14 @@ To be completed by the BA. (Screens are M4 STORY-025.)
 ## 7. Data and API impact
 **Spec:** sections 4, 4.3, 4.4, 6, 8, 9, 10, 13. No business rule changes. ADR-008 §14: the last zone of a branch cannot be deleted.
 
+**Amendment 2026-11-08 (product owner decisions, ADR-009, ADR-008 Amendment 1 B):**
+- Permissions (the "Roles" column below is the default grant; CA and the Branch Manager role have all of them by default): `zones.view/create/edit/delete`, `counters.view/create/edit/delete` (incl. `GET /branches/{id}/counters`), `counter-service-mapping.view/edit`. Branch scope unchanged.
+- `is_active` on zones and counters: `PUT` bodies gain `isActive`; DTOs return it; lists accept `?isActive=`. Rules (ADR-008 Amendment 1 B): a counter created in or moved to an inactive zone → 400 `zone.inactive`; a zone can be deactivated only when none of its counters is active (409 `zone.has_active_counters`) and never when it is the branch's last active zone (409 `zone.last_active_zone`); a counter can be deactivated only while Closed (409 `counter.not_closed`); saving the service mapping of an inactive counter is allowed (prepare before activation). Inactive zones/counters are hidden from consoles, dispensers and displays in M3; history kept; delete rules unchanged.
+- Audit: activation changes are ordinary `update` rows.
+
 **Database**
 - Tables: `zone` (branch_id, name_en, name_ar, sort_order), `counter` (branch_id, zone_id, name, number ≥ 1 unique per branch, status, current_user_id; composite FK zone in same branch), `counter_service_priority` (branch_id, counter_id, service_type_id, priority_type_id; unique `(counter_id, service_type_id, priority_type_id)`; FKs to counter and branch mapping); read `branch_service_priority`, `device`, `dispenser_zone_service`, `token_visit`, `user_counter` for in-use checks; `audit_log`.
-- **Schema change: none.** Note: zones and counters have no `is_active` (spec §9); a counter with history cannot be deleted and stays Closed (ADR-008 Consequences).
+- **Schema change: yes (stage 2, product owner 2026-11-08):** `zone.is_active` and `counter.is_active` (boolean, not null, default true; existing rows true), migration e.g. `ZoneCounterActive`; entity property `IsActive` on `Zone` and `Counter`. Spec §9 updated.
 
 **Backend**
 | Method | Route | Roles | Notes |
@@ -57,10 +62,10 @@ To be completed by the BA. (Screens are M4 STORY-025.)
 ## 8. Stage plan (filled by architect, stage 0)
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
-| 0 Architect | Yes | — | ADR-008 |
+| 0 Architect | Yes | — | ADR-008 (+ Amendment 1), ADR-009 |
 | 1 BA | Yes | — | BA may split stage 3 into zones/counters CRUD and counter mapping |
-| 2 Database | N/A | — | Tables, keys and composite FKs exist (STORY-002) |
-| 3 Backend | Yes | BA creates | Zone and counter CRUD, counter mapping grid, chain validation, tests |
+| 2 Database | Yes | BA creates | `zone.is_active`, `counter.is_active` + migration (product owner 2026-11-08); other tables, keys and composite FKs exist (STORY-002) |
+| 3 Backend | Yes | BA creates | Zone and counter CRUD incl. active flag rules, counter mapping grid, chain validation, permission attributes, tests; after STORY-048 |
 | 4 Frontend | N/A | — | Screens are M4 (STORY-025) |
 | 5 Android | N/A | — | No device API change |
 | 6 Code review | Yes | — | |
@@ -70,7 +75,7 @@ To be completed by the BA. (Screens are M4 STORY-025.)
 To be completed by the BA.
 
 ## 10. Open questions
-- [ ] Product owner (low) — zones and counters have no `is_active` in spec §9, so a counter or zone that served tokens can never be removed from lists (delete is refused by history). Proposal: accept for phase 1 (a counter stays Closed); add `is_active` later if branches ask. Not blocking.
+- [x] **Resolved 2026-11-08:** `is_active` added to zones and counters (ADR-008 Amendment 1 B). Original question: Product owner (low) — zones and counters have no `is_active` in spec §9, so a counter or zone that served tokens can never be removed from lists (delete is refused by history). Proposal: accept for phase 1 (a counter stays Closed); add `is_active` later if branches ask. Not blocking.
 - [ ] None else. Counter `name` stays a single (not bilingual) column as in spec §9 (STORY-002 decision 5).
 
 ## 11. Stage log
@@ -83,3 +88,13 @@ Notes for next stage:
 - `GET /branches/{branchId}/counters` is an addition beyond the §10 table (covered by ADR-008 §2 nested lists); list it in the ADR-008 spec impact when the spec is updated.
 - Counter session fields (`status`, `current_user_id`) belong to M3 STORY-016; setup never writes them.
 Open questions: `is_active` for zones/counters (low); none blocks analysis.
+
+### Stage 0 — Architecture review (amendment) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (sections 7, 8, 10); ADR-009 (new); ADR-008 Amendment 1; `docs/PROJECT_SPEC.md` §9 (approved)
+Notes for next stage:
+- Stage 2 now applies: `is_active` on `zone` and `counter`. The BA creates a stage 2 task.
+- Active-flag rules (zone/counter consistency, Closed-only counter deactivation) are in section 7; they are interpretations recorded in ADR-008 Amendment 1 B.
+- Permission codes listed in section 7; depends on STORY-048 too.
+- STORY-012's dispenser-mapping warning counts only **active** counters of the zone.
+Open questions: none.

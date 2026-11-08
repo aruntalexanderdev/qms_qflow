@@ -31,6 +31,10 @@ To be completed by the BA. (Grid screen is M4 STORY-023.)
 ## 7. Data and API impact
 **Spec:** sections 4.1, 8, 9, 10. No business rule changes.
 
+**Amendment 2026-11-08 (ADR-009, ADR-008 Amendment 1):** authorization is permission-based.
+- Permissions `service-mapping.view` (default: Company Admin, Branch Manager role) and `service-mapping.edit` (default: Company Admin); the role column below is the default grant.
+- Inactive service / priority types still cannot be used in new rows (`mapping.type_inactive`, ADR-008 §7, unchanged).
+
 **Database**
 - Tables: `company_service_priority` (company_id, service_type_id, priority_type_id; alternate key `(company_id, service_type_id, priority_type_id)`, composite FKs to `service_type` / `priority_type`); read `branch_service_priority` for the in-use check; `company` row locked for the set version (ADR-008 §5); `audit_log`.
 - **Schema change: none.**
@@ -53,7 +57,7 @@ To be completed by the BA. (Grid screen is M4 STORY-023.)
 ## 8. Stage plan (filled by architect, stage 0)
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
-| 0 Architect | Yes | — | ADR-008 |
+| 0 Architect | Yes | — | ADR-008 (+ Amendment 1), ADR-009 |
 | 1 BA | Yes | — | |
 | 2 Database | N/A | — | Table, keys and composite FKs exist (STORY-002) |
 | 3 Backend | Yes | BA creates | GET/PUT grid, chain checks, tests |
@@ -77,3 +81,10 @@ Notes for next stage:
 - Depends on STORY-005 (plumbing, types). Small story; the grid pattern built here (diff, parent lock, set version, row errors) is reused by STORY-008, STORY-009 (counter mapping) and STORY-012 (dispenser mapping), so keep it as a reusable helper.
 - Spec §10 says "CRUD"; ADR-008 §2 makes it a whole-set GET/PUT like the other grids.
 Open questions: none
+
+### Stage 0 — Architecture review (amendment) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (section 7, 8)
+Notes for next stage:
+- Endpoints use `[RequirePermission]` with the codes in section 7 (ADR-009 catalog); depends on STORY-048 as well. Stage plan otherwise unchanged.
+Open questions: none.

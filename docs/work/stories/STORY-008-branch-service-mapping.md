@@ -31,6 +31,10 @@ To be completed by the BA. (Grid screen is M4 STORY-024.)
 ## 7. Data and API impact
 **Spec:** sections 4.2–4.4, 6, 8, 9, 10. No business rule changes.
 
+**Amendment 2026-11-08 (ADR-009, ADR-008 Amendment 1):** authorization is permission-based.
+- Permissions `branch-service-mapping.view` / `.edit` (default: Company Admin and Branch Manager role, own branches via `IBranchScope`); the role column below is the default grant.
+- Inactive service / priority types still cannot be used in new rows (`mapping.type_inactive`, ADR-008 §7, unchanged).
+
 **Database**
 - Tables: `branch_service_priority` (branch_id, service_type_id, priority_type_id, max_tokens_per_day 1–9999 `ck_branch_service_priority_max_tokens`, is_available; alternate key `(branch_id, service_type_id, priority_type_id)`; FK `fk_branch_service_priority_company_service_priorities_company_`); read `company_service_priority`, `counter_service_priority`, `dispenser_zone_service`, `service_flow` for checks; `branch` row locked for the set version; `audit_log`.
 - **Schema change: none.**
@@ -53,7 +57,7 @@ To be completed by the BA. (Grid screen is M4 STORY-024.)
 ## 8. Stage plan (filled by architect, stage 0)
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
-| 0 Architect | Yes | — | ADR-008 |
+| 0 Architect | Yes | — | ADR-008 (+ Amendment 1), ADR-009 |
 | 1 BA | Yes | — | |
 | 2 Database | N/A | — | Table, alternate key and composite FKs exist (STORY-002) |
 | 3 Backend | Yes | BA creates | GET/PUT grid on the STORY-006 grid helper, chain checks, tests |
@@ -77,3 +81,10 @@ Notes for next stage:
 - Depends on STORY-006 (company mapping + grid helper) and STORY-007 (branches, `IBranchScope` usage).
 - The "service in use by a dispenser or flow" check is Application-only: those rows reference the service type, not the pair, so no FK protects it (STORY-002 note).
 Open questions: none
+
+### Stage 0 — Architecture review (amendment) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (section 7, 8)
+Notes for next stage:
+- Endpoints use `[RequirePermission]` with the codes in section 7 (ADR-009 catalog); depends on STORY-048 as well. Stage plan otherwise unchanged.
+Open questions: none.

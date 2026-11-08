@@ -31,9 +31,14 @@ To be completed by the BA. (Screen is M4 STORY-025.)
 ## 7. Data and API impact
 **Spec:** sections 4, 6, 8, 9, 10, 13. No business rule changes.
 
+**Amendment 2026-11-08 (product owner decisions, ADR-009):**
+- Permissions `service-flows.view/create/edit/delete`; the "Roles" column below is the default grant (Company Admin all, Branch Manager role view). Open question 1 resolved by configuration: a company may grant edit to its Branch Manager role.
+- One flow per from-service per branch confirmed: pre-check 409 `flow.from_service_taken`, database unique index as backstop (stage 2). `flow.duplicate` is now covered by the same rule.
+- Inactive service types: a new flow may not reference one (400 `mapping.type_inactive`, ADR-008 §7).
+
 **Database**
 - Tables: `service_flow` (branch_id, from_service_type_id, to_service_type_id, mode; unique `(branch_id, from_service_type_id, to_service_type_id)`; check `ck_service_flow_different_services`; composite FKs to branch and service types); read `branch_service_priority`; `audit_log`.
-- **Schema change: none.** (If the product owner wants at most one flow per from-service enforced by the database, stage 2 would add a unique index `(branch_id, from_service_type_id)`; default is an Application check, see open questions.)
+- **Schema change: yes (stage 2).** One flow per from-service is confirmed (product owner 2026-11-08), so the database enforces it: replace unique `(branch_id, from_service_type_id, to_service_type_id)` with unique `ux_service_flow_branch_id_from_service_type_id` `(branch_id, from_service_type_id)` (the old index becomes redundant), migration e.g. `ServiceFlowOneFromService`. `PostgresErrorCatalog`: that index → 409 `flow.from_service_taken`. Seed has no flow rows, so no data fix.
 
 **Backend**
 | Method | Route | Roles | Notes |
@@ -54,10 +59,10 @@ To be completed by the BA. (Screen is M4 STORY-025.)
 ## 8. Stage plan (filled by architect, stage 0)
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
-| 0 Architect | Yes | — | ADR-008 |
+| 0 Architect | Yes | — | ADR-008 (+ Amendment 1), ADR-009 |
 | 1 BA | Yes | — | |
-| 2 Database | N/A | — | Table, unique key and check exist (STORY-002); see open question 2 |
-| 3 Backend | Yes | BA creates | Flow CRUD, chain validation, tests |
+| 2 Database | Yes | BA creates | Unique index `(branch_id, from_service_type_id)` replacing the three-column unique + catalog entry (one flow per from-service, confirmed 2026-11-08) |
+| 3 Backend | Yes | BA creates | Flow CRUD, chain validation, permission attributes, tests; after STORY-048 |
 | 4 Frontend | N/A | — | Screen is M4 (STORY-025) |
 | 5 Android | N/A | — | No device API change |
 | 6 Code review | Yes | — | |
@@ -67,8 +72,8 @@ To be completed by the BA. (Screen is M4 STORY-025.)
 To be completed by the BA.
 
 ## 10. Open questions
-- [ ] **Product owner — who edits flows.** Spec §8 lists flows among the admin screens but neither under Company Admin nor under Branch Manager in the role table. ADR-008 §9 default: Company Admin writes, Branch Manager reads own branches. Confirm, or let the Branch Manager edit flows of their own branches (they already edit the counter mapping). Not blocking.
-- [ ] **Product owner — more than one next service.** Spec §4/§6 describe "the next service" (singular) and the Ask button is "Complete & send to X". The schema allows several rows per from-service, which makes Auto ambiguous. Default: at most one flow per from-service per branch (409 `flow.from_service_taken`, Application check). Confirm; if several targets for Ask are wanted, M5 needs a choice list. Not blocking.
+- [x] **Resolved 2026-11-08 by configurable roles (ADR-009):** default Company Admin edits, Branch Manager role reads; configurable. Original question: **Product owner — who edits flows.** Spec §8 lists flows among the admin screens but neither under Company Admin nor under Branch Manager in the role table. ADR-008 §9 default: Company Admin writes, Branch Manager reads own branches. Confirm, or let the Branch Manager edit flows of their own branches (they already edit the counter mapping). Not blocking.
+- [x] **Resolved 2026-11-08:** one flow per from-service, enforced by a unique index. Original question: **Product owner — more than one next service.** Spec §4/§6 describe "the next service" (singular) and the Ask button is "Complete & send to X". The schema allows several rows per from-service, which makes Auto ambiguous. Default: at most one flow per from-service per branch (409 `flow.from_service_taken`, Application check). Confirm; if several targets for Ask are wanted, M5 needs a choice list. Not blocking.
 - [ ] Note: cycles (A → B and B → A) are allowed; each step needs a staff Complete, so no automatic loop. The BA may state this as a rule.
 
 ## 11. Stage log
@@ -81,3 +86,11 @@ Notes for next stage:
 - STORY-008 must refuse removing the last pair of a service used by a flow (already in its section 7).
 - Mode `None` keeps a stored but inactive flow (spec §6); the BA states it.
 Open questions: flow editing rights, one flow per from-service; none blocks analysis.
+
+### Stage 0 — Architecture review (amendment) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (sections 7, 8, 10); ADR-009 (new); ADR-008 Amendment 1; `docs/PROJECT_SPEC.md` §9, §13 (approved)
+Notes for next stage:
+- Stage 2 now applies: unique index `(branch_id, from_service_type_id)` replaces the three-column unique; catalog maps it to `flow.from_service_taken`. The BA creates a stage 2 task.
+- Flow editing rights come from permissions (default as before). Depends on STORY-048 too.
+Open questions: none.

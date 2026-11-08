@@ -31,6 +31,13 @@ To be completed by the BA. (Branch screens are M4 STORY-024.)
 ## 7. Data and API impact
 **Spec:** sections 4, 6, 8, 9, 10, 11, 13. No business rule changes. Interpretations in ADR-008 §14 (default "Main zone" and settings on create) and §2 (hours as a whole week).
 
+**Amendment 2026-11-08 (product owner decisions, ADR-009, ADR-008 Amendment 1):**
+- Authorization is permission-based. The "Roles" column below is the **default grant**; endpoints declare permissions: `branches.view/create/edit/delete` (details), `branch-hours.view/edit` (hours **and** calendar), `branch-settings.view/edit`, `branch-fees.view/edit`. Read for the Branch Manager role by default; a company may grant the Branch Manager role edit rights (open question 1 resolved by configuration). "Own branches" = `IBranchScope` (role branch scope `Company` or `Assigned` + `user_branch`), unchanged order 404 → 403.
+- The branch list returns all branches for a user with `Company` scope and only assigned ones for `Assigned` scope (`AccessibleBranchIdsAsync`, no longer a role check).
+- Overlapping calendar entries are **rejected** (confirmed): 409 `branch_calendar.overlap` on POST and PUT; Application check under a `SELECT … FOR UPDATE` lock on the branch row (no exclusion constraint, no `btree_gist`).
+- Deactivating a branch hides it from devices and consoles (M3); inactive branch stays readable in setup.
+- Integration tests: per ADR-008 Amendment 1 A, one grant/revoke test (custom role with `branch-hours.edit` can save hours; revoked → 403 on the next request).
+
 **Database**
 - Tables: `branch` (name_en, name_ar, code unique per company, timezone, is_active), `branch_hours` (day_of_week, open_time, close_time; unique `(branch_id, day_of_week, open_time)`; split shifts allowed), `branch_calendar` (date_from, date_to, type Holiday/SpecialHours, open_time, close_time; checks `ck_branch_calendar_date_range`, `ck_branch_calendar_special_hours_times`), `branch_setting` (one per branch: recall_limit, skip_default, block_when_no_counter, wait_alert_minutes), `branch_priority_fee` (unique `(branch_id, priority_type_id)`, fee ≥ 0), `zone` (default "Main zone" inserted on create), `audit_log`.
 - **Schema change: none.** All columns and constraints exist.
@@ -45,7 +52,7 @@ To be completed by the BA. (Branch screens are M4 STORY-024.)
 | DELETE | `/api/v1/branches/{id}` | CA | removes its own default rows (setting, empty zones, hours, calendar, fees) only if nothing else references the branch; else 409 `branch.in_use` (deactivate instead) |
 | GET / PUT | `/api/v1/branches/{id}/hours` | GET CA, BM (own); PUT CA | whole week `{ version, rows: [{ dayOfWeek, openTime, closeTime }] }`; close after open; no overlapping intervals on a day → 400 `branch_hours.overlap` |
 | GET / POST | `/api/v1/branches/{id}/calendar` | GET CA, BM (own); POST CA | entry `{ dateFrom, dateTo, type, openTime?, closeTime? }`; times required for SpecialHours, forbidden for Holiday; `?from=&to=` filter |
-| GET / PUT / DELETE | `/api/v1/branches/{id}/calendar/{entryId}` | GET CA, BM (own); PUT/DELETE CA | overlapping entries → 409 `branch_calendar.overlap` (open question) |
+| GET / PUT / DELETE | `/api/v1/branches/{id}/calendar/{entryId}` | GET CA, BM (own); PUT/DELETE CA | overlapping entries → 409 `branch_calendar.overlap` (confirmed 2026-11-08) |
 | GET / PUT | `/api/v1/branches/{id}/settings` | GET CA, BM (own); PUT CA | `{ recallLimit, skipDefault, blockWhenNoCounter, waitAlertMinutes?, version }` |
 | GET / PUT | `/api/v1/branches/{id}/priority-fees` | GET CA, BM (own); PUT CA | GET lists every **paid** priority type with `companyFee`, `overrideFee?`, `currencyCode`; PUT `{ version, rows: [{ priorityTypeId, feeAmount }] }` — omitted type = no override; a non-paid or other-company type → 400 `branch_priority_fee.priority_not_paid` / unknown |
 - Audit on every write (`branch`, `branch_hours`, `branch_calendar`, `branch_setting`, `branch_priority_fee`; create/update/delete).
@@ -59,10 +66,10 @@ To be completed by the BA. (Branch screens are M4 STORY-024.)
 ## 8. Stage plan (filled by architect, stage 0)
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
-| 0 Architect | Yes | — | ADR-008 |
+| 0 Architect | Yes | — | ADR-008 (+ Amendment 1), ADR-009 |
 | 1 BA | Yes | — | |
 | 2 Database | N/A | — | All tables, columns and checks exist (STORY-002) |
-| 3 Backend | Yes | BA creates | Branch CRUD, hours, calendar, settings, priority fees, tests |
+| 3 Backend | Yes | BA creates | Branch CRUD, hours, calendar (overlap rejected), settings, priority fees, permission attributes, tests; after STORY-048 |
 | 4 Frontend | N/A | — | Branch screens are M4 (STORY-024) |
 | 5 Android | N/A | — | No device API change |
 | 6 Code review | Yes | — | |
@@ -72,8 +79,8 @@ To be completed by the BA. (Branch screens are M4 STORY-024.)
 To be completed by the BA.
 
 ## 10. Open questions
-- [ ] **Product owner — Branch Manager rights on branch details.** Spec §8 gives "Branches … working hours, holidays, special hours, branch settings … fee override" to the Company Admin and does not list them for the Branch Manager. ADR-008 §9 therefore lets the Branch Manager **read** their own branches only. Confirm, or allow the Branch Manager to edit hours / calendar / settings of their own branches. Not blocking (default = read only).
-- [ ] Product owner — overlapping calendar entries (e.g. a holiday inside a Ramadan special-hours range). Proposal: reject overlaps (409 `branch_calendar.overlap`) so M3 has one answer per date. Alternative: allow, with Holiday winning over SpecialHours. Not blocking.
+- [x] **Resolved 2026-11-08 by configurable roles (ADR-009):** default stays read-only for the Branch Manager role; a company may grant edit. Original question: **Product owner — Branch Manager rights on branch details.** Spec §8 gives "Branches … working hours, holidays, special hours, branch settings … fee override" to the Company Admin and does not list them for the Branch Manager. ADR-008 §9 therefore lets the Branch Manager **read** their own branches only. Confirm, or allow the Branch Manager to edit hours / calendar / settings of their own branches. Not blocking (default = read only).
+- [x] **Resolved 2026-11-08:** overlaps rejected. Original question: Product owner — overlapping calendar entries (e.g. a holiday inside a Ramadan special-hours range). Proposal: reject overlaps (409 `branch_calendar.overlap`) so M3 has one answer per date. Alternative: allow, with Holiday winning over SpecialHours. Not blocking.
 - [ ] Product owner — the default zone created with a new branch (ADR-008 §14, from spec §4 "A branch with one zone gets a default Main zone"). Confirm the names "Main zone" / "المنطقة الرئيسية". Not blocking.
 - [ ] Carried from STORY-002 QA: Branch 1 sample working hours (seed uses Sunday–Thursday 08:00–15:00; spec §4 lists none). Not blocking.
 
@@ -88,3 +95,11 @@ Notes for next stage:
 - Branch create writes three tables in one transaction (branch, setting, zone) under one audit row; the zone row is visible to STORY-009.
 - Delete: the FKs restrict (23001), so the handler deletes the branch's own setting/hours/calendar/fees/empty default zone first and maps any remaining reference to 409 `branch.in_use`.
 Open questions: Branch Manager rights, calendar overlaps, default zone names, sample hours; none blocks analysis.
+
+### Stage 0 — Architecture review (amendment) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (sections 7, 8, 10); ADR-009 (new); ADR-008 Amendment 1; `docs/PROJECT_SPEC.md` §8–§13 (approved)
+Notes for next stage:
+- Product owner decisions applied: permission-based authorization (permission codes listed in section 7), BM rights now come from the seeded Branch Manager role (default read-only), calendar overlaps rejected.
+- Now depends on STORY-048 as well (permission catalog, DB resolver, role branch scope). Stage plan unchanged (no schema change).
+Open questions: default zone names, sample hours (unchanged, not blocking).

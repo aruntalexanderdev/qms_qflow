@@ -24,7 +24,7 @@ Follow-ups folded in (from earlier stage logs):
 - **STORY-003 stage 3 follow-up**: a deactivated user's access token lives up to 15 minutes — deactivation revokes the user's refresh-token families so the session ends at the next refresh.
 - **STORY-004 / ADR-007 B.4**: endpoint for a signed-in user to save their own language.
 
-Depends on STORY-005 (plumbing), STORY-007 (branches) and STORY-009 (counters).
+Depends on STORY-005 (plumbing), STORY-007 (branches), STORY-009 (counters), STORY-048 (roles, `user_role`, lock-out guard) and STORY-049 (password policy validator).
 
 ## 3. Scope
 To be completed by the BA.
@@ -41,9 +41,19 @@ To be completed by the BA. (Users screen is M4 STORY-026; the shell language swi
 ## 7. Data and API impact
 **Spec:** sections 2, 8, 9, 10, 11, 13. No business rule changes. Password policy is a security setting (open question 1).
 
+**Amendment 2026-11-08 (product owner decisions, ADR-009) — supersedes the conflicting lines below:**
+- **Roles come from STORY-048.** A user holds **one or more** company roles (`user_role`), not an Identity role. Request bodies carry `roleIds: Guid[]` (at least one → 400 `user.role_required`; each an existing role of the caller's company → 404 `role.not_found`; inactive roles may be kept but not newly assigned → 400 `role.inactive`). The `role` field and the "one role per user" rule are gone; `GET /users` filters by `?roleId=`. Super Admin is never assignable (it is not a company role).
+- **Assignments follow the effective branch scope** (ADR-009 §5): `branchIds` / `counterIds` only when every assigned active role has `Assigned` scope (any role with `Company` scope → no assignments, 400 `user.assignment_invalid`). Counter assignments are no longer limited to "Counter Staff": any Assigned-scope user may have counters. **Confirmed:** every assigned counter's branch must be in `branchIds` (400 `user.counter_outside_branches`). A newly assigned counter must be active (400 `counter.inactive`, ADR-008 Amendment 1 B).
+- **Self-protection confirmed and extended:** no user can change their own roles, deactivate or delete their own account (409 `user.cannot_change_self`). The STORY-048 lock-out guard also runs on user changes: 409 `role.last_admin` if the company would keep no active user with `roles.edit` + `users.edit` and `Company` scope.
+- **Passwords** are checked with STORY-049's `IPasswordPolicyValidator` (company policy incl. history); create and admin reset set `password_changed_at` and add a `password_history` row. The policy itself is no longer decided here (open question 1 resolved).
+- **Usernames unique across all companies — confirmed** (409 `user.user_name_taken`).
+- **Permissions** (default grant: Company Admin): `users.view` (GET), `users.create` (POST), `users.edit` (PUT), `users.delete` (DELETE), `users.reset-password` (`POST /users/{id}/password`). The "Roles" column below is the default grant. `PUT /auth/me/language` needs no permission.
+- Role changes take effect on the user's next request (ADR-009 §6); deactivation still revokes refresh families.
+- Integration tests add: two roles → union of permissions; Company-scope + assignments → 400; self role change → 409; last admin → 409; counter outside branches → 400; password reuse within history → 400.
+
 **Database**
 - Tables: `asp_net_users` (company_id, display_name, language `ck_asp_net_users_language`, is_active, user_name unique — Identity normalises user names **globally**, across companies), `asp_net_user_roles`, `user_branch`, `user_counter` (tenant rows; composite and raw-SQL FKs from `UserAssignmentCompany`), `refresh_token` (revoke on deactivate / password reset), `audit_log`.
-- **Schema change: none.** Password policy and Identity options are configuration in `Qms.Infrastructure/DependencyInjection.cs` (stage 3, as in STORY-003).
+- **Schema change: none in this story.** `user_role` comes from STORY-048, `password_policy` / `password_history` / `password_changed_at` from STORY-049.
 
 **Backend**
 | Method | Route | Roles | Notes |
@@ -74,10 +84,10 @@ To be completed by the BA. (Users screen is M4 STORY-026; the shell language swi
 ## 8. Stage plan (filled by architect, stage 0)
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
-| 0 Architect | Yes | — | ADR-008; ADR-003 Amendment 1 B; ADR-007 B.4 |
+| 0 Architect | Yes | — | ADR-008 (+ Amendment 1); ADR-009; ADR-003 Amendment 1 B; ADR-007 B.4 |
 | 1 BA | Yes | — | |
-| 2 Database | N/A | — | All user and assignment columns and constraints exist (STORY-002, STORY-003 `UserAssignmentCompany`); password policy is configuration, not schema |
-| 3 Backend | Yes | BA creates | User CRUD, assignments, password policy and reset, language endpoint, 23503 mapping proof, tests |
+| 2 Database | N/A | — | User and assignment tables exist (STORY-002, STORY-003); `user_role` is built by STORY-048 and the password tables by STORY-049 |
+| 3 Backend | Yes | BA creates | User CRUD with one or more roles, assignments by branch scope, self-protection and last-admin guard, password reset via the company policy, language endpoint, 23503 mapping proof, tests; after STORY-048 and STORY-049 |
 | 4 Frontend | N/A | — | Users screen is M4 (STORY-026); calling the language endpoint from the shell switch is an M4 follow-up (BACKLOG note) |
 | 5 Android | N/A | — | No device API change |
 | 6 Code review | Yes | — | |
@@ -87,11 +97,11 @@ To be completed by the BA. (Users screen is M4 STORY-026; the shell language swi
 To be completed by the BA.
 
 ## 10. Open questions
-- [ ] **Product owner — password policy** (STORY-003 follow-up). Today: Identity default (6 characters, upper, lower, digit, symbol). Proposal for a bank: at least 12 characters with upper case, lower case and a digit; symbols optional; no forced expiry; lockout unchanged (5 / 15 min, ADR-004). Stage 3 applies the proposal unless the product owner decides otherwise before stage 3. Not blocking analysis.
-- [ ] **Product owner — who creates Company Admins of a new company** (see STORY-005 question on companies). This story lets a Company Admin manage users of their own company only; Super Admin user management needs the companies story. Not blocking.
-- [ ] Product owner — counter assignments must lie inside the user's assigned branches (default above). Confirm. Not blocking.
-- [ ] Product owner — self-protection (a Company Admin cannot deactivate, delete or demote themselves, so a company always keeps an admin). Confirm. Not blocking.
-- [ ] Note: user names are unique across all companies (Identity normalised user name). A bank deployment has one company in practice; confirm this is acceptable. Not blocking.
+- [x] **Resolved 2026-11-08:** per-company policy, own story STORY-049 (ADR-009 §8). Original question: **Product owner — password policy** (STORY-003 follow-up). Today: Identity default (6 characters, upper, lower, digit, symbol). Proposal for a bank: at least 12 characters with upper case, lower case and a digit; symbols optional; no forced expiry; lockout unchanged (5 / 15 min, ADR-004). Stage 3 applies the proposal unless the product owner decides otherwise before stage 3. Not blocking analysis.
+- [x] **Resolved 2026-11-08:** Super Admin, STORY-047 `POST /companies/{id}/admin-users`. Original question: **Product owner — who creates Company Admins of a new company** (see STORY-005 question on companies). This story lets a Company Admin manage users of their own company only; Super Admin user management needs the companies story. Not blocking.
+- [x] **Resolved 2026-11-08 (confirmed).** Product owner — counter assignments must lie inside the user's assigned branches (default above). Confirm. Not blocking.
+- [x] **Resolved 2026-11-08 (confirmed; extended to all users and to own roles, ADR-009 §7).** Product owner — self-protection (a Company Admin cannot deactivate, delete or demote themselves, so a company always keeps an admin). Confirm. Not blocking.
+- [x] **Resolved 2026-11-08 (confirmed).** Note: user names are unique across all companies (Identity normalised user name). A bank deployment has one company in practice; confirm this is acceptable. Not blocking.
 
 ## 11. Stage log
 
@@ -104,3 +114,12 @@ Notes for next stage:
 - `asp_net_users` writes bypass the tenant guard: the reviewer will grep every user query for the company predicate.
 - The ADR-008 audit decorator transaction must enclose the `UserManager` calls (same scoped `QmsDbContext`).
 Open questions: password policy (default applies), Company Admin provisioning, counter-inside-branches rule, self-protection, global user names; none blocks analysis.
+
+### Stage 0 — Architecture review (amendment) — project-architect — 2026-11-08
+Result: Done
+Changed: this story (sections 2, 7, 8, 10); ADR-009 (new); ADR-008 Amendment 1; `docs/PROJECT_SPEC.md` §8–§13 (approved)
+Notes for next stage:
+- The amendment block at the top of section 7 overrides the original lines where they conflict (role field, one role per user, CounterStaff-only counters, password policy).
+- Users now get one or more roles from STORY-048; assignments depend on the effective branch scope; self-protection and last-admin guard reuse STORY-048's guard; passwords go through STORY-049's validator.
+- New dependencies: STORY-048 and STORY-049. Stage 2 stays N/A.
+Open questions: none open (all five resolved 2026-11-08).
