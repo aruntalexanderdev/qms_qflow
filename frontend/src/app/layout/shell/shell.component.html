@@ -5,11 +5,16 @@
   [class.shell--collapsed]="collapsed()"
   [class.shell--drawer-open]="drawerVisible()"
 >
-  <qms-sidebar id="qms-sidebar" class="shell__sidebar" [role]="role()" (navigated)="closeDrawer()" />
+  <aside id="qms-sidebar" class="shell__sidebar" [cdkTrapFocus]="drawerVisible()">
+    <qms-sidebar #sidebar [role]="role()" (navigated)="closeDrawer()" />
+  </aside>
   <div class="shell__backdrop" aria-hidden="true" (click)="closeDrawer()"></div>
 
-  <div class="shell__column">
-    <qms-topbar [navExpanded]="navExpanded()" (menuToggle)="toggleNav()" />
+  <!-- Inert while the drawer is open: nothing behind the backdrop can take focus. -->
+  <div class="shell__column" [attr.inert]="drawerVisible() ? '' : null">
+    <header>
+      <qms-topbar [navExpanded]="navExpanded()" (menuToggle)="toggleNav()" />
+    </header>
     <main id="qms-main" class="shell__main" tabindex="-1">
       <div class="shell__content">
         <router-outlet />

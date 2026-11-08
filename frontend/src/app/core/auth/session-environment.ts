@@ -2,7 +2,11 @@ import { InjectionToken } from '@angular/core';
 
 /** The part of `navigator.locks` the app uses. Replaced by a fake in tests. */
 export interface LockManagerLike {
-  request<T>(name: string, options: { mode: 'exclusive' }, callback: () => Promise<T>): Promise<T>;
+  request<T>(
+    name: string,
+    options: { mode: 'exclusive'; ifAvailable?: boolean },
+    callback: (lock: unknown) => Promise<T>,
+  ): Promise<T>;
 }
 
 /** The part of `BroadcastChannel` the app uses. A tab does not receive its own messages. */

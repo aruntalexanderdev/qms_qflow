@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | Frontend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -423,3 +423,27 @@ Nice to have
 
 Notes for next stage: Back to stage 4 for M1. S1–S5 should be fixed in the same loop if cheap; otherwise they become follow-up tasks. S6 goes to the architect. Then return to stage 6.
 Open questions: none
+
+### Stage 4 — Frontend (review loop 1) — frontend-developer — 2026-11-08
+Result: Done
+Changed: frontend/src/app/shared/language-switch.component.{scss,ts spec}, core/auth/{session-coordinator,session-environment,auth.interceptor}.ts and specs, layout/{shell,topbar,sidebar}, features/auth/login (landmark, 36px token), frontend/src/testing/auth-fakes.ts
+Fixed:
+- M1: `.switch` no longer has `overflow: hidden`; first and last button carry the logical rounded corners. Playwright focus screenshots (en, ar) show the full ring: `.../scratchpad/focus-lang-en.png`, `focus-lang-ar.png`. A component test asserts the container does not clip.
+- S1: drawer (below 1024px) moves focus to the first nav link when it opens, traps focus (`cdkTrapFocus`), makes the page column `inert`, and on close (Escape, backdrop, link) returns focus to the menu button after the render that removes `inert`.
+- S2: no more polling or 3 ms threshold. Contention is detected with an `ifAvailable` lock probe. A queued tab waits for the broadcast as an event (`onMessage` wakes it) or one 150 ms timeout. An uncontended refresh never waits.
+- S3: a refresh that returns another `user.id` than the tab had resets the tab (clear, broadcast, go to `/`) and returns the new outcome `user-changed`. The interceptor does not retry when the outcome is `signed-out` or `user-changed`, or when the user in the store differs from the one the request was sent under; the original 401 is returned.
+- S4: the bearer goes only to relative URLs or URLs on `location.origin` under `/api/`.
+- S5: language buttons are 44px high with a 44px minimum width (`--qms-size-control-height`).
+- N1: `<header>` around the top bar, `<aside>` around the sidebar, `<header>` around the login language switch. N3: the 36px tiles use `--qms-size-control-height-sm`. N6: test added (sign-out in tab A while tab B is queued: B ends signed out on `/login`, no message).
+Verified (real runs): `npm run lint` clean; `npm test -- --watch=false` 13 files / 88 tests green; `npm run build` green, 453.34 kB initial / 114.48 kB transfer, no warnings. E2E (API + postgres:18 + ng serve, Playwright): two expired tabs navigating together send exactly 1 refresh; reloading both: both stay signed in with 1 refresh; axe (wcag2a/aa, wcag21a/aa, best-practice) on login, shell and drawer in en and ar: no violations (the earlier moderate `region` is gone); drawer focus in, inert background, Tab stays inside, Escape returns focus to the menu button, en and ar. Containers and processes cleaned up.
+Notes for the architect (S6): final coordinator behaviour to record in ADR-007:
+- A.2: a session is "newer" when its `validUntil` (local epoch ms = arrival time + `expiresIn`) is later than the `validUntil` of the session that needed refreshing (null at start-up). Tokens are not compared (two tokens issued in the same second are identical). Newer must also be fresh (more than 30 s left).
+- A.4: the `session` message is `{ type, accessToken, validUntil, expiresAt, user }`; `validUntil` is valid across tabs because they share the PC clock. `signed-out` is `{ type, reason? }`, with `reason` = `auth.refresh_reused` only. A received `session` with a different `user.id` clears the tab and navigates to `/`; in practice the tab ends on `/login` because `authGuard` does not restore a cleared tab, and the login page adopts the next session broadcast.
+- Lock use: login, refresh and logout all run under `qms-auth-session`. A probe with `ifAvailable` tells whether the call had to queue. Only a queued refresh waits, for at most 150 ms, for the previous holder's broadcast (event-driven, then one timeout) before sending its own request. Inside the lock it first re-checks for a newer session.
+- Refresh result: a refresh response whose `user.id` differs from the tab's current user applies the same rule as a broadcast (reset, broadcast, go to `/`), outcome `user-changed`. The interceptor then fails the original request instead of retrying it.
+- When to refresh: at start-up; before an API call when the token expires within 30 s; once after a 401 (retry once, never under another identity); and in `authGuard` on every navigation (`runGuardsAndResolvers: 'always'`, still no background timers).
+- Interceptor scope: only same-origin `/api/` URLs get the bearer; `/auth/login|refresh|logout` never.
+- Sign-out: if `POST /auth/logout` fails (network or 5xx) the user stays signed in with an error message.
+- Extend the accepted "response lost" consequence to a reload or tab close during a refresh.
+Open questions: none
+

@@ -27,8 +27,8 @@
 .login__logo {
   display: grid;
   place-items: center;
-  inline-size: 36px;
-  block-size: 36px;
+  inline-size: var(--qms-size-control-height-sm);
+  block-size: var(--qms-size-control-height-sm);
   border-radius: var(--qms-radius-md);
   background: var(--qms-brand-primary);
   color: var(--qms-brand-on-primary);

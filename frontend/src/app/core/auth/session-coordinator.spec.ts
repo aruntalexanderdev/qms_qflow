@@ -202,4 +202,56 @@ describe('SessionCoordinator', () => {
     await Promise.all([coordinator.refresh(null), coordinator.refresh(null)]);
     expect(server.refreshCalls).toBe(1);
   });
+
+  it('a queued tab adopts a broadcast that arrives after the lock was released (event-driven, one refresh)', async () => {
+    const a = openTab();
+    const b = openTab();
+    // Hold back every broadcast until we release it by hand, like a slow cross-process delivery.
+    const held: (() => void)[] = [];
+    hub.deliver = (from, message) => {
+      for (const endpoint of hub['endpoints'] as Set<{ onmessage: ((e: MessageEvent) => void) | null }>) {
+        if (endpoint !== (from as unknown)) {
+          held.push(() => endpoint.onmessage?.({ data: message } as MessageEvent));
+        }
+      }
+    };
+    const both = Promise.all([a.coordinator.refresh(null), b.coordinator.refresh(null)]);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(server.refreshCalls).toBe(1);
+    held.forEach((release) => release());
+    const outcomes = await both;
+    expect(outcomes.sort()).toEqual(['adopted', 'refreshed']);
+    expect(server.refreshCalls).toBe(1);
+  });
+
+  it('does not wait for a broadcast when the lock was free', async () => {
+    const tab = openTab();
+    const started = performance.now();
+    await tab.coordinator.refresh(null);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
+  it('a refresh that returns another user resets the tab, broadcasts, and reports user-changed', async () => {
+    const a = openTab();
+    await a.coordinator.login({ userName: 'a', password: 'b' });
+    server.nextRefresh = () => of(makeAuthResponse('other', makeUser('CounterStaff', { id: 'user-2' })));
+    const outcome = await a.coordinator.refresh(now + 900_000);
+    expect(outcome).toBe('user-changed');
+    expect(a.store.isAuthenticated()).toBe(false);
+    expect(a.router.navigateByUrl).toHaveBeenCalledWith('/');
+  });
+
+  it('sign-out in one tab while another tab is queued for a refresh ends the queued tab on /login', async () => {
+    const a = openTab();
+    const b = openTab();
+    await a.coordinator.login({ userName: 'a', password: 'b' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    server.nextRefresh = () => throwError(() => problem(401, 'auth.refresh_invalid'));
+    const bRefresh = b.coordinator.refresh(null);
+    const aLogout = a.coordinator.logout();
+    await Promise.all([aLogout, bRefresh.catch(() => undefined)]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(b.store.isAuthenticated()).toBe(false);
+    expect(b.store.endedReason()).toBeNull();
+  });
 });

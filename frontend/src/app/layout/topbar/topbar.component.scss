@@ -49,8 +49,8 @@
   display: grid;
   place-items: center;
   flex: none;
-  inline-size: 36px;
-  block-size: 36px;
+  inline-size: var(--qms-size-control-height-sm);
+  block-size: var(--qms-size-control-height-sm);
   border-radius: var(--qms-radius-full);
   background: var(--qms-brand-primary-subtle);
   color: var(--qms-brand-on-primary-subtle);

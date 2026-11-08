@@ -1,4 +1,6 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { signal } from '@angular/core';
+import { of } from 'rxjs';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
@@ -17,7 +19,7 @@ describe('ShellComponent', () => {
   const auth = { user, logout: vi.fn().mockResolvedValue(undefined) };
   const notifications = { error: vi.fn() };
 
-  async function open(role: UserRole, language: 'en' | 'ar' = 'en'): Promise<HTMLElement> {
+  async function open(role: UserRole, language: 'en' | 'ar' = 'en', drawer = false): Promise<HTMLElement> {
     user.set(makeUser(role, { name: role === 'SuperAdmin' ? 'Sam Super' : 'Arun Alexander' }));
     await TestBed.configureTestingModule({
       imports: [ShellComponent],
@@ -26,6 +28,7 @@ describe('ShellComponent', () => {
         provideRouter([]),
         { provide: AuthService, useValue: auth },
         { provide: NotificationService, useValue: notifications },
+        { provide: BreakpointObserver, useValue: { observe: () => of({ matches: drawer, breakpoints: {} }) } },
         { provide: LanguageService, useValue: { current: signal(language), choose: vi.fn() } },
       ],
     }).compileComponents();
@@ -81,5 +84,34 @@ describe('ShellComponent', () => {
     fixture.detectChanges();
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(el.querySelector('.shell--collapsed')).not.toBeNull();
+  });
+
+  it('drawer: focus moves into the nav, background is inert, Escape closes and returns focus to the menu button', async () => {
+    const el = await open('CompanyAdmin', 'en', true);
+    document.body.appendChild(el);
+    const button = el.querySelector<HTMLButtonElement>('.menu-button')!;
+    button.focus();
+    button.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(el.querySelector('.shell--drawer-open')).not.toBeNull();
+    expect(el.querySelector('.shell__column')?.hasAttribute('inert')).toBe(true);
+    expect(document.activeElement?.classList.contains('item')).toBe(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(el.querySelector('.shell__column')?.hasAttribute('inert')).toBe(false);
+    expect(document.activeElement).toBe(button);
+    el.remove();
+  });
+
+  it('uses header, aside and main landmarks', async () => {
+    const el = await open('CompanyAdmin');
+    expect(el.querySelector('header qms-topbar')).not.toBeNull();
+    expect(el.querySelector('aside qms-sidebar')).not.toBeNull();
+    expect(el.querySelector('main')).not.toBeNull();
   });
 });

@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../core/auth/auth.service';
@@ -21,10 +31,16 @@ export class TopbarComponent {
 
   readonly navExpanded = input(false);
   readonly menuToggle = output<void>();
+  private readonly menuButton = viewChild.required<ElementRef<HTMLButtonElement>>('menuButton');
 
   protected readonly user = this.auth.user;
   protected readonly initials = computed(() => initialsOf(this.user()?.name));
   protected readonly signingOut = signal(false);
+
+  /** Puts focus back on the menu button (after the drawer closes). */
+  focusMenuButton(): void {
+    this.menuButton().nativeElement.focus();
+  }
 
   protected async signOut(): Promise<void> {
     this.signingOut.set(true);

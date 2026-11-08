@@ -123,4 +123,35 @@ describe('authInterceptor', () => {
     expect(isAuthEndpoint('/api/v1/auth/login')).toBe(true);
     expect(isAuthEndpoint('/api/v1/auth/me')).toBe(false);
   });
+
+  it('sends the bearer to an absolute URL on this origin', async () => {
+    http.get(`${location.origin}/api/v1/things`).subscribe();
+    await tick();
+    const request = backend.expectOne(`${location.origin}/api/v1/things`);
+    expect(request.request.headers.get('Authorization')).toBe('Bearer old');
+    request.flush({});
+  });
+
+  it('never sends the bearer to another origin, even under /api/', async () => {
+    http.get('https://evil.example/api/v1/things').subscribe({ error: () => undefined });
+    await tick();
+    const request = backend.expectOne('https://evil.example/api/v1/things');
+    expect(request.request.headers.has('Authorization')).toBe(false);
+    request.flush({}, { status: 401, statusText: 'x' });
+    await tick();
+    backend.expectNone('/api/v1/auth/refresh');
+  });
+
+  it('does not retry the request when the refresh returned another user (identity switch)', async () => {
+    let status = 0;
+    http.get('/api/v1/things').subscribe({ error: (e) => (status = e.status) });
+    await tick();
+    backend.expectOne('/api/v1/things').flush({}, { status: 401, statusText: 'x' });
+    await tick();
+    backend.expectOne('/api/v1/auth/refresh').flush(makeAuthResponse('y', makeUser('CounterStaff', { id: 'user-2' })));
+    await tick();
+    backend.expectNone('/api/v1/things');
+    expect(status).toBe(401);
+    expect(store.isAuthenticated()).toBe(false);
+  });
 });

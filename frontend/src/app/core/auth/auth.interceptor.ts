@@ -27,8 +27,14 @@ function pathOf(url: string): string {
   }
 }
 
+/** Only same-origin URLs (relative, or absolute on this origin) under /api/ get the bearer token. */
 function isApiCall(url: string): boolean {
-  return pathOf(url).startsWith(API_PREFIX);
+  try {
+    const parsed = new URL(url, location.origin);
+    return parsed.origin === location.origin && parsed.pathname.startsWith(API_PREFIX);
+  } catch {
+    return false;
+  }
 }
 
 function withBearer(request: HttpRequest<unknown>, token: string | null): HttpRequest<unknown> {
@@ -73,11 +79,13 @@ export const authInterceptor: HttpInterceptorFn = (
             return throwError(() => error);
           }
           return from(coordinator.refresh(session?.validUntil ?? null)).pipe(
-            switchMap((outcome) =>
-              outcome === 'signed-out'
+            switchMap((outcome) => {
+              // Never replay the request under another identity (a user switch in another tab, ADR-007 A.4).
+              const sameUser = (store.user()?.id ?? null) === (session?.user.id ?? null);
+              return outcome === 'signed-out' || outcome === 'user-changed' || !sameUser
                 ? throwError(() => error)
-                : next(withBearer(request, store.accessToken())),
-            ),
+                : next(withBearer(request, store.accessToken()));
+            }),
           );
         }),
       ),

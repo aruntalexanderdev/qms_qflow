@@ -39,6 +39,12 @@
   position: sticky;
   inset-block-start: 0;
   block-size: 100vh;
+  background: var(--qms-nav-bg);
+  overflow-y: auto;
+}
+
+.shell__sidebar qms-sidebar {
+  min-block-size: 100%;
 }
 
 .shell__backdrop {

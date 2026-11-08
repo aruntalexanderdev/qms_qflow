@@ -33,17 +33,27 @@ export function problem(status: number, code: string, headers: Record<string, st
 /** One lock shared by every fake "tab": requests run one at a time in arrival order, like navigator.locks. */
 export class FakeLockManager implements LockManagerLike {
   private tail: Promise<unknown> = Promise.resolve();
+  private pending = 0;
   held = 0;
   maxHeld = 0;
 
-  request<T>(_name: string, _options: { mode: 'exclusive' }, callback: () => Promise<T>): Promise<T> {
+  request<T>(
+    _name: string,
+    options: { mode: 'exclusive'; ifAvailable?: boolean },
+    callback: (lock: unknown) => Promise<T>,
+  ): Promise<T> {
+    if (options.ifAvailable && this.pending > 0) {
+      return callback(null);
+    }
+    this.pending++;
     const run = this.tail.then(async () => {
       this.held++;
       this.maxHeld = Math.max(this.maxHeld, this.held);
       try {
-        return await callback();
+        return await callback({});
       } finally {
         this.held--;
+        this.pending--;
       }
     });
     this.tail = run.catch(() => undefined);

@@ -21,13 +21,12 @@ export type AuthMessage =
   | { type: 'signed-out'; reason?: string };
 
 /** What a refresh request ended up doing. */
-export type RefreshOutcome = 'refreshed' | 'adopted' | 'signed-out';
+/** 'user-changed': the refresh returned another user than this tab had; the tab was reset (ADR-007 A.4). */
+export type RefreshOutcome = 'refreshed' | 'adopted' | 'signed-out' | 'user-changed';
 
 export const REFRESH_REUSED_CODE = 'auth.refresh_reused';
 
-/** Waiting longer than this for the lock means another tab held it. */
-const WAITED_THRESHOLD_MS = 3;
-/** How long a tab that waited listens for the other tab's broadcast before refreshing itself. */
+/** How long a tab that had to queue for the lock waits for the previous holder's broadcast before refreshing itself. */
 const BROADCAST_GRACE_MS = 150;
 
 /**
@@ -45,6 +44,8 @@ export class SessionCoordinator {
   private readonly now = inject(CLOCK);
 
   private inFlight: Promise<RefreshOutcome> | null = null;
+  /** Callbacks waiting for a newer session to arrive over the channel (see waitForBroadcast). */
+  private readonly sessionWaiters = new Set<() => void>();
 
   constructor() {
     if (this.channel) {
@@ -87,9 +88,8 @@ export class SessionCoordinator {
       return Promise.resolve('adopted');
     }
     const navigate = options.navigate ?? true;
-    const requestedAt = performance.now();
-    const flight: Promise<RefreshOutcome> = this.withLock(() =>
-      this.refreshInsideLock(staleValidUntil, navigate, performance.now() - requestedAt),
+    const flight: Promise<RefreshOutcome> = this.withLock((contended) =>
+      this.refreshInsideLock(staleValidUntil, navigate, contended),
     ).finally(() => {
       if (this.inFlight === flight) {
         this.inFlight = null;
@@ -108,19 +108,31 @@ export class SessionCoordinator {
   private async refreshInsideLock(
     staleValidUntil: number | null,
     navigate: boolean,
-    waitedMs: number,
+    contended: boolean,
   ): Promise<RefreshOutcome> {
-    // A tab that had to wait for the lock gives the previous holder's broadcast time to arrive (it travels between
-    // browser processes and can be a few milliseconds behind the lock release), so one refresh serves both tabs.
-    const deadline = performance.now() + (waitedMs > WAITED_THRESHOLD_MS ? BROADCAST_GRACE_MS : 0);
-    do {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    if (this.hasNewerSession(staleValidUntil)) {
+      return 'adopted';
+    }
+    if (contended) {
+      // This tab had to queue behind another tab's lock. That tab's new session travels over the channel, between
+      // browser processes, and can trail the lock release by a few ms: wait for it (an event, or one timeout) so a
+      // single refresh serves both tabs. An uncontended refresh never waits.
+      await this.waitForBroadcast(BROADCAST_GRACE_MS, () => this.hasNewerSession(staleValidUntil));
       if (this.hasNewerSession(staleValidUntil)) {
         return 'adopted';
       }
-    } while (performance.now() < deadline);
+    }
     try {
       const response = await firstValueFrom(this.api.refresh());
+      const current = this.store.snapshot();
+      if (current && current.user.id !== response.user.id) {
+        // The cookie now belongs to another user than this tab (and the request that triggered the refresh) had:
+        // the same rule as for a broadcast. Reset the tab; others learn it from the broadcast.
+        this.store.clear();
+        this.broadcastSession(response, this.now() + response.expiresIn * 1000);
+        void this.router.navigateByUrl('/');
+        return 'user-changed';
+      }
       this.adoptAndBroadcast(response);
       return 'refreshed';
     } catch (error) {
@@ -148,6 +160,10 @@ export class SessionCoordinator {
     const validUntil = this.now() + response.expiresIn * 1000;
     this.store.set({ accessToken: response.accessToken, validUntil, user: response.user });
     this.store.endedReason.set(null);
+    this.broadcastSession(response, validUntil);
+  }
+
+  private broadcastSession(response: AuthResponse, validUntil: number): void {
     this.post({
       type: 'session',
       accessToken: response.accessToken,
@@ -182,6 +198,9 @@ export class SessionCoordinator {
           user: message.user,
         });
         this.store.endedReason.set(null);
+        for (const wake of [...this.sessionWaiters]) {
+          wake();
+        }
       }
       return;
     }
@@ -199,10 +218,38 @@ export class SessionCoordinator {
     this.channel?.postMessage(message);
   }
 
-  private withLock<T>(callback: () => Promise<T>): Promise<T> {
+  /** Resolves when `isDone()` holds after a session message, or after `timeoutMs`, whichever comes first. */
+  private waitForBroadcast(timeoutMs: number, isDone: () => boolean): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        this.sessionWaiters.delete(check);
+        resolve();
+      };
+      const check = () => {
+        if (isDone()) {
+          finish();
+        }
+      };
+      const timer = setTimeout(finish, timeoutMs);
+      this.sessionWaiters.add(check);
+    });
+  }
+
+  /**
+   * Runs `callback` under the exclusive lock. `contended` is true when another holder made this call queue (found with
+   * an `ifAvailable` probe, not a timing guess). Without Web Locks the callback just runs.
+   */
+  private async withLock<T>(callback: (contended: boolean) => Promise<T>): Promise<T> {
     if (!this.locks) {
-      return callback();
+      return callback(false);
     }
-    return this.locks.request(AUTH_LOCK_NAME, { mode: 'exclusive' }, callback);
+    const probe = await this.locks.request(AUTH_LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, async (lock) =>
+      lock ? { ran: true as const, value: await callback(false) } : { ran: false as const },
+    );
+    if (probe.ran) {
+      return probe.value;
+    }
+    return this.locks.request(AUTH_LOCK_NAME, { mode: 'exclusive' }, () => callback(true));
   }
 }
