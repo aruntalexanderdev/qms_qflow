@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-005 |
-| Status | Code Review |
+| Status | QA |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 4 (entities), 4.1 (priority types table), 5.1 step 2, 6 (Paid priority), 8 (Company Admin; `/admin/service-types`, `/admin/priority-types`), 9 (`service_type`, `priority_type`, `audit_log`), 10 (`/service-types`, `/priority-types`), 11 (Audit, Security), 12 (M2) |
@@ -363,3 +363,34 @@ Notes for next stage:
 - M1 tests added; S1 to S7, N1, N2 done (details in TASK-010 section 7). 392 tests green, suite 4m29s -> 2m40s.
 - ADR-008 additions for the architect: (1) PUT is full replacement and never defaults a missing field (nullable request fields + `Sent()` validator, 400 validation.failed); (2) post-commit actions only from audited commands, run with their own token and 30 s timeout; (3) cross-tenant audited commands implement `IAuditCompanyTarget`; (4) test fixture: `SetupHost.StartAsync(postgres)` clones a prebuilt template database.
 Open questions: none
+
+### Stage 6 — Code review (round 2) — code-reviewer — 2026-11-08
+Result: Approved
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release --no-incremental`: 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release`: 392 passed, 0 failed, 0 skipped, 2 m 50 s) · web N/A · android N/A
+Reviewed: `git diff 1697366 HEAD -- backend` (commit 2223c57) against the round 1 findings.
+ACs checked: AC-1 to AC-37 ✅. AC-4, AC-5 (b), AC-7 (translation clauses) and AC-17 (b, l) now have integration and unit tests.
+
+Round 1 items:
+- M1 ✅ New tests: AC-17 (l) `en` key on priority types; AC-17 (b) and AC-5 (b) missing `name`; AC-7 `PUT` with `{}` clears Arabic (checked again by a later `GET`) and `PUT` with `fr`/`en` returns the AC-5 codes, for both resources; AC-4 `{}` and `{ "ar": "" }` return 201 with `{}`. The unit helper now accepts `translations`.
+- S1 ✅ `PUT` request and command fields `isActive`, `sortOrder`, `priorityLevel` and `isPaid` are nullable with `Sent()` (NotNull), so a missing field is 400 `validation.failed` keyed by field, and no row or audit row is written (tested, including "a dropped isPaid cannot make VIP free"). JSON shape is unchanged: same camelCase names and types, and responses are untouched. Create semantics: service type create still defaults `sortOrder` 0 and `isActive` true. Priority type create now *requires* `isPaid` and `priorityLevel`. Before, a missing `priorityLevel` was already 400 and a missing `isPaid` meant unpaid. Every AC body sends both, so no AC changes. This is sound because paid/fee is an explicit choice. The architect should record it in ADR-008 (see S-R2).
+- S2 ✅ Post-commit actions run with their own token and a 30 s timeout, not the request token. Every exception is logged and swallowed. Tested with a cancelled request token.
+- S3 ✅ `Enqueue` throws when no audited command is running, so actions can no longer be silently dropped. Tested for plain and `[NotAudited]` commands. On whether this will bite later: it fails loudly, and the first test of any such handler shows it, so it is acceptable for M2. M3 will have non-audited commands that must publish SignalR events after commit (for example display state or counter status). Those need a runner that does not depend on auditing (see S-R1).
+- S4 ✅ `IAuditCompanyTarget` (on the command or the result) is read only when `ICurrentTenant.CompanyId` is null: `CompanyId ?? target ?? throw`. It cannot be abused while a tenant is set, because the tenant always wins. With no tenant and no cross-tenant section, the audit insert itself is refused by the tenant guard (`NoTenant`). Only `[CrossTenant]` handlers, which check the Super Admin role, open that section. Tested for the target case and the loud failure without a target.
+- S5 ✅ Every public controller in `Qms.Api` is now reflected over. Each action needs `[RequirePermission]` or `[AllowAnonymous]`; only `AuthController` (own-session endpoints) is exempt. New tests check that any granted action implies its module's `view`, and that every granted permission is in `Permissions.All`.
+- S6 ✅ `PostgresFixture.NewSetupDatabaseAsync` builds the seed and `SetupTestData` template once, under a `SemaphoreSlim`. After building it disposes the host and clears pools, so the template has no open connections. Each test then gets its own `CREATE DATABASE … TEMPLATE` clone and its own host, so no state is shared across tests. If the build fails, the template stays null and the next test retries. All database tests run in one xUnit collection (serial). CI runs in parallel each get their own Testcontainers PostgreSQL, so they are isolated. Runtime dropped from 4 m 12 s to 2 m 50 s here.
+- S7 ✅ A bare `PostgresException` (raw SQL) now goes through the same catalog, tested with a real `ExecuteSqlInterpolated` duplicate. The response never contains SQL.
+- N1 ✅ `UnsupportedLanguages` removed. N2 ✅ Keys that differ only by case are rejected (400 on `translations.ar`, tested).
+
+Must fix
+- none
+
+Should fix (follow-ups, do not block QA)
+- S-R1 [stage 0 → stage 3, before M3] `backend/Qms.Application/Common/PostCommitActions.cs`: a non-audited handler that saves first and then calls `Enqueue` commits its change and then gets a 500 from the throw. Before the first M3 command that publishes SignalR events without an audit row, add a post-commit/transaction decorator that does not depend on auditing (for example `[Transactional]`), or decide that those commands are audited. Nested audited commands also reset the "runner active" flag, but EF already forbids a nested transaction, so that case is moot for now. Record the rule in ADR-008 §11/§12.
+- S-R2 [stage 0] ADR-008: write in the four conventions stage 3 listed. (1) `PUT` is full replacement and never defaults a missing field (nullable plus `Sent()`). Also state the create-side rule: defaults allowed for `sortOrder`/`isActive`, explicit choice required for `isPaid`. Note that nullable-meaning fields (`targetMinutes`, `feeAmount`) treat omitted as null. (2) Post-commit actions use their own token and a timeout. (3) `IAuditCompanyTarget` for cross-tenant audits. (4) The `SetupHost` template-database fixture. Tick the section 10 "error-code mismatch" question (resolved).
+
+Nice to have
+- N-R1 `backend/Qms.Tests/Application/AuditDecoratorTests.cs`: add a test where a tenant user's command implements `IAuditCompanyTarget` with another company id, and assert the audit row still uses the tenant's company. This pins the S4 anti-abuse behaviour.
+- N-R2 `backend/Qms.Tests/Architecture/ArchitectureTests.cs`: `AuthController` is exempt as a whole. Exempting by action (`Me`, `Logout`, …) would catch a future non-self action added there.
+- Open from round 1 (unchanged, not blocking): N3 enum converter for SignalR/minimal APIs, N4 `IgnoreQueryFilters()` architecture test, N5 audit row on a no-op `PUT`, N6 [stage 1] TASK-010 / story §7 wording.
+
+Notes for next stage (QA): the contract is as in the stage 3 handoff, plus: `PUT` bodies must send every field (`isActive`, `sortOrder` / `priorityLevel`, `isPaid`), or 400 `validation.failed` names the missing field. `POST /priority-types` must send `isPaid` and `priorityLevel`. Duplicate translation keys that differ only by case are 400.
