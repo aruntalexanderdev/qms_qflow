@@ -54,14 +54,14 @@ STORY-004 follow-ups from localisation (STORY-004 is merged; built by STORY-051 
 ### M3 Queue engine
 | Story | Title |
 | --- | --- |
-| STORY-014 | Issue token: numbering per priority + service, issue rules, daily limit, row lock; `language` in `POST /tokens`, print data in that language (ADR-010) |
+| STORY-014 | Issue token: numbering per priority + service, issue rules, daily limit, row lock; `language` in `POST /tokens`, print data in that language (ADR-010) (**first**: STORY-005 review S-R1, ADR-008 Amendment 3 C — move transaction + post-commit queue from `AuditDecorator` into a `TransactionDecorator` for `[Audited]` and new `[Transactional]` commands; device actor in audit rows) |
 | STORY-015 | Device register, config and heartbeat endpoints; `/device/config` returns texts resolved per device language (ADR-010 §7) |
 | STORY-016 | Counter session (open, pause, resume, close) and Call Next (priority, `is_front`, `SKIP LOCKED`) |
 | STORY-017 | Call specific, recall, start, skip (NoShow / Hold) |
 | STORY-018 | Complete with service flow (incl. VIP forwarded to front of the Normal queue), transfer |
 | STORY-019 | VIP fee: Paid / Waived, Complete blocked while Due, change priority to Normal, cancel on refusal |
 | STORY-020 | Supervisor cancel / reinstate; audit log for all token actions |
-| STORY-021 | SignalR hub, groups and events |
+| STORY-021 | SignalR hub, groups and events (publish only through `IPostCommitActions`, ADR-008 Amendment 3 C; STORY-005 N3: enum string converter in `AddJsonProtocol`) |
 | STORY-022 | Background jobs: daily reset, no-show timeout, device offline, data retention (ADR-005) |
 
 ## Phase 1B — Web

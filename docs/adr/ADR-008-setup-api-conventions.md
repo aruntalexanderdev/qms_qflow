@@ -1,6 +1,6 @@
 # ADR-008 — Setup API conventions (milestone M2)
 
-Status: Accepted with changes (product owner, 2026-11-08) — see Amendment 1; §9 superseded by ADR-009; §4, §8, §13, §14 amended by ADR-010 (Amendment 2)
+Status: Accepted with changes (product owner, 2026-11-08) — see Amendment 1; §9 superseded by ADR-009; §4, §8, §13, §14 amended by ADR-010 (Amendment 2); §5, §7, §8, §11, §12, §15 extended by Amendment 3
 Date: 2026-11-08
 Story: STORY-005 to STORY-013 (M2 Setup API)
 
@@ -154,3 +154,39 @@ English is the default language; other languages are configurable and optional (
 - **§13 Error codes:** "the web app translates every code (en + ar) in M4" reads "the web app translates every code in `en.json` (other languages through their translation files when they are made available)". New codes: the two above, `language.not_enabled`, `company_language.not_available`, `company_language.default_required`, `company_language.in_use`.
 - **§14 Defaults:** the default zone of a new branch is `name` "Main zone" with no translations (the Arabic name is added by the company when Arabic is enabled); a new dispenser gets `languages = {<company default>}`, `default_language = <company default>` (phase 1: `{en}`, `en`) instead of "en + ar".
 - **§15 Tests:** endpoints with translated fields add one test with a second language made available and enabled for a test company (valid key saved and returned; not-enabled key → 400; key of a later-disabled language kept on `PUT` and not returned).
+
+## Amendment 3 — Conventions from building STORY-005 (project-architect, 2026-11-08)
+Records what STORY-005 (TASK-010 §7, review rounds 1–2) settled for every later endpoint. No business rule changes. Sections not named here stand as written.
+
+### A. `PUT` is a full replacement (extends §5, §8)
+- A `PUT` never defaults a missing field. Request and command fields of value type (`bool`, `int`, enums, `decimal` that is required by meaning) are nullable in the API model with a `NotNull()` validator (`CommonRules.Sent()`); a missing field → 400 `validation.failed`, `errors` keyed by the field; nothing is saved and no audit row is written.
+- Fields that are optional by meaning (`targetMinutes`, `feeAmount` while unpaid, `translations`) may be omitted or `null`; on `PUT` that means "clear".
+- **Create (`POST`) defaults:** only a field whose default is harmless and stated in the spec or the story may default: `isActive` → true, `sortOrder` → 0. Any field that changes behaviour, money or queue order must be explicit on create as well (`isPaid`, `priorityLevel`, and later e.g. token mode, max tokens per day, availability). Each story's AC lists which create fields default.
+
+### B. No-op `PUT` (extends §11)
+A `PUT` with equal values and a matching `version` succeeds, writes an audit row (the command was accepted) and sends no `UPDATE` (EF sees no change, so `version` is unchanged). Accepted: the audit log records intent, not only diffs.
+
+### C. Post-commit actions and the S-R1 decision (replaces the "after commit" mechanics of §12)
+- Handlers announce side effects (device config change, and from M3 every SignalR event) only through `IPostCommitActions.Enqueue`, never by calling the notifier or hub directly. Actions run after the commit, with their own `CancellationToken` and a 30 s timeout, not the request token; every failure (including cancellation) is logged and swallowed; a failed or rolled-back command discards its actions.
+- `Enqueue` throws `InvalidOperationException` when no transaction runner owns the command, so an action is never silently dropped. Commands do not dispatch other commands (no nested runners).
+- **S-R1 decision — a transaction decorator independent of auditing.** Spec §11 makes every *token action* and every *setup change* audited, and those commands stay `[Audited]`. But M3 also has state-changing commands that push SignalR events and are neither: device heartbeat (`DeviceStatusChanged`, every few seconds per device), counter session open/pause/resume/close (`CounterStatusChanged`). Auditing them would invent an audit rule and flood `audit_log`. So:
+  - The transaction and the post-commit queue move from `AuditDecorator` into a `TransactionDecorator` (Application). It applies to every command marked `[Audited]` or the new `[Transactional]`. Chain: validation → cross-tenant → **transaction** → audit → handler. `AuditDecorator` only adds the `audit_log` row inside the open transaction.
+  - Rule for M3: token actions and setup changes = `[Audited]`; other state-changing commands that save or enqueue = `[Transactional]`; queries are neither. Whether counter session commands are also audited is for STORY-016's BA to raise if wanted (not in spec §11 today).
+  - Device-originated audited commands (token issue, STORY-014) write `user_id` null and `device_id` set (spec §9 `audit_log`). Background jobs (STORY-022) that act on tokens run commands through the same pipeline; their audit actor is an open question for STORY-022.
+  - Work: done in STORY-014 (first M3 story, before any SignalR-emitting command) — see BACKLOG note. STORY-021 implements the publishers behind `IPostCommitActions` and the existing `IDeviceConfigNotifier`.
+
+### D. Cross-tenant audit company (extends §11, ADR-009 §9)
+An `[Audited]` `[CrossTenant]` command (Super Admin, e.g. STORY-047) implements `IAuditCompanyTarget.AuditCompanyId` on the command or its result. `audit_log.company_id` = current tenant ?? target ?? `InvalidOperationException`; the current tenant always wins, so a tenant user cannot redirect an audit row.
+
+### E. Integration-test pattern (replaces the first bullet of §15)
+- `SetupHost.StartAsync(postgres)` per test: `PostgresFixture.NewSetupDatabaseAsync()` builds one template database per run (seed, roles, admin users, `SetupTestData`) and clones it per test with `CREATE DATABASE … TEMPLATE`; each test has its own database and its own host, so no state is shared. Database tests stay in the one serial xUnit collection.
+- Users come from `SetupTestData` (`CallAsync(SetupUser, …)`, `AuditRowsAsync`); every endpoint still gets the full §15 test set (Amendment 1 A and Amendment 2 additions included). A missing-field test is added for every `PUT` (A above).
+
+### F. Permission coverage (extends Amendment 1 A)
+A reflection test checks that every action of every public controller in `Qms.Api` has `[RequirePermission]`, `[RequireSuperAdmin]` (added by STORY-047) or `[AllowAnonymous]`; only `AuthController` (own-session endpoints) is exempt. Invariant tests on the role map: a granted `<module>.<action>` implies `<module>.view`, and every granted permission is in `Permissions.All`. STORY-048 keeps both invariants for database roles.
+
+### G. Raw SQL errors (extends §7)
+A bare `PostgresException` (raw SQL such as `ExecuteSql*`, planned for the M3 queue engine and the token-number collision in STORY-014) is mapped through `PostgresErrorCatalog` exactly like one wrapped in `DbUpdateException`. New constraint names used by raw SQL go into the catalog (the catalog test checks they exist).
+
+### H. Spec impact (amendment)
+None. Spec §10 already points to ADR-008 for setup conventions; §11 audit scope is unchanged (C only adds a non-audited transactional path for commands outside it).
