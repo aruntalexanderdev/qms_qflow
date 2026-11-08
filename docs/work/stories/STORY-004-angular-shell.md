@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | Code Review |
+| Status | QA |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -536,3 +536,33 @@ Notes for next stage:
 - Reloading the page with the API down starts signed out (the start-up restore cannot reach the server); this is by design, not part of AC-16.
 Open questions: none
 
+
+### Stage 6 — Code review (round 3, BUG-001) — code-reviewer — 2026-11-08
+Result: Approved
+Builds/tests: backend N/A (not touched) · web ✅ (`npm run lint` clean, ESLint + Stylelint; `npm test -- --watch=false` 13 files / 94 tests green; `npm run build` green, 453.54 kB initial / 114.46 kB transfer) · android N/A
+Scope reviewed: `git diff d4f4884 HEAD -- frontend` (commit 04439fd): `core/errors/api-error.ts` + spec, `core/i18n/translations.spec.ts`, `public/i18n/{en,ar}.json`.
+Checked:
+- `mapHttpError`:
+  - status 0 → `network` (unchanged);
+  - 502, 503 or 504 whose body has no problem-details `code` (plain text, HTML, empty, JSON without `code`) → `network` / `errors.network`;
+  - a gateway status that carries a `code` keeps it, and keeps the `correlationId` for `server.unexpected_error`;
+  - 500 and other 5xx are unchanged (a code is kept with its correlation id; without a code they show `errors.unknown`).
+  The session handling for AC-16 (keep the session on status 0 or 5xx) depends on `HttpErrorResponse.status`, not on the mapped code, so it is unaffected.
+- The tests are meaningful. With the pre-fix `api-error.ts` swapped in temporarily, the new spec fails 5 of 15: the four gateway cases and the singular/dual/plural 429 case. The file was restored afterwards. The old `502 '<html>'` → unknown assertion was correctly moved to 418.
+- i18n: en and ar have identical key sets (57 keys each, scripted check). `rate_limited_one` and `rate_limited_two` are added to both files and to `translations.spec.ts`. The plural keys keep `{{minutes}}`.
+- AC-10 is not regressed. The login page renders `failure.messageKey | translate: failure.params`, so the new keys need no template change. The login spec (Retry-After 120) still shows "Try again in 2 minutes". No Retry-After still gives `rate_limited_generic`.
+- The 429 wording change goes beyond the bug summary, but it is the QA wording note recorded in BUG-001 section 8, so it is in scope.
+ACs checked: AC-10 ✅, AC-16 ✅ (stage 4's live check: API stopped behind `ng serve` and Nginx, en and ar; QA retests), every other AC unaffected by this diff.
+
+Must fix
+- none
+
+Should fix
+- none
+
+Nice to have
+- N10 [stage 4] public/i18n/ar.json `errors.request.rate_limited` — Arabic uses "دقائق" only for 3–10. From 11 up the counted noun is singular ("11 دقيقة"). This is unlikely to show today, because the login limit window is 60 s. Add it to the pending native Arabic wording review.
+- N11 [stage 4] api-error.ts `ApiError.code` doc comment still says "`network` for status 0". It now also covers 502, 503 and 504 without a code.
+
+Notes for next stage: QA retests BUG-001 (API stopped, behind `ng serve` and behind Nginx, en and ar; then API restarted, one refresh), and AC-10's 429 text (1, 2 and N minutes). Bug status set to Retest.
+Open questions: none

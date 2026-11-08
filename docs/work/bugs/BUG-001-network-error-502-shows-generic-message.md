@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | BUG-001 |
-| Status | Code Review |
+| Status | Retest |
 | Severity | Minor |
 | Priority | P3 |
 | Found in | STORY-004 (AC-16), frontend as reviewed in round 2 (HEAD 08be692) |
@@ -63,3 +63,9 @@ AC-16 of STORY-004: "the user is not signed out and stays on the current page, t
 
 ## 10. Stage log
 <Handoffs, same format as stories.>
+
+### Stage 6 — Code review — code-reviewer — 2026-11-08
+Result: Approved (details in STORY-004 Stage log, "Stage 6 — Code review (round 3, BUG-001)")
+Changed: none (review only)
+Notes for next stage: QA retest per section 9. Lint, tests (94) and build are green. The new spec cases fail on the pre-fix code.
+Open questions: none
