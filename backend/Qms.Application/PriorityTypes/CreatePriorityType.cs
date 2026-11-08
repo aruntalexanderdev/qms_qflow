@@ -25,12 +25,12 @@ public sealed class CreatePriorityTypeHandler(IQmsDbContext db, ICurrentTenant t
             return PriorityTypeErrors.PrefixTaken;
         }
 
-        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
+        var (name, translations) = LocalizedText.ToStorage(command.Name!, command.Translations);
         var row = new PriorityType
         {
             CompanyId = companyId,
-            NameEn = nameEn,
-            NameAr = nameAr,
+            Name = name,
+            NameTranslations = translations,
             Prefix = prefix,
             PriorityLevel = command.PriorityLevel!.Value,
             IsPaid = command.IsPaid!.Value,

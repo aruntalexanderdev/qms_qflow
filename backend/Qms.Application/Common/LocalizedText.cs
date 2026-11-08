@@ -5,11 +5,10 @@ namespace Qms.Application.Common;
 
 /// <summary>
 /// Master-data names as the API sees them: a required default-language <c>name</c> (English) and optional
-/// <c>translations</c> (language code to text). TEMPORARY STORAGE MAPPING until the localisation migration story
-/// (<c>name</c> + <c>name_translations</c> jsonb): <c>name</c> is stored in <c>name_en</c>, <c>translations["ar"]</c> in
-/// <c>name_ar</c> (empty text when absent), and any other language is refused. This class is the only place that knows the
-/// mapping; the migration story changes only <see cref="ToStorage"/>, <see cref="FromStorage"/> and
-/// the language checks in <see cref="LocalizedTranslations"/>.
+/// <c>translations</c> (language code to text). TEMPORARY ADAPTER (STORY-051 stage 2) until the backend stage replaces this
+/// class with <c>LocalizedTextRules</c>: <c>name</c> is stored in <c>name</c> and the translations in
+/// <c>name_translations</c> (jsonb), but only the <c>ar</c> key is accepted, as before, and any other language is refused.
+/// The language checks in <see cref="LocalizedTranslations"/> are unchanged on purpose (they still hard-code en / ar).
 /// </summary>
 public static class LocalizedText
 {
@@ -62,14 +61,20 @@ public static class LocalizedText
             }
         });
 
-    /// <summary>The two stored columns for a validated name and translations.</summary>
-    public static (string NameEn, string NameAr) ToStorage(string name, IReadOnlyDictionary<string, string?>? translations)
+    /// <summary>The stored <c>name</c> and <c>name_translations</c> for a validated name and translations (only a non-empty <c>ar</c>).</summary>
+    public static (string Name, Dictionary<string, string> Translations) ToStorage(string name, IReadOnlyDictionary<string, string?>? translations)
     {
-        var arabic = translations?.FirstOrDefault(pair => string.Equals(pair.Key?.Trim(), Arabic, StringComparison.OrdinalIgnoreCase)).Value;
-        return (name.Trim(), arabic?.Trim() ?? string.Empty);
+        var arabic = translations?.FirstOrDefault(pair => string.Equals(pair.Key?.Trim(), Arabic, StringComparison.OrdinalIgnoreCase)).Value?.Trim();
+        return (name.Trim(), string.IsNullOrEmpty(arabic) ? new Dictionary<string, string>() : new Dictionary<string, string> { [Arabic] = arabic });
     }
 
-    /// <summary>The translations object of the API: only languages with a non-empty text.</summary>
-    public static IReadOnlyDictionary<string, string> FromStorage(string nameAr) =>
-        string.IsNullOrWhiteSpace(nameAr) ? new Dictionary<string, string>() : new Dictionary<string, string> { [Arabic] = nameAr.Trim() };
+    /// <summary>The translations object of the API: only the <c>ar</c> text when it is non-empty.</summary>
+    public static IReadOnlyDictionary<string, string> FromStorage(IReadOnlyDictionary<string, string> translations) =>
+        translations.TryGetValue(Arabic, out var arabic) && !string.IsNullOrWhiteSpace(arabic)
+            ? new Dictionary<string, string> { [Arabic] = arabic.Trim() }
+            : new Dictionary<string, string>();
+
+    /// <summary>True when both objects hold the same keys and texts.</summary>
+    public static bool SameTranslations(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right) =>
+        left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out var other) && other == pair.Value);
 }

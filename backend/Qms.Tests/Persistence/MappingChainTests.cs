@@ -106,8 +106,8 @@ public sealed class MappingChainTests(PostgresFixture postgres)
     {
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);
         await using var db = PostgresFixture.CreateContext(connectionString);
-        var otherBranch = new Branch { CompanyId = SeedIds.Company1, NameEn = "Branch 2", NameAr = "الفرع 2", Code = "B2", Timezone = "Asia/Dubai" };
-        var otherZone = new Zone { CompanyId = SeedIds.Company1, BranchId = otherBranch.Id, NameEn = "Zone X", NameAr = "المنطقة س" };
+        var otherBranch = new Branch { CompanyId = SeedIds.Company1, Name = "Branch 2", Code = "B2", Timezone = "Asia/Dubai" };
+        var otherZone = new Zone { CompanyId = SeedIds.Company1, BranchId = otherBranch.Id, Name = "Zone X" };
         db.AddRange(otherBranch, otherZone);
         await db.SaveChangesAsync();
 
@@ -121,7 +121,7 @@ public sealed class MappingChainTests(PostgresFixture postgres)
     {
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);
         await using var db = PostgresFixture.CreateContext(connectionString);
-        var other = new Company { NameEn = "Company 2", NameAr = "الشركة 2", Code = "C2", CurrencyCode = "AED" };
+        var other = new Company { Name = "Company 2", Code = "C2", CurrencyCode = "AED" };
         db.Companies.Add(other);
         await db.SaveChangesAsync();
 
@@ -138,8 +138,8 @@ public sealed class MappingChainTests(PostgresFixture postgres)
     {
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);
         await using var db = PostgresFixture.CreateContext(connectionString);
-        var otherBranch = new Branch { CompanyId = SeedIds.Company1, NameEn = "Branch 2", NameAr = "الفرع 2", Code = "B2", Timezone = "Asia/Dubai" };
-        var otherZone = new Zone { CompanyId = SeedIds.Company1, BranchId = otherBranch.Id, NameEn = "Zone X", NameAr = "المنطقة س" };
+        var otherBranch = new Branch { CompanyId = SeedIds.Company1, Name = "Branch 2", Code = "B2", Timezone = "Asia/Dubai" };
+        var otherZone = new Zone { CompanyId = SeedIds.Company1, BranchId = otherBranch.Id, Name = "Zone X" };
         db.AddRange(otherBranch, otherZone);
         await db.SaveChangesAsync();
 

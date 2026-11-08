@@ -7,9 +7,11 @@ public class Zone : TenantEntity
 
     public Branch? Branch { get; set; }
 
-    public required string NameEn { get; set; }
+    /// <summary>Default-language (English) text, required.</summary>
+    public required string Name { get; set; }
 
-    public required string NameAr { get; set; }
+    /// <summary>Optional translations, language code to text, never the default language (ADR-010 section 4).</summary>
+    public Dictionary<string, string> NameTranslations { get; set; } = new();
 
     public int SortOrder { get; set; }
 }

@@ -166,17 +166,17 @@ public sealed class SetupTestData
     {
         if (!await db.Companies.IgnoreQueryFilters().AnyAsync(c => c.Id == Company2))
         {
-            db.Companies.Add(new Company { Id = Company2, NameEn = "Company 2", NameAr = "الشركة 2", Code = "C2", CurrencyCode = "SAR" });
+            db.Companies.Add(new Company { Id = Company2, Name = "Company 2", Code = "C2", CurrencyCode = "SAR" });
             await db.SaveChangesAsync();
         }
 
         await EnsureAsync(db, Company2Branch, () => new Branch
         {
-            Id = Company2Branch, CompanyId = Company2, NameEn = "Company 2 branch", NameAr = "فرع الشركة 2", Code = "X1", Timezone = "Asia/Riyadh",
+            Id = Company2Branch, CompanyId = Company2, Name = "Company 2 branch", Code = "X1", Timezone = "Asia/Riyadh",
         });
         await EnsureAsync(db, Company2Zone, () => new Zone
         {
-            Id = Company2Zone, CompanyId = Company2, BranchId = Company2Branch, NameEn = "Zone X", NameAr = "المنطقة س", SortOrder = 1,
+            Id = Company2Zone, CompanyId = Company2, BranchId = Company2Branch, Name = "Zone X", SortOrder = 1,
         });
         await EnsureAsync(db, Company2Counter, () => new Counter
         {
@@ -188,11 +188,11 @@ public sealed class SetupTestData
         });
         await EnsureAsync(db, Company2ServiceType, () => new ServiceType
         {
-            Id = Company2ServiceType, CompanyId = Company2, NameEn = "Service X", NameAr = "الخدمة س", Prefix = "A", SortOrder = 1,
+            Id = Company2ServiceType, CompanyId = Company2, Name = "Service X", Prefix = "A", SortOrder = 1,
         });
         await EnsureAsync(db, Company2PriorityType, () => new PriorityType
         {
-            Id = Company2PriorityType, CompanyId = Company2, NameEn = "Normal X", NameAr = "عادي س", Prefix = "N", PriorityLevel = 2,
+            Id = Company2PriorityType, CompanyId = Company2, Name = "Normal X", Prefix = "N", PriorityLevel = 2,
         });
     }
 
@@ -200,11 +200,11 @@ public sealed class SetupTestData
     {
         await EnsureAsync(db, Branch2, () => new Branch
         {
-            Id = Branch2, CompanyId = SeedIds.Company1, NameEn = "Branch 2", NameAr = "الفرع 2", Code = "B2", Timezone = "Asia/Dubai",
+            Id = Branch2, CompanyId = SeedIds.Company1, Name = "Branch 2", Code = "B2", Timezone = "Asia/Dubai",
         });
         await EnsureAsync(db, Branch2Zone, () => new Zone
         {
-            Id = Branch2Zone, CompanyId = SeedIds.Company1, BranchId = Branch2, NameEn = "Zone B2", NameAr = "منطقة ب2", SortOrder = 1,
+            Id = Branch2Zone, CompanyId = SeedIds.Company1, BranchId = Branch2, Name = "Zone B2", SortOrder = 1,
         });
         await EnsureAsync(db, Branch2Counter, () => new Counter
         {

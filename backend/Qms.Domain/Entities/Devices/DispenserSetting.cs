@@ -19,8 +19,8 @@ public class DispenserSetting : TenantEntity
 
     public int? PhoneMax { get; set; }
 
-    /// <summary>Language codes offered on the dispenser, e.g. en, ar.</summary>
-    public string[] Languages { get; set; } = ["en", "ar"];
+    /// <summary>Language codes offered on the dispenser: a subset of the company's enabled languages (phase 1: en).</summary>
+    public string[] Languages { get; set; } = ["en"];
 
     public string DefaultLanguage { get; set; } = "en";
 

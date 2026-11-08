@@ -17,12 +17,12 @@ public sealed class ListServiceTypesHandler(IQmsDbContext db) : IQueryHandler<Li
         }
 
         var items = await rows
-            .OrderBy(row => row.SortOrder).ThenBy(row => row.NameEn).ThenBy(row => row.Id)
-            .Select(row => new { row.Id, row.NameEn, row.NameAr, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion })
+            .OrderBy(row => row.SortOrder).ThenBy(row => row.Name).ThenBy(row => row.Id)
+            .Select(row => new { row.Id, row.Name, row.NameTranslations, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion })
             .ToListAsync(cancellationToken);
 
         return items
-            .Select(row => ServiceTypeDto.From(row.Id, row.NameEn, row.NameAr, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion))
+            .Select(row => ServiceTypeDto.From(row.Id, row.Name, row.NameTranslations, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion))
             .ToList();
     }
 }

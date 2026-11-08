@@ -15,11 +15,11 @@ public sealed record ServiceTypeDto(
     string Version)
 {
     public static ServiceTypeDto From(ServiceType row) => From(
-        row.Id, row.NameEn, row.NameAr, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion);
+        row.Id, row.Name, row.NameTranslations, row.Prefix, row.TargetMinutes, row.SortOrder, row.IsActive, row.RowVersion);
 
     public static ServiceTypeDto From(
-        Guid id, string nameEn, string nameAr, string prefix, int? targetMinutes, int sortOrder, bool isActive, uint rowVersion) =>
-        new(id, nameEn, LocalizedText.FromStorage(nameAr), prefix.Trim(), targetMinutes, sortOrder, isActive, RowVersionCodec.Encode(rowVersion));
+        Guid id, string name, IReadOnlyDictionary<string, string> nameTranslations, string prefix, int? targetMinutes, int sortOrder, bool isActive, uint rowVersion) =>
+        new(id, name, LocalizedText.FromStorage(nameTranslations), prefix.Trim(), targetMinutes, sortOrder, isActive, RowVersionCodec.Encode(rowVersion));
 }
 
 /// <summary>Stable error codes of the service type endpoints (web and Android translate them).</summary>

@@ -45,14 +45,14 @@ public sealed class UpdatePriorityTypeHandler(
 
         db.Entry(row).Property(r => r.RowVersion).OriginalValue = version;
 
-        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
+        var (name, translations) = LocalizedText.ToStorage(command.Name!, command.Translations);
         var isPaid = command.IsPaid!.Value;
         var isActive = command.IsActive!.Value;
         var fee = isPaid ? command.FeeAmount : null;
-        var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != isActive
+        var devicesAffected = row.Name != name || !LocalizedText.SameTranslations(row.NameTranslations, translations) || row.Prefix != prefix || row.IsActive != isActive
             || row.IsPaid != isPaid || row.FeeAmount != fee;
-        row.NameEn = nameEn;
-        row.NameAr = nameAr;
+        row.Name = name;
+        row.NameTranslations = translations;
         row.Prefix = prefix;
         row.PriorityLevel = command.PriorityLevel!.Value;
         row.IsPaid = isPaid;

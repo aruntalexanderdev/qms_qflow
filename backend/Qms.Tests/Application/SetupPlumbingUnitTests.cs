@@ -208,13 +208,16 @@ internal sealed class FakeUser(Guid? companyId, string role, bool authenticated 
 public sealed class LocalizedTextTests
 {
     [Fact]
-    public void The_temporary_storage_mapping_is_name_to_english_and_ar_to_arabic()
+    public void The_temporary_adapter_maps_name_to_name_and_ar_to_the_translations_object()
     {
-        LocalizedText.ToStorage(" Cards ", new Dictionary<string, string?> { ["AR"] = " البطاقات " }).ShouldBe(("Cards", "البطاقات"));
-        LocalizedText.ToStorage("Cards", null).ShouldBe(("Cards", string.Empty));
-        LocalizedText.ToStorage("Cards", new Dictionary<string, string?> { ["ar"] = "  " }).ShouldBe(("Cards", string.Empty));
-        LocalizedText.FromStorage("البطاقات")["ar"].ShouldBe("البطاقات");
-        LocalizedText.FromStorage("").ShouldBeEmpty();
+        var (name, translations) = LocalizedText.ToStorage(" Cards ", new Dictionary<string, string?> { ["AR"] = " البطاقات " });
+        name.ShouldBe("Cards");
+        translations.ShouldBe(new Dictionary<string, string> { ["ar"] = "البطاقات" });
+        LocalizedText.ToStorage("Cards", null).Translations.ShouldBeEmpty();
+        LocalizedText.ToStorage("Cards", new Dictionary<string, string?> { ["ar"] = "  " }).Translations.ShouldBeEmpty();
+        LocalizedText.FromStorage(new Dictionary<string, string> { ["ar"] = "البطاقات" })["ar"].ShouldBe("البطاقات");
+        LocalizedText.FromStorage(new Dictionary<string, string> { ["ar"] = "" }).ShouldBeEmpty();
+        LocalizedText.FromStorage(new Dictionary<string, string>()).ShouldBeEmpty();
     }
 
     [Fact]

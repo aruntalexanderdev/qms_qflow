@@ -373,7 +373,7 @@ namespace Qms.Tests.Application.AuditFixtures
         public async Task<Result<TestDto>> HandleAsync(AuditedCommand command, CancellationToken cancellationToken)
         {
             log.Add("handler");
-            var row = new ServiceType { CompanyId = tenant.CompanyId!.Value, NameEn = "t", NameAr = "ت", Prefix = command.Name == "explode-after" ? "Y" : "Z" };
+            var row = new ServiceType { CompanyId = tenant.CompanyId!.Value, Name = "t", Prefix = command.Name == "explode-after" ? "Y" : "Z" };
             db.ServiceTypes.Add(row);
             await db.SaveChangesAsync(cancellationToken);
             postCommit.Enqueue(_ =>
@@ -496,7 +496,7 @@ namespace Qms.Tests.Application.AuditFixtures
     {
         public async Task<Result<int>> HandleAsync(BrokenAuditCommand command, CancellationToken cancellationToken)
         {
-            db.ServiceTypes.Add(new ServiceType { CompanyId = tenant.CompanyId!.Value, NameEn = "t", NameAr = "ت", Prefix = "Z" });
+            db.ServiceTypes.Add(new ServiceType { CompanyId = tenant.CompanyId!.Value, Name = "t", Prefix = "Z" });
             await db.SaveChangesAsync(cancellationToken);
             return 1;
         }

@@ -4,13 +4,36 @@ using Qms.Domain.Entities;
 
 namespace Qms.Infrastructure.Persistence.Configurations;
 
+internal sealed class LanguageConfiguration() : EntityConfiguration<Language>("language")
+{
+    protected override void Map(EntityTypeBuilder<Language> builder)
+    {
+        builder.ToTable(table => table.HasCheckConstraint("ck_language_direction", "direction IN ('ltr', 'rtl')"));
+        builder.Property(l => l.Code).HasMaxLength(35).IsRequired();
+        builder.Property(l => l.NativeName).HasMaxLength(100).IsRequired();
+        builder.Property(l => l.Direction).HasMaxLength(3).IsRequired();
+        // Unique code, also the target of the language foreign keys (company, user).
+        builder.HasAlternateKey(l => l.Code).HasName("ux_language_code");
+    }
+}
+
 internal sealed class CompanyConfiguration() : EntityConfiguration<Company>("company")
 {
     protected override void Map(EntityTypeBuilder<Company> builder)
     {
-        builder.ToTable(table => table.HasCheckConstraint("ck_company_currency_code", "currency_code ~ '^[A-Z]{3}$'"));
-        builder.Property(c => c.NameEn).HasMaxLength(200).IsRequired();
-        builder.Property(c => c.NameAr).HasMaxLength(200).IsRequired();
+        builder.ToTable(table =>
+        {
+            table.HasCheckConstraint("ck_company_currency_code", "currency_code ~ '^[A-Z]{3}$'");
+            table.HasCheckConstraint("ck_company_default_language_enabled", "default_language = ANY(enabled_languages)");
+            table.HasTranslationsCheck("company", "name_translations");
+        });
+        builder.Property(c => c.Name).HasMaxLength(200).IsRequired();
+        builder.Property(c => c.NameTranslations).HasTranslationsMapping();
+        builder.Property(c => c.DefaultLanguage).HasMaxLength(35).HasDefaultValue("en").IsRequired();
+        builder.Property(c => c.EnabledLanguages).HasColumnType("text[]").HasDefaultValueSql("'{en}'::text[]").IsRequired();
+        // Language codes are rows of the registry; restrict, so a language in use cannot be removed.
+        builder.HasOne<Language>().WithMany().HasForeignKey(c => c.DefaultLanguage).HasPrincipalKey(l => l.Code)
+            .OnDelete(DeleteBehavior.Restrict).HasConstraintName("fk_company_default_language_language_code");
         builder.Property(c => c.Code).HasMaxLength(50).IsRequired();
         builder.Property(c => c.LogoUrl).HasMaxLength(500);
         builder.Property(c => c.CurrencyCode).HasMaxLength(3).IsFixedLength().IsRequired();
@@ -26,9 +49,10 @@ internal sealed class ServiceTypeConfiguration() : EntityConfiguration<ServiceTy
         {
             table.HasCheckConstraint("ck_service_type_prefix", "prefix ~ '^[A-Z]$'");
             table.HasCheckConstraint("ck_service_type_target_minutes", "target_minutes IS NULL OR target_minutes > 0");
+            table.HasTranslationsCheck("service_type", "name_translations");
         });
-        builder.Property(s => s.NameEn).HasMaxLength(200).IsRequired();
-        builder.Property(s => s.NameAr).HasMaxLength(200).IsRequired();
+        builder.Property(s => s.Name).HasMaxLength(200).IsRequired();
+        builder.Property(s => s.NameTranslations).HasTranslationsMapping();
         builder.Property(s => s.Prefix).HasMaxLength(1).IsFixedLength().IsRequired();
         builder.HasIndex(s => new { s.CompanyId, s.Prefix }).IsUnique();
         // Target of the composite foreign key from company_service_priority: same company by construction.
@@ -47,9 +71,10 @@ internal sealed class PriorityTypeConfiguration() : EntityConfiguration<Priority
             // A paid priority needs a fee; no fee is ever negative.
             table.HasCheckConstraint("ck_priority_type_fee_required_when_paid", "NOT is_paid OR fee_amount IS NOT NULL");
             table.HasCheckConstraint("ck_priority_type_fee_not_negative", "fee_amount IS NULL OR fee_amount >= 0");
+            table.HasTranslationsCheck("priority_type", "name_translations");
         });
-        builder.Property(p => p.NameEn).HasMaxLength(200).IsRequired();
-        builder.Property(p => p.NameAr).HasMaxLength(200).IsRequired();
+        builder.Property(p => p.Name).HasMaxLength(200).IsRequired();
+        builder.Property(p => p.NameTranslations).HasTranslationsMapping();
         builder.Property(p => p.Prefix).HasMaxLength(1).IsFixedLength().IsRequired();
         builder.Property(p => p.FeeAmount).HasColumnType(ColumnTypes.Money);
         builder.HasIndex(p => new { p.CompanyId, p.Prefix }).IsUnique();
@@ -61,8 +86,9 @@ internal sealed class BranchConfiguration() : EntityConfiguration<Branch>("branc
 {
     protected override void Map(EntityTypeBuilder<Branch> builder)
     {
-        builder.Property(b => b.NameEn).HasMaxLength(200).IsRequired();
-        builder.Property(b => b.NameAr).HasMaxLength(200).IsRequired();
+        builder.ToTable(table => table.HasTranslationsCheck("branch", "name_translations"));
+        builder.Property(b => b.Name).HasMaxLength(200).IsRequired();
+        builder.Property(b => b.NameTranslations).HasTranslationsMapping();
         builder.Property(b => b.Code).HasMaxLength(50).IsRequired();
         builder.Property(b => b.Timezone).HasMaxLength(64).IsRequired();
         builder.HasIndex(b => new { b.CompanyId, b.Code }).IsUnique();
@@ -133,8 +159,9 @@ internal sealed class ZoneConfiguration() : EntityConfiguration<Zone>("zone")
 {
     protected override void Map(EntityTypeBuilder<Zone> builder)
     {
-        builder.Property(z => z.NameEn).HasMaxLength(200).IsRequired();
-        builder.Property(z => z.NameAr).HasMaxLength(200).IsRequired();
+        builder.ToTable(table => table.HasTranslationsCheck("zone", "name_translations"));
+        builder.Property(z => z.Name).HasMaxLength(200).IsRequired();
+        builder.Property(z => z.NameTranslations).HasTranslationsMapping();
         builder.HasOne(z => z.Branch).WithMany().HasForeignKey(z => new { z.CompanyId, z.BranchId })
             .HasPrincipalKey(b => new { b.CompanyId, b.Id });
         // Target of composite foreign keys that force a counter / device / token zone into the same branch.
@@ -146,8 +173,13 @@ internal sealed class CounterConfiguration() : EntityConfiguration<Counter>("cou
 {
     protected override void Map(EntityTypeBuilder<Counter> builder)
     {
-        builder.ToTable(table => table.HasCheckConstraint("ck_counter_number", "number >= 1"));
+        builder.ToTable(table =>
+        {
+            table.HasCheckConstraint("ck_counter_number", "number >= 1");
+            table.HasTranslationsCheck("counter", "name_translations");
+        });
         builder.Property(c => c.Name).HasMaxLength(200).IsRequired();
+        builder.Property(c => c.NameTranslations).HasTranslationsMapping();
         builder.HasOne(c => c.Branch).WithMany().HasForeignKey(c => new { c.CompanyId, c.BranchId })
             .HasPrincipalKey(b => new { b.CompanyId, b.Id });
         builder.HasOne(c => c.Zone).WithMany().HasForeignKey(c => new { c.BranchId, c.ZoneId })
@@ -181,10 +213,15 @@ internal sealed class TicketTemplateConfiguration() : EntityConfiguration<Ticket
 {
     protected override void Map(EntityTypeBuilder<TicketTemplate> builder)
     {
-        builder.Property(t => t.HeaderEn).HasMaxLength(500).IsRequired();
-        builder.Property(t => t.HeaderAr).HasMaxLength(500).IsRequired();
-        builder.Property(t => t.FooterEn).HasMaxLength(500).IsRequired();
-        builder.Property(t => t.FooterAr).HasMaxLength(500).IsRequired();
+        builder.ToTable(table =>
+        {
+            table.HasTranslationsCheck("ticket_template", "header_translations");
+            table.HasTranslationsCheck("ticket_template", "footer_translations");
+        });
+        builder.Property(t => t.Header).HasMaxLength(500).IsRequired();
+        builder.Property(t => t.HeaderTranslations).HasTranslationsMapping();
+        builder.Property(t => t.Footer).HasMaxLength(500).IsRequired();
+        builder.Property(t => t.FooterTranslations).HasTranslationsMapping();
         builder.Property(t => t.LogoUrl).HasMaxLength(500);
         builder.HasAlternateKey(t => new { t.CompanyId, t.Id });
     }

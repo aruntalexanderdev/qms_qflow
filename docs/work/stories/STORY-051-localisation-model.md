@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-051 |
-| Status | Database |
+| Status | Backend |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 2 (Web i18n, Display voice), 7 (dispenser languages), 8 (`/login` language choice, `/admin/languages`), 9 (translated text pattern, `language`, `company`, all former `*_en` / `*_ar` columns, user `language`, `dispenser_setting.languages`), 10 (`/languages`, `/company-languages`), 11 (Languages), 12 (M2), 13 (localisation resolved) |
@@ -432,3 +432,17 @@ Notes for next stage:
 - Permissions: `company-languages.view|edit` default grant Company Admin only; Branch Manager, Counter Staff and Super Admin get 403 (BR-19, AC-16). Cross-company isolation is AC-22 (no company id in the route, so it can only act on the caller's company).
 - STORY-004 AC-3 and AC-17 apply only when Arabic is offered; AC-38 re-bases them (see section 10).
 Open questions: none blocking. Two BA interpretations to confirm (unknown language code in `PUT` gives `company_language.not_available`; language-list fetch failure falls back to English) and the STORY-048 note about re-reading `/auth/me` after a switch; all in section 10.
+
+### Stage 2 — Database — database-architect — 2026-11-08
+Result: Done
+Changed: migration `backend/Qms.Infrastructure/Persistence/Migrations/20261108085816_Localisation.cs` (+ Designer, snapshot); `Qms.Domain/Entities/Localisation/Language.cs` (new); `Company`, `ServiceType`, `PriorityType`, `Branch`, `Zone`, `Counter`, `TicketTemplate`, `DispenserSetting` entities; `Persistence/Configurations/TranslationsMapping.cs` (new), `OrganizationConfigurations.cs`, `MessagingAndIdentityConfigurations.cs`, `QmsDbContext.cs` (`Languages`), `Seed/DevSeeder.cs`; `Errors/PostgresErrorCatalog.cs`; adapter in `Qms.Application/Common/LocalizedText.cs` and the property renames in `Qms.Application/ServiceTypes/*` and `PriorityTypes/*`; tests (new `Qms.Tests/Persistence/LocalisationMigrationTests.cs`, 16 tests; existing persistence, support and unit tests updated). Task: [TASK-011](../tasks/TASK-011-localisation-migration.md) Done. Build: 0 warnings, 0 errors. Tests: 408 passed, 0 failed, 0 skipped.
+Notes for next stage:
+- Entities: `Name` + `NameTranslations` (`Dictionary<string,string>`, never null, empty by default) on Company, ServiceType, PriorityType, Branch, Zone; `Counter.NameTranslations`; `TicketTemplate.Header/HeaderTranslations/Footer/FooterTranslations`; `Company.DefaultLanguage` / `EnabledLanguages` (string[]); `Language` (`Code`, `NativeName`, `Direction`, `IsAvailable`, `SortOrder`) via `db.Languages` (no tenant filter, readable with no company). Mutating the dictionary in place is tracked (value comparer); no query can filter on JSON content.
+- Constraint names for the catalog and tests: `ux_language_code`, `ck_language_direction`, `ck_company_default_language_enabled`, `fk_company_default_language_language_code`, `fk_asp_net_users_language_language_code`, `ck_<table>_<column>_object` for the 8 translations columns. Catalog: user language FK is 400 `language.not_enabled`; company default FK and check are 400 `request.invalid`.
+- The adapter in `LocalizedText` is temporary and still hard-codes `en` / `ar`: replace it with `LocalizedTextRules`, `Merge` (keep keys of disabled languages), `ForAdmin`. Until then the seeded Arabic is still returned and `ar` still accepted (AC-28/AC-31 change that). Lists should sort by `Name` (done) then id; `sortOrder` first for service types.
+- The ar-enabled test database is made by the test: `UPDATE language SET is_available = true WHERE code = 'ar'` and `UPDATE company SET enabled_languages = '{en,ar}' WHERE id = <Company 1>` (the check allows it). The seed has no `ar` enabled anywhere.
+- Mapping `Language` rows by `code` is the FK target (alternate key `ux_language_code`); `language.id` is not referenced.
+- `asp_net_users.language` and `dispenser_setting` language columns are still varchar(8) (registry codes are varchar(35)); widen in the story that validates them if a longer code is ever shipped.
+- Down loses translation keys other than `ar` and does not undo the dispenser language fix (documented in the migration).
+- PostgreSQL 18 (test container) names not-null constraints after the column; the migration renames them, and a model check still passes (`HasPendingModelChanges` is false).
+Open questions: none

@@ -125,10 +125,10 @@ public sealed class AuthHost : IDisposable
     public async Task<Company2> AddCompany2Async()
     {
         await using var db = PostgresFixture.CreateContext(ConnectionString);
-        var company = new Company { NameEn = "Company 2", NameAr = "الشركة 2", Code = "C2", CurrencyCode = "SAR" };
+        var company = new Company { Name = "Company 2", Code = "C2", CurrencyCode = "SAR" };
         db.Companies.Add(company);
         await db.SaveChangesAsync();
-        var branch = new Branch { CompanyId = company.Id, NameEn = "Other branch", NameAr = "فرع آخر", Code = "X1", Timezone = "Asia/Riyadh" };
+        var branch = new Branch { CompanyId = company.Id, Name = "Other branch", Code = "X1", Timezone = "Asia/Riyadh" };
         db.Branches.Add(branch);
         var user = new AppUser { UserName = "company2.user", NormalizedUserName = "COMPANY2.USER", DisplayName = "Company 2 User", CompanyId = company.Id };
         db.Users.Add(user);

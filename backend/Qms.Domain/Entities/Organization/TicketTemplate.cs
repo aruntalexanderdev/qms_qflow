@@ -1,15 +1,15 @@
 namespace Qms.Domain.Entities;
 
-/// <summary>Printed ticket layout texts, English and Arabic.</summary>
+/// <summary>Printed ticket layout texts, default-language text plus optional translations (ADR-010).</summary>
 public class TicketTemplate : TenantEntity
 {
-    public required string HeaderEn { get; set; }
+    public required string Header { get; set; }
 
-    public required string HeaderAr { get; set; }
+    public Dictionary<string, string> HeaderTranslations { get; set; } = new();
 
-    public required string FooterEn { get; set; }
+    public required string Footer { get; set; }
 
-    public required string FooterAr { get; set; }
+    public Dictionary<string, string> FooterTranslations { get; set; } = new();
 
     public string? LogoUrl { get; set; }
 

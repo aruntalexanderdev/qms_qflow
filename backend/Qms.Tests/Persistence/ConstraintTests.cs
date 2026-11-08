@@ -54,7 +54,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
     public async Task A_second_priority_type_with_the_same_prefix_in_a_company_is_rejected()
     {
         await using var db = await SeededAsync();
-        db.PriorityTypes.Add(new PriorityType { CompanyId = SeedIds.Company1, NameEn = "Very VIP", NameAr = "مهم جدا", Prefix = "V", PriorityLevel = 1 });
+        db.PriorityTypes.Add(new PriorityType { CompanyId = SeedIds.Company1, Name = "Very VIP", Prefix = "V", PriorityLevel = 1 });
 
         await db.ShouldBeRejectedAsync(SqlState.UniqueViolation);
     }
@@ -63,7 +63,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
     public async Task A_second_service_type_with_the_same_prefix_in_a_company_is_rejected()
     {
         await using var db = await SeededAsync();
-        db.ServiceTypes.Add(new ServiceType { CompanyId = SeedIds.Company1, NameEn = "Service 7", NameAr = "الخدمة 7", Prefix = "A" });
+        db.ServiceTypes.Add(new ServiceType { CompanyId = SeedIds.Company1, Name = "Service 7", Prefix = "A" });
 
         await db.ShouldBeRejectedAsync(SqlState.UniqueViolation);
     }
@@ -72,9 +72,9 @@ public sealed class ConstraintTests(PostgresFixture postgres)
     public async Task The_same_prefix_is_allowed_in_another_company()
     {
         await using var db = await SeededAsync();
-        var other = new Company { NameEn = "Company 2", NameAr = "الشركة 2", Code = "C2", CurrencyCode = "SAR" };
+        var other = new Company { Name = "Company 2", Code = "C2", CurrencyCode = "SAR" };
         db.Companies.Add(other);
-        db.ServiceTypes.Add(new ServiceType { CompanyId = other.Id, NameEn = "Service 1", NameAr = "الخدمة 1", Prefix = "A" });
+        db.ServiceTypes.Add(new ServiceType { CompanyId = other.Id, Name = "Service 1", Prefix = "A" });
 
         (await db.SaveChangesAsync()).ShouldBe(2);
     }
@@ -152,7 +152,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
         await using var db = await SeededAsync();
         db.PriorityTypes.Add(new PriorityType
         {
-            CompanyId = SeedIds.Company1, NameEn = "Gold", NameAr = "ذهبي", Prefix = "G", PriorityLevel = 1, IsPaid = true,
+            CompanyId = SeedIds.Company1, Name = "Gold", Prefix = "G", PriorityLevel = 1, IsPaid = true,
             FeeAmount = fee is null ? null : decimal.Parse(fee, System.Globalization.CultureInfo.InvariantCulture),
         });
 
@@ -178,7 +178,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
         await using var db = await SeededAsync();
         db.PriorityTypes.Add(new PriorityType
         {
-            CompanyId = SeedIds.Company1, NameEn = "Gold", NameAr = "ذهبي", Prefix = "G", PriorityLevel = 3, IsPaid = isPaid,
+            CompanyId = SeedIds.Company1, Name = "Gold", Prefix = "G", PriorityLevel = 3, IsPaid = isPaid,
             FeeAmount = fee is null ? null : decimal.Parse(fee, System.Globalization.CultureInfo.InvariantCulture),
         });
 
@@ -205,7 +205,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
     public async Task Prefixes_must_be_one_upper_case_letter(string prefix)
     {
         await using var db = await SeededAsync();
-        db.ServiceTypes.Add(new ServiceType { CompanyId = SeedIds.Company1, NameEn = "Bad", NameAr = "سيء", Prefix = prefix });
+        db.ServiceTypes.Add(new ServiceType { CompanyId = SeedIds.Company1, Name = "Bad", Prefix = prefix });
 
         await db.ShouldBeRejectedAsync(SqlState.CheckViolation);
     }
@@ -214,7 +214,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
     public async Task A_prefix_longer_than_one_letter_is_rejected()
     {
         await using var db = await SeededAsync();
-        db.PriorityTypes.Add(new PriorityType { CompanyId = SeedIds.Company1, NameEn = "Bad", NameAr = "سيء", Prefix = "VV", PriorityLevel = 3 });
+        db.PriorityTypes.Add(new PriorityType { CompanyId = SeedIds.Company1, Name = "Bad", Prefix = "VV", PriorityLevel = 3 });
 
         var exception = await Should.ThrowAsync<DbUpdateException>(() => db.SaveChangesAsync());
         exception.InnerException.ShouldBeOfType<Npgsql.PostgresException>().SqlState.ShouldBe("22001");
@@ -224,7 +224,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
     public async Task Priority_level_must_be_at_least_1()
     {
         await using var db = await SeededAsync();
-        db.PriorityTypes.Add(new PriorityType { CompanyId = SeedIds.Company1, NameEn = "Zero", NameAr = "صفر", Prefix = "Z", PriorityLevel = 0 });
+        db.PriorityTypes.Add(new PriorityType { CompanyId = SeedIds.Company1, Name = "Zero", Prefix = "Z", PriorityLevel = 0 });
 
         await db.ShouldBeRejectedAsync(SqlState.CheckViolation);
     }

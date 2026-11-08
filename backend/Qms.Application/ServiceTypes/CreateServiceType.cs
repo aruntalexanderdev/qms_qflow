@@ -35,12 +35,12 @@ public sealed class CreateServiceTypeHandler(IQmsDbContext db, ICurrentTenant te
             return ServiceTypeErrors.PrefixTaken;
         }
 
-        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
+        var (name, translations) = LocalizedText.ToStorage(command.Name!, command.Translations);
         var row = new ServiceType
         {
             CompanyId = companyId,
-            NameEn = nameEn,
-            NameAr = nameAr,
+            Name = name,
+            NameTranslations = translations,
             Prefix = prefix,
             TargetMinutes = command.TargetMinutes,
             SortOrder = command.SortOrder,

@@ -18,8 +18,8 @@ public sealed class BranchScopeTests(PostgresFixture postgres)
     {
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);
         await using var db = PostgresFixture.CreateContext(connectionString);
-        var branch2 = new Branch { CompanyId = SeedIds.Company1, NameEn = "B2", NameAr = "ب2", Code = "B2", Timezone = "Asia/Dubai" };
-        var other = new Company { NameEn = "C2", NameAr = "ش2", Code = "C2", CurrencyCode = "AED" };
+        var branch2 = new Branch { CompanyId = SeedIds.Company1, Name = "B2", Code = "B2", Timezone = "Asia/Dubai" };
+        var other = new Company { Name = "C2", Code = "C2", CurrencyCode = "AED" };
         db.Branches.Add(branch2);
         db.Companies.Add(other);
         var manager = new AppUser { UserName = "bm", NormalizedUserName = "BM", DisplayName = "BM", CompanyId = SeedIds.Company1 };
@@ -78,7 +78,7 @@ public sealed class BranchScopeTests(PostgresFixture postgres)
         await using (var setup = PostgresFixture.CreateContext(connectionString))
         {
             var company = await setup.Companies.IgnoreQueryFilters().SingleAsync(c => c.Code == "C2");
-            var branch = new Branch { CompanyId = company.Id, NameEn = "X", NameAr = "س", Code = "X1", Timezone = "Asia/Dubai" };
+            var branch = new Branch { CompanyId = company.Id, Name = "X", Code = "X1", Timezone = "Asia/Dubai" };
             setup.Branches.Add(branch);
             await setup.SaveChangesAsync();
             otherCompanyBranch = branch.Id;

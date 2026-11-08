@@ -52,10 +52,10 @@ public sealed class UpdateServiceTypeHandler(
         // The UPDATE then carries "AND xmin = version": a save racing between the load and here fails with a concurrency error (409).
         db.Entry(row).Property(r => r.RowVersion).OriginalValue = version;
 
-        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
-        var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != command.IsActive!.Value;
-        row.NameEn = nameEn;
-        row.NameAr = nameAr;
+        var (name, translations) = LocalizedText.ToStorage(command.Name!, command.Translations);
+        var devicesAffected = row.Name != name || !LocalizedText.SameTranslations(row.NameTranslations, translations) || row.Prefix != prefix || row.IsActive != command.IsActive!.Value;
+        row.Name = name;
+        row.NameTranslations = translations;
         row.Prefix = prefix;
         row.TargetMinutes = command.TargetMinutes;
         row.SortOrder = command.SortOrder!.Value;

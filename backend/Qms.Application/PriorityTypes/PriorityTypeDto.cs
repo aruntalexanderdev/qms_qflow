@@ -21,11 +21,11 @@ public sealed record PriorityTypeDto(
     string Version)
 {
     public static PriorityTypeDto From(PriorityType row, string currencyCode) => From(
-        row.Id, row.NameEn, row.NameAr, row.Prefix, row.PriorityLevel, row.IsPaid, row.FeeAmount, currencyCode, row.IsActive, row.RowVersion);
+        row.Id, row.Name, row.NameTranslations, row.Prefix, row.PriorityLevel, row.IsPaid, row.FeeAmount, currencyCode, row.IsActive, row.RowVersion);
 
     public static PriorityTypeDto From(
-        Guid id, string nameEn, string nameAr, string prefix, int priorityLevel, bool isPaid, decimal? feeAmount, string currencyCode, bool isActive, uint rowVersion) =>
-        new(id, nameEn, LocalizedText.FromStorage(nameAr), prefix.Trim(), priorityLevel, isPaid, feeAmount, currencyCode.Trim(), isActive, RowVersionCodec.Encode(rowVersion));
+        Guid id, string name, IReadOnlyDictionary<string, string> nameTranslations, string prefix, int priorityLevel, bool isPaid, decimal? feeAmount, string currencyCode, bool isActive, uint rowVersion) =>
+        new(id, name, LocalizedText.FromStorage(nameTranslations), prefix.Trim(), priorityLevel, isPaid, feeAmount, currencyCode.Trim(), isActive, RowVersionCodec.Encode(rowVersion));
 
     /// <summary>The currency of the current company (the tenant filter on <c>company</c> leaves exactly one row).</summary>
     internal static Task<string> CurrencyOfCompanyAsync(IQmsDbContext db, CancellationToken cancellationToken) =>

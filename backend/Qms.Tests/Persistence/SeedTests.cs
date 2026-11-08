@@ -40,16 +40,16 @@ public sealed class SeedTests(PostgresFixture postgres)
     {
         await using var handle = await SeededAsync();
 
-        var services = await handle.Db.ServiceTypes.IgnoreQueryFilters().OrderBy(s => s.SortOrder).Select(s => new { s.NameEn, s.Prefix }).ToListAsync();
-        services.Select(s => (s.NameEn, s.Prefix)).ShouldBe(
+        var services = await handle.Db.ServiceTypes.IgnoreQueryFilters().OrderBy(s => s.SortOrder).Select(s => new { s.Name, s.Prefix }).ToListAsync();
+        services.Select(s => (s.Name, s.Prefix)).ShouldBe(
             [("Service 1", "A"), ("Service 2", "B"), ("Service 3", "C"), ("Service 4", "D"), ("Service 5", "F"), ("Service 6", "G")]);
 
         var priorities = await handle.Db.PriorityTypes.IgnoreQueryFilters().OrderBy(p => p.PriorityLevel).ToListAsync();
         priorities.Count.ShouldBe(2);
         var vip = priorities[0];
-        (vip.NameEn, vip.Prefix, vip.PriorityLevel, vip.IsPaid, vip.FeeAmount).ShouldBe(("VIP", "V", 1, true, 50.00m));
+        (vip.Name, vip.Prefix, vip.PriorityLevel, vip.IsPaid, vip.FeeAmount).ShouldBe(("VIP", "V", 1, true, 50.00m));
         var normal = priorities[1];
-        (normal.NameEn, normal.Prefix, normal.PriorityLevel, normal.IsPaid, normal.FeeAmount).ShouldBe(("Normal", "N", 2, false, null));
+        (normal.Name, normal.Prefix, normal.PriorityLevel, normal.IsPaid, normal.FeeAmount).ShouldBe(("Normal", "N", 2, false, null));
 
         (await handle.Db.Companies.IgnoreQueryFilters().SingleAsync()).CurrencyCode.ShouldBe("AED");
         services.Count.ShouldBe(6);
@@ -86,7 +86,7 @@ public sealed class SeedTests(PostgresFixture postgres)
         var counters = await handle.Db.Counters.IgnoreQueryFilters().OrderBy(c => c.Number).ToListAsync();
         counters.Select(c => (c.Name, c.ZoneId)).ShouldBe(
             [("Counter 1", SeedIds.Zone(1)), ("Counter 2", SeedIds.Zone(1)), ("Counter 3", SeedIds.Zone(2)), ("Counter 4", SeedIds.Zone(2))]);
-        (await handle.Db.Zones.IgnoreQueryFilters().Select(z => z.NameEn).ToListAsync()).ShouldBe(["Zone 1", "Zone 2"], ignoreOrder: true);
+        (await handle.Db.Zones.IgnoreQueryFilters().Select(z => z.Name).ToListAsync()).ShouldBe(["Zone 1", "Zone 2"], ignoreOrder: true);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed class SeedTests(PostgresFixture postgres)
         var settings = await handle.Db.DispenserSettings.IgnoreQueryFilters().ToListAsync();
         settings.Count.ShouldBe(2);
         settings.ShouldAllBe(s => s.TokenMode == TokenMode.PrintOnly && s.ShowVip && s.DefaultLanguage == "en");
-        settings.ShouldAllBe(s => s.Languages.SequenceEqual(new[] { "en", "ar" }));
+        settings.ShouldAllBe(s => s.Languages.SequenceEqual(new[] { "en" }));
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public sealed class SeedTests(PostgresFixture postgres)
         await using var handle = await SeededAsync();
 
         var branch = await handle.Db.Branches.IgnoreQueryFilters().SingleAsync();
-        (branch.NameEn, branch.NameAr, branch.Timezone).ShouldBe(("Branch 1", "الفرع 1", "Asia/Dubai"));
+        (branch.Name, branch.NameTranslations["ar"], branch.Timezone).ShouldBe(("Branch 1", "الفرع 1", "Asia/Dubai"));
 
         var hours = await handle.Db.BranchHours.IgnoreQueryFilters().ToListAsync();
         hours.Select(h => h.DayOfWeek).ShouldBe(
@@ -124,17 +124,17 @@ public sealed class SeedTests(PostgresFixture postgres)
         (setting.RecallLimit, setting.SkipDefault).ShouldBe((3, SkipDefault.NoShow));
 
         var template = await handle.Db.TicketTemplates.IgnoreQueryFilters().SingleAsync();
-        new[] { template.HeaderEn, template.HeaderAr, template.FooterEn, template.FooterAr }.ShouldAllBe(text => !string.IsNullOrWhiteSpace(text));
+        new[] { template.Header, template.HeaderTranslations["ar"], template.Footer, template.FooterTranslations["ar"] }.ShouldAllBe(text => !string.IsNullOrWhiteSpace(text));
     }
 
     [Fact]
-    public async Task Names_exist_in_english_and_arabic()
+    public async Task Names_have_english_and_the_seeded_arabic_is_kept_as_a_translation()
     {
         await using var handle = await SeededAsync();
 
-        (await handle.Db.ServiceTypes.IgnoreQueryFilters().AllAsync(s => s.NameAr != "" && s.NameEn != "")).ShouldBeTrue();
-        (await handle.Db.PriorityTypes.IgnoreQueryFilters().AllAsync(s => s.NameAr != "" && s.NameEn != "")).ShouldBeTrue();
-        (await handle.Db.Zones.IgnoreQueryFilters().AllAsync(s => s.NameAr != "" && s.NameEn != "")).ShouldBeTrue();
+        (await handle.Db.ServiceTypes.IgnoreQueryFilters().ToListAsync()).ShouldAllBe(s => s.Name != "" && s.NameTranslations.ContainsKey("ar"));
+        (await handle.Db.PriorityTypes.IgnoreQueryFilters().ToListAsync()).ShouldAllBe(s => s.Name != "" && s.NameTranslations.ContainsKey("ar"));
+        (await handle.Db.Zones.IgnoreQueryFilters().ToListAsync()).ShouldAllBe(s => s.Name != "" && s.NameTranslations.ContainsKey("ar"));
     }
 
     [Fact]

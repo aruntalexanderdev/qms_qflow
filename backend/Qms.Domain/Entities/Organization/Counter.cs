@@ -15,6 +15,9 @@ public class Counter : TenantEntity
 
     public required string Name { get; set; }
 
+    /// <summary>Optional translations of <see cref="Name"/>, language code to text.</summary>
+    public Dictionary<string, string> NameTranslations { get; set; } = new();
+
     public int Number { get; set; }
 
     public CounterStatus Status { get; set; } = CounterStatus.Closed;

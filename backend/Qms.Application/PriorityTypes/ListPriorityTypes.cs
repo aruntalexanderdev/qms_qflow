@@ -18,13 +18,13 @@ public sealed class ListPriorityTypesHandler(IQmsDbContext db) : IQueryHandler<L
 
         var items = await rows
             .OrderBy(row => row.PriorityLevel).ThenBy(row => row.Prefix).ThenBy(row => row.Id)
-            .Select(row => new { row.Id, row.NameEn, row.NameAr, row.Prefix, row.PriorityLevel, row.IsPaid, row.FeeAmount, row.IsActive, row.RowVersion })
+            .Select(row => new { row.Id, row.Name, row.NameTranslations, row.Prefix, row.PriorityLevel, row.IsPaid, row.FeeAmount, row.IsActive, row.RowVersion })
             .ToListAsync(cancellationToken);
         var currency = await PriorityTypeDto.CurrencyOfCompanyAsync(db, cancellationToken);
 
         return items
             .Select(row => PriorityTypeDto.From(
-                row.Id, row.NameEn, row.NameAr, row.Prefix, row.PriorityLevel, row.IsPaid, row.FeeAmount, currency, row.IsActive, row.RowVersion))
+                row.Id, row.Name, row.NameTranslations, row.Prefix, row.PriorityLevel, row.IsPaid, row.FeeAmount, currency, row.IsActive, row.RowVersion))
             .ToList();
     }
 }
