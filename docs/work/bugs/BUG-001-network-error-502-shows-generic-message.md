@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | BUG-001 |
-| Status | Retest |
+| Status | Done |
 | Severity | Minor |
 | Priority | P3 |
 | Found in | STORY-004 (AC-16), frontend as reviewed in round 2 (HEAD 08be692) |
@@ -59,7 +59,7 @@ AC-16 of STORY-004: "the user is not signed out and stays on the current page, t
 ## 9. Retest (filled by QA)
 | Date | Build | Result | Notes |
 |---|---|---|---|
-| | | Pass / Fail | Retest with the API stopped behind `ng serve` and behind Nginx, en and ar |
+| 2026-11-08 | HEAD 16dd6de (fix 04439fd) | Pass | Real API + postgres:18, Playwright. `ng serve`: API stopped, token near expiry, navigate: toast "Cannot reach the server" (en) and "تعذّر الاتصال بالخادم" (ar), session kept on `/home`; API restarted: next navigation sends one refresh (200). Nginx (built dist, API stopped, refresh answered 502): toast "Cannot reach the server" (en), session kept, one refresh and success after restart. Stubbed 500 with correlationId still shows the reference text. `npm test` 94 green, lint and build green. |
 
 ## 10. Stage log
 <Handoffs, same format as stories.>
@@ -69,3 +69,7 @@ Result: Approved (details in STORY-004 Stage log, "Stage 6 — Code review (roun
 Changed: none (review only)
 Notes for next stage: QA retest per section 9. Lint, tests (94) and build are green. The new spec cases fail on the pre-fix code.
 Open questions: none
+
+### Stage 7 — QA (retest) — qa-tester — 2026-11-08
+Result: Done (Pass, bug closed)
+Notes: see retest table; AC-16 now Pass in STORY-004.

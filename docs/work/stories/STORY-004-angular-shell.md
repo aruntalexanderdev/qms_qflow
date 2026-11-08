@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | QA |
+| Status | Done |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -566,3 +566,11 @@ Nice to have
 
 Notes for next stage: QA retests BUG-001 (API stopped, behind `ng serve` and behind Nginx, en and ar; then API restarted, one refresh), and AC-10's 429 text (1, 2 and N minutes). Bug status set to Retest.
 Open questions: none
+
+### Stage 7 — QA (retest) — qa-tester — 2026-11-08
+Result: Done
+AC results: AC-1 Pass, AC-2 Pass, AC-3 Pass, AC-4 Pass, AC-5 Pass, AC-6 Pass, AC-7 Pass, AC-8 Pass, AC-9 Pass, AC-10 Pass, AC-11 Pass, AC-12 Pass, AC-13 Pass, AC-14 Pass, AC-15 Pass, AC-16 Pass (retest, BUG-001), AC-17 Pass, AC-18 Pass
+Bugs: BUG-001 (Minor, stage 4) retested Pass and closed (status Done). No open bugs.
+Retest evidence: [STORY-004-tests.md](STORY-004-tests.md) "Retest 2026-11-08". AC-16 with the API stopped shows "Cannot reach the server" / "تعذّر الاتصال بالخادم" behind `ng serve` and Nginx, session kept, one refresh after restart. 429 texts correct for 1, 2, 5 minutes and no header, en + ar. Smoke AC-1, AC-11, AC-13 green. `npm test` 94 green, lint and build green.
+Manual device checks pending: none (web only). Not verifiable in the sandbox: `docker compose up --build` image build and a GitHub Actions run of AC-9.
+Sign-off: STORY-004 accepted. Known follow-ups S7, N2, N4, N5, N7, N8, N9 remain open, none blocking.
