@@ -26,7 +26,7 @@ backend/
   Qms.Application/     commands/queries, handlers, validators, DTOs, queue engine
   Qms.Infrastructure/  EF Core DbContext, migrations, repositories, messaging adapters
   Qms.Api/             controllers (/api/v1), SignalR hub (/hubs/qms), auth, middleware
-  Qms.Tests/           xUnit v2 + Shouldly + NetArchTest + WebApplicationFactory (Testcontainers PostgreSQL from STORY-002)
+  Qms.Tests/           xUnit v2 + Shouldly + NetArchTest + WebApplicationFactory (Testcontainers PostgreSQL 18; Docker must be running)
   Directory.Build.props / Directory.Packages.props   shared settings and central package versions
 ```
 
@@ -55,8 +55,10 @@ dotnet --version   # must be 10.0.x
 ```
 
 ```bash
-dotnet tool install --global dotnet-ef
+dotnet tool restore
 ```
+
+`dotnet-ef` is pinned in `.config/dotnet-tools.json` at the repository root (run `dotnet ef` from the repository root).
 
 Docker Desktop (arm64) is needed for PostgreSQL and for Testcontainers.
 
@@ -89,6 +91,8 @@ Validation errors (`errors` in problem details) use camelCase keys without a `$.
 ```bash
 dotnet ef migrations add <Name> -p backend/Qms.Infrastructure -s backend/Qms.Api
 ```
+
+The tool uses `QmsDbContextFactory` (design-time, no database needed). To run `dotnet ef database update` against a real database, set `QMS_DESIGN_CONNECTION`. The first migration was created with `-o Persistence/Migrations`; EF puts later ones next to it. Never edit an applied migration; add a new one.
 
 ## Configuration
 
