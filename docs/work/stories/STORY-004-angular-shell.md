@@ -447,3 +447,22 @@ Notes for the architect (S6): final coordinator behaviour to record in ADR-007:
 - Extend the accepted "response lost" consequence to a reload or tab close during a refresh.
 Open questions: none
 
+
+### Stage 0 — Architecture (review S6) — project-architect — 2026-11-08 — ADR-007 updated
+Result: Done
+Changed: docs/adr/ADR-007-web-session-handling.md, docs/work/stories/STORY-004-angular-shell.md (this entry)
+Notes for next stage:
+- ADR-007 is now Accepted. Part A records the coordinator as built (checked against `core/auth/session-coordinator.ts`, `session-environment.ts`, `auth.interceptor.ts`, `auth.guards.ts`, `app.routes.ts`):
+  - "newer" by `validUntil`, and why tokens are not compared;
+  - the `session` / `signed-out` message shapes;
+  - login, refresh and logout under `qms-auth-session`;
+  - the `ifAvailable` probe and the one 150 ms event-driven grace wait;
+  - user switch (it ends on `/login`) and no replay under another identity;
+  - refresh triggers, including `authGuard` on every navigation, with no timers;
+  - interceptor scope: same-origin `/api/` only;
+  - a failed sign-out keeps the session;
+  - behaviour without Web Locks.
+- Consequences: "response lost" now covers a reload or tab close during a refresh; new accepted limit: a hidden tab's grace timer may be throttled to about 1 s.
+- Numbering A.1–A.8 kept, so the existing code comments (A.4, A.6) still point to the right items.
+- ADR-004 unchanged. S6 is closed; returns to stage 6 for the rest of the review.
+Open questions: none
