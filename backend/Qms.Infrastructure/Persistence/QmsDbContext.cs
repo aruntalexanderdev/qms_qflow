@@ -26,6 +26,8 @@ public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant
     /// <summary>Read by the query filters; EF evaluates it per context instance.</summary>
     public Guid? CurrentCompanyId => currentTenant.CompanyId;
 
+    public DbSet<Language> Languages => Set<Language>();
+
     public DbSet<Company> Companies => Set<Company>();
 
     public DbSet<ServiceType> ServiceTypes => Set<ServiceType>();

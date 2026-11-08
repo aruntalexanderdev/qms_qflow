@@ -246,17 +246,18 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
-                    b.Property<string>("NameAr")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("name_ar");
+                        .HasColumnName("name");
 
-                    b.Property<string>("NameEn")
+                    b.Property<string>("NameTranslations")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("name_en");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("name_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
@@ -284,7 +285,10 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_branch_company_id_code");
 
-                    b.ToTable("branch", (string)null);
+                    b.ToTable("branch", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_branch_name_translations_object", "jsonb_typeof(name_translations) = 'object'");
+                        });
                 });
 
             modelBuilder.Entity("Qms.Domain.Entities.BranchCalendar", b =>
@@ -621,6 +625,21 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("currency_code")
                         .IsFixedLength();
 
+                    b.Property<string>("DefaultLanguage")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)")
+                        .HasDefaultValue("en")
+                        .HasColumnName("default_language");
+
+                    b.PrimitiveCollection<string[]>("EnabledLanguages")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("enabled_languages")
+                        .HasDefaultValueSql("'{en}'::text[]");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -630,17 +649,18 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("logo_url");
 
-                    b.Property<string>("NameAr")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("name_ar");
+                        .HasColumnName("name");
 
-                    b.Property<string>("NameEn")
+                    b.Property<string>("NameTranslations")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("name_en");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("name_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
@@ -659,9 +679,16 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_company_code");
 
+                    b.HasIndex("DefaultLanguage")
+                        .HasDatabaseName("ix_company_default_language");
+
                     b.ToTable("company", null, t =>
                         {
                             t.HasCheckConstraint("ck_company_currency_code", "currency_code ~ '^[A-Z]{3}$'");
+
+                            t.HasCheckConstraint("ck_company_default_language_enabled", "default_language = ANY(enabled_languages)");
+
+                            t.HasCheckConstraint("ck_company_name_translations_object", "jsonb_typeof(name_translations) = 'object'");
                         });
                 });
 
@@ -739,6 +766,13 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
 
+                    b.Property<string>("NameTranslations")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("name_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
                     b.Property<int>("Number")
                         .HasColumnType("integer")
                         .HasColumnName("number");
@@ -790,6 +824,8 @@ namespace Qms.Infrastructure.Persistence.Migrations
 
                     b.ToTable("counter", null, t =>
                         {
+                            t.HasCheckConstraint("ck_counter_name_translations_object", "jsonb_typeof(name_translations) = 'object'");
+
                             t.HasCheckConstraint("ck_counter_number", "number >= 1");
                         });
                 });
@@ -1124,6 +1160,64 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.ToTable("dispenser_zone_service", (string)null);
                 });
 
+            modelBuilder.Entity("Qms.Domain.Entities.Language", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("direction");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_available");
+
+                    b.Property<string>("NativeName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("native_name");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_language");
+
+                    b.HasAlternateKey("Code")
+                        .HasName("ux_language_code");
+
+                    b.ToTable("language", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_language_direction", "direction IN ('ltr', 'rtl')");
+                        });
+                });
+
             modelBuilder.Entity("Qms.Domain.Entities.MessageLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1285,17 +1379,18 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_paid");
 
-                    b.Property<string>("NameAr")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("name_ar");
+                        .HasColumnName("name");
 
-                    b.Property<string>("NameEn")
+                    b.Property<string>("NameTranslations")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("name_en");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("name_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<string>("Prefix")
                         .IsRequired()
@@ -1333,6 +1428,8 @@ namespace Qms.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_priority_type_fee_not_negative", "fee_amount IS NULL OR fee_amount >= 0");
 
                             t.HasCheckConstraint("ck_priority_type_fee_required_when_paid", "NOT is_paid OR fee_amount IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_priority_type_name_translations_object", "jsonb_typeof(name_translations) = 'object'");
 
                             t.HasCheckConstraint("ck_priority_type_prefix", "prefix ~ '^[A-Z]$'");
 
@@ -1491,17 +1588,18 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
-                    b.Property<string>("NameAr")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("name_ar");
+                        .HasColumnName("name");
 
-                    b.Property<string>("NameEn")
+                    b.Property<string>("NameTranslations")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("name_en");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("name_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<string>("Prefix")
                         .IsRequired()
@@ -1540,6 +1638,8 @@ namespace Qms.Infrastructure.Persistence.Migrations
 
                     b.ToTable("service_type", null, t =>
                         {
+                            t.HasCheckConstraint("ck_service_type_name_translations_object", "jsonb_typeof(name_translations) = 'object'");
+
                             t.HasCheckConstraint("ck_service_type_prefix", "prefix ~ '^[A-Z]$'");
 
                             t.HasCheckConstraint("ck_service_type_target_minutes", "target_minutes IS NULL OR target_minutes > 0");
@@ -1561,29 +1661,31 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("FooterAr")
+                    b.Property<string>("Footer")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
-                        .HasColumnName("footer_ar");
+                        .HasColumnName("footer");
 
-                    b.Property<string>("FooterEn")
+                    b.Property<string>("FooterTranslations")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("footer_en");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("footer_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
-                    b.Property<string>("HeaderAr")
+                    b.Property<string>("Header")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
-                        .HasColumnName("header_ar");
+                        .HasColumnName("header");
 
-                    b.Property<string>("HeaderEn")
+                    b.Property<string>("HeaderTranslations")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("header_en");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("header_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<string>("LogoUrl")
                         .HasMaxLength(500)
@@ -1614,7 +1716,12 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasAlternateKey("CompanyId", "Id")
                         .HasName("ak_ticket_templates_company_id_id");
 
-                    b.ToTable("ticket_template", (string)null);
+                    b.ToTable("ticket_template", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ticket_template_footer_translations_object", "jsonb_typeof(footer_translations) = 'object'");
+
+                            t.HasCheckConstraint("ck_ticket_template_header_translations_object", "jsonb_typeof(header_translations) = 'object'");
+                        });
                 });
 
             modelBuilder.Entity("Qms.Domain.Entities.Token", b =>
@@ -2103,17 +2210,18 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("NameAr")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("name_ar");
+                        .HasColumnName("name");
 
-                    b.Property<string>("NameEn")
+                    b.Property<string>("NameTranslations")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("name_en");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("name_translations")
+                        .HasDefaultValueSql("'{}'::jsonb");
 
                     b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
@@ -2138,7 +2246,10 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasIndex("CompanyId", "BranchId")
                         .HasDatabaseName("ix_zone_company_id_branch_id");
 
-                    b.ToTable("zone", (string)null);
+                    b.ToTable("zone", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_zone_name_translations_object", "jsonb_typeof(name_translations) = 'object'");
+                        });
                 });
 
             modelBuilder.Entity("Qms.Infrastructure.Persistence.Identity.AppRole", b =>
@@ -2275,6 +2386,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasIndex("CompanyId")
                         .HasDatabaseName("ix_asp_net_users_company_id");
 
+                    b.HasIndex("Language")
+                        .HasDatabaseName("ix_asp_net_users_language");
+
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
 
@@ -2282,10 +2396,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
 
-                    b.ToTable("asp_net_users", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_asp_net_users_language", "language IN ('en', 'ar')");
-                        });
+                    b.ToTable("asp_net_users", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -2483,6 +2594,17 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_branch_setting_branch_company_id_branch_id");
 
                     b.Navigation("Branch");
+                });
+
+            modelBuilder.Entity("Qms.Domain.Entities.Company", b =>
+                {
+                    b.HasOne("Qms.Domain.Entities.Language", null)
+                        .WithMany()
+                        .HasForeignKey("DefaultLanguage")
+                        .HasPrincipalKey("Code")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_company_default_language_language_code");
                 });
 
             modelBuilder.Entity("Qms.Domain.Entities.CompanyServicePriority", b =>
@@ -3081,6 +3203,14 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_asp_net_users_companies_company_id");
+
+                    b.HasOne("Qms.Domain.Entities.Language", null)
+                        .WithMany()
+                        .HasForeignKey("Language")
+                        .HasPrincipalKey("Code")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_users_language_language_code");
                 });
 #pragma warning restore 612, 618
         }

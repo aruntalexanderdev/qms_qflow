@@ -56,7 +56,7 @@ public sealed class RowVersionTests(PostgresFixture postgres)
         builder.UseQmsPostgres(connectionString).LogTo(commands.Add, Microsoft.Extensions.Logging.LogLevel.Information).EnableSensitiveDataLogging();
         await using var db = new QmsDbContext(builder.Options, new SettableCurrentTenant(SeedIds.Company1));
         var service = await db.ServiceTypes.FirstAsync();
-        service.NameEn = "Renamed";
+        service.Name = "Renamed";
 
         await db.SaveChangesAsync();
 
@@ -77,15 +77,15 @@ public sealed class RowVersionTests(PostgresFixture postgres)
         loadedVersion.ShouldNotBe(0u);
         b.RowVersion.ShouldBe(loadedVersion);
 
-        a.NameEn = "First writer";
+        a.Name = "First writer";
         await first.SaveChangesAsync();
         a.RowVersion.ShouldNotBe(loadedVersion, "the new xmin is read back after the update");
 
-        b.NameEn = "Second writer";
+        b.Name = "Second writer";
         await Should.ThrowAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
 
         await using var check = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
-        (await check.ServiceTypes.SingleAsync(s => s.Id == a.Id)).NameEn.ShouldBe("First writer");
+        (await check.ServiceTypes.SingleAsync(s => s.Id == a.Id)).Name.ShouldBe("First writer");
     }
 
     [Fact]
@@ -103,13 +103,13 @@ public sealed class RowVersionTests(PostgresFixture postgres)
 
         await using (var other = PostgresFixture.CreateContext(connectionString, SeedIds.Company1))
         {
-            (await other.ServiceTypes.SingleAsync(s => s.Id == id)).NameEn = "Changed meanwhile";
+            (await other.ServiceTypes.SingleAsync(s => s.Id == id)).Name = "Changed meanwhile";
             await other.SaveChangesAsync();
         }
 
         await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
         var current = await db.ServiceTypes.SingleAsync(s => s.Id == id);
-        current.NameEn = "From a stale form";
+        current.Name = "From a stale form";
         db.Entry(current).Property(s => s.RowVersion).OriginalValue = clientVersion;
 
         await Should.ThrowAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
@@ -123,7 +123,7 @@ public sealed class RowVersionTests(PostgresFixture postgres)
         await using var second = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
         var a = await first.ServiceTypes.FirstAsync();
         var b = await second.ServiceTypes.SingleAsync(s => s.Id == a.Id);
-        a.NameEn = "Touched";
+        a.Name = "Touched";
         await first.SaveChangesAsync();
 
         second.ServiceTypes.Remove(b);

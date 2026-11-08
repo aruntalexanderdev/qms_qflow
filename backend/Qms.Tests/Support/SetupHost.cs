@@ -33,13 +33,49 @@ public sealed class SetupHost : IDisposable
         return new SetupHost(host, await SetupTestData.EnsureAsync(host));
     }
 
+    /// <summary>
+    /// The ar-enabled test database (STORY-051): <c>ar</c> is made available and enabled for Company 1 only, by SQL in the test.
+    /// The shipped seed never has this state (phase 1 is English only).
+    /// </summary>
+    public static async Task<SetupHost> StartWithArabicAsync(PostgresFixture postgres)
+    {
+        var setup = await StartAsync(postgres);
+        await setup.MakeArabicAvailableAsync();
+        await setup.SetEnabledLanguagesAsync(Qms.Infrastructure.Persistence.Seed.SeedIds.Company1, "en", "ar");
+        return setup;
+    }
+
     public void Dispose() => Host.Dispose();
+
+    public Task MakeArabicAvailableAsync() => ExecuteAsync("UPDATE language SET is_available = true WHERE code = 'ar'");
+
+    public Task MakeArabicUnavailableAsync() => ExecuteAsync("UPDATE language SET is_available = false WHERE code = 'ar'");
+
+    /// <summary>Sets the enabled languages of a company by SQL (the default stays <c>en</c>).</summary>
+    public Task SetEnabledLanguagesAsync(Guid companyId, params string[] codes) =>
+        ExecuteAsync($"UPDATE company SET enabled_languages = {TextArray(codes)} WHERE id = '{companyId}'");
+
+    /// <summary>Sets the languages a seeded dispenser offers by SQL.</summary>
+    public Task SetDispenserLanguagesAsync(Guid deviceId, params string[] codes) =>
+        ExecuteAsync($"UPDATE dispenser_setting SET languages = {TextArray(codes)} WHERE device_id = '{deviceId}'");
+
+    private static string TextArray(string[] codes) => "ARRAY[" + string.Join(",", codes.Select(code => $"'{code}'")) + "]::text[]";
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var db = Host.OpenContext();
+        await db.Database.ExecuteSqlRawAsync(sql);
+    }
 
     /// <summary>Calls the API as <paramref name="user"/>; a null user sends no token.</summary>
     public Task<ApiReply> CallAsync(SetupUser? user, HttpMethod method, string url, object? body = null) =>
         Host.SendAsync(method, url, body, user is { } signedIn ? Data.Token(signedIn) : null);
 
     public Task<ApiReply> GetAsync(SetupUser? user, string url) => CallAsync(user, HttpMethod.Get, url);
+
+    /// <summary>A <c>GET</c> that sends an <c>Accept-Language</c> header (null sends none).</summary>
+    public Task<ApiReply> GetWithLanguageAsync(SetupUser? user, string url, string? acceptLanguage) =>
+        Host.SendAsync(HttpMethod.Get, url, null, user is { } signedIn ? Data.Token(signedIn) : null, acceptLanguage: acceptLanguage);
 
     public Task<ApiReply> PostAsync(SetupUser? user, string url, object body) => CallAsync(user, HttpMethod.Post, url, body);
 

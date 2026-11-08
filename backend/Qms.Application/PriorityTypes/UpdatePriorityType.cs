@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Qms.Application.Common;
+using Qms.Application.Localisation;
 
 namespace Qms.Application.PriorityTypes;
 
@@ -12,7 +13,8 @@ public sealed record UpdatePriorityTypeCommand(
 
 public sealed class UpdatePriorityTypeValidator : PriorityTypeFieldsValidator<UpdatePriorityTypeCommand>
 {
-    public UpdatePriorityTypeValidator()
+    public UpdatePriorityTypeValidator(ICompanyLanguages languages)
+        : base(languages)
     {
         RuleFor(command => command.IsActive).Sent();
         RuleFor(command => command.Version).RowVersionText();
@@ -20,7 +22,7 @@ public sealed class UpdatePriorityTypeValidator : PriorityTypeFieldsValidator<Up
 }
 
 public sealed class UpdatePriorityTypeHandler(
-    IQmsDbContext db, IPostCommitActions postCommit, IDeviceConfigNotifier notifier)
+    IQmsDbContext db, ICompanyLanguages languages, IPostCommitActions postCommit, IDeviceConfigNotifier notifier)
     : ICommandHandler<UpdatePriorityTypeCommand, PriorityTypeDto>
 {
     public async Task<Result<PriorityTypeDto>> HandleAsync(UpdatePriorityTypeCommand command, CancellationToken cancellationToken)
@@ -45,14 +47,16 @@ public sealed class UpdatePriorityTypeHandler(
 
         db.Entry(row).Property(r => r.RowVersion).OriginalValue = version;
 
-        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
+        var company = await languages.GetCompanySettingsAsync(cancellationToken);
+        var name = command.Name!.Trim();
+        var translations = LocalizedTextRules.Merge(row.NameTranslations, command.Translations, company);
         var isPaid = command.IsPaid!.Value;
         var isActive = command.IsActive!.Value;
         var fee = isPaid ? command.FeeAmount : null;
-        var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != isActive
+        var devicesAffected = row.Name != name || !LocalizedTextRules.Same(row.NameTranslations, translations) || row.Prefix != prefix || row.IsActive != isActive
             || row.IsPaid != isPaid || row.FeeAmount != fee;
-        row.NameEn = nameEn;
-        row.NameAr = nameAr;
+        row.Name = name;
+        row.NameTranslations = translations;
         row.Prefix = prefix;
         row.PriorityLevel = command.PriorityLevel!.Value;
         row.IsPaid = isPaid;
@@ -66,6 +70,6 @@ public sealed class UpdatePriorityTypeHandler(
             postCommit.Enqueue(token => notifier.ConfigChangedAsync(change, token));
         }
 
-        return PriorityTypeDto.From(row, await PriorityTypeDto.CurrencyOfCompanyAsync(db, cancellationToken));
+        return PriorityTypeDto.From(row, await PriorityTypeDto.CurrencyOfCompanyAsync(db, cancellationToken), company);
     }
 }

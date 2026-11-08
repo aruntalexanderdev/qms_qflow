@@ -26,6 +26,7 @@ public static class PostgresErrorCatalog
     private static readonly DatabaseError ServiceTypeInUse = new(ErrorType.Conflict, "service_type.in_use");
     private static readonly DatabaseError PriorityTypeInUse = new(ErrorType.Conflict, "priority_type.in_use");
     private static readonly DatabaseError UserNotFound = new(ErrorType.NotFound, "user.not_found");
+    private static readonly DatabaseError LanguageNotEnabled = new(ErrorType.Validation, "language.not_enabled");
     private static readonly DatabaseError ResourceNotFound = new(ErrorType.NotFound, ErrorCodes.ResourceNotFound);
 
     private static readonly Dictionary<string, DatabaseError> UniqueConstraints = new(StringComparer.Ordinal)
@@ -58,11 +59,23 @@ public static class PostgresErrorCatalog
         ["fk_user_counter_user_company"] = UserNotFound,
         ["fk_user_branch_branch_company_id_branch_id"] = ResourceNotFound,
         ["fk_user_counter_counter_company_id_counter_id"] = ResourceNotFound,
+
+        // Languages (STORY-051). The Application checks these first; the database is the backstop. A user language outside the
+        // registry is 400 language.not_enabled; a company default outside the registry is 400 request.invalid, not "in use".
+        ["fk_asp_net_users_language_language_code"] = LanguageNotEnabled,
+        ["fk_company_default_language_language_code"] = DefaultInvalid,
+    };
+
+    // Check constraints (23514) that have their own answer. Every check answers 400; these are listed so the catalog test proves
+    // the names exist. A company default outside the enabled list is the backstop of the Application rule.
+    private static readonly Dictionary<string, DatabaseError> CheckConstraints = new(StringComparer.Ordinal)
+    {
+        ["ck_company_default_language_enabled"] = DefaultInvalid,
     };
 
     /// <summary>Every constraint or index name the catalog knows. A test checks each exists in the schema.</summary>
     public static IReadOnlyCollection<string> ConstraintNames { get; } =
-        [.. UniqueConstraints.Keys, .. ForeignKeys.Keys];
+        [.. UniqueConstraints.Keys, .. ForeignKeys.Keys, .. CheckConstraints.Keys];
 
     /// <summary>The answer for a database error, or null when the SQLSTATE is not one the catalog handles.</summary>
     public static DatabaseError? Map(string? sqlState, string? constraintName)
@@ -75,7 +88,7 @@ public static class PostgresErrorCatalog
             case RestrictViolation:
                 return constraintName is not null && ForeignKeys.TryGetValue(constraintName, out var reference) ? reference : DefaultInUse;
             case CheckViolation:
-                return DefaultInvalid;
+                return constraintName is not null && CheckConstraints.TryGetValue(constraintName, out var invalid) ? invalid : DefaultInvalid;
             default:
                 return null;
         }

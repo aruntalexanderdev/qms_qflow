@@ -12,6 +12,9 @@ namespace Qms.Application.Common;
 /// </summary>
 public interface IQmsDbContext
 {
+    /// <summary>The language registry: global, not filtered by company (ADR-010 section 2).</summary>
+    DbSet<Language> Languages { get; }
+
     DbSet<Company> Companies { get; }
 
     DbSet<ServiceType> ServiceTypes { get; }

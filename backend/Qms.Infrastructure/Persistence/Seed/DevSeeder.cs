@@ -45,7 +45,7 @@ public sealed class DevSeeder(QmsDbContext db)
 
         await EnsureAsync<Company>(c => c.Id == company, () => new Company
         {
-            Id = company, NameEn = "Company 1", NameAr = "الشركة 1", Code = "C1", CurrencyCode = "AED",
+            Id = company, Name = "Company 1", NameTranslations = Arabic("الشركة 1"), DefaultLanguage = "en", EnabledLanguages = ["en"], Code = "C1", CurrencyCode = "AED",
         }, cancellationToken);
 
         for (var number = 1; number <= ServicePrefixes.Length; number++)
@@ -53,18 +53,18 @@ public sealed class DevSeeder(QmsDbContext db)
             var n = number;
             await EnsureAsync<ServiceType>(s => s.CompanyId == company && s.Prefix == ServicePrefixes[n - 1], () => new ServiceType
             {
-                Id = SeedIds.Service(n), CompanyId = company, NameEn = $"Service {n}", NameAr = $"الخدمة {n}",
+                Id = SeedIds.Service(n), CompanyId = company, Name = $"Service {n}", NameTranslations = Arabic($"الخدمة {n}"),
                 Prefix = ServicePrefixes[n - 1], SortOrder = n,
             }, cancellationToken);
         }
 
         await EnsureAsync<PriorityType>(p => p.CompanyId == company && p.Prefix == "N", () => new PriorityType
         {
-            Id = SeedIds.Normal, CompanyId = company, NameEn = "Normal", NameAr = "عادي", Prefix = "N", PriorityLevel = 2, IsPaid = false,
+            Id = SeedIds.Normal, CompanyId = company, Name = "Normal", NameTranslations = Arabic("عادي"), Prefix = "N", PriorityLevel = 2, IsPaid = false,
         }, cancellationToken);
         await EnsureAsync<PriorityType>(p => p.CompanyId == company && p.Prefix == "V", () => new PriorityType
         {
-            Id = SeedIds.Vip, CompanyId = company, NameEn = "VIP", NameAr = "كبار الشخصيات", Prefix = "V", PriorityLevel = 1,
+            Id = SeedIds.Vip, CompanyId = company, Name = "VIP", NameTranslations = Arabic("كبار الشخصيات"), Prefix = "V", PriorityLevel = 1,
             IsPaid = true, FeeAmount = 50.00m,
         }, cancellationToken);
 
@@ -82,7 +82,7 @@ public sealed class DevSeeder(QmsDbContext db)
 
         await EnsureAsync<Branch>(b => b.CompanyId == company && b.Code == "B1", () => new Branch
         {
-            Id = branch, CompanyId = company, NameEn = "Branch 1", NameAr = "الفرع 1", Code = "B1", Timezone = "Asia/Dubai",
+            Id = branch, CompanyId = company, Name = "Branch 1", NameTranslations = Arabic("الفرع 1"), Code = "B1", Timezone = "Asia/Dubai",
         }, cancellationToken);
 
         // Sample working hours (spec section 4 lists none): Sunday to Thursday, 08:00 to 15:00.
@@ -118,7 +118,7 @@ public sealed class DevSeeder(QmsDbContext db)
             var z = zone;
             await EnsureAsync<Zone>(x => x.Id == SeedIds.Zone(z), () => new Zone
             {
-                Id = SeedIds.Zone(z), CompanyId = company, BranchId = branch, NameEn = $"Zone {z}", NameAr = $"المنطقة {z}", SortOrder = z,
+                Id = SeedIds.Zone(z), CompanyId = company, BranchId = branch, Name = $"Zone {z}", NameTranslations = Arabic($"المنطقة {z}"), SortOrder = z,
             }, cancellationToken);
         }
 
@@ -147,8 +147,8 @@ public sealed class DevSeeder(QmsDbContext db)
 
         await EnsureAsync<TicketTemplate>(t => t.Id == SeedIds.TicketTemplate1, () => new TicketTemplate
         {
-            Id = SeedIds.TicketTemplate1, CompanyId = company, HeaderEn = "Company 1", HeaderAr = "الشركة 1",
-            FooterEn = "Thank you for your visit", FooterAr = "شكراً لزيارتكم", ShowWait = true, ShowPeopleAhead = true,
+            Id = SeedIds.TicketTemplate1, CompanyId = company, Header = "Company 1", HeaderTranslations = Arabic("الشركة 1"),
+            Footer = "Thank you for your visit", FooterTranslations = Arabic("شكراً لزيارتكم"), ShowWait = true, ShowPeopleAhead = true,
         }, cancellationToken);
 
         for (var dispenser = 1; dispenser <= 2; dispenser++)
@@ -163,7 +163,7 @@ public sealed class DevSeeder(QmsDbContext db)
             await EnsureAsync<DispenserSetting>(s => s.DeviceId == deviceId, () => new DispenserSetting
             {
                 CompanyId = company, DeviceId = deviceId, TokenMode = TokenMode.PrintOnly, CountryCodes = ["+971"], DefaultCountryCode = "+971",
-                PhoneMin = 9, PhoneMax = 9, Languages = ["en", "ar"], DefaultLanguage = "en", TicketTemplateId = SeedIds.TicketTemplate1,
+                PhoneMin = 9, PhoneMax = 9, Languages = ["en"], DefaultLanguage = "en", TicketTemplateId = SeedIds.TicketTemplate1,
                 ConfirmSeconds = 5, ShowVip = true,
             }, cancellationToken);
         }
@@ -183,6 +183,12 @@ public sealed class DevSeeder(QmsDbContext db)
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// The seeded Arabic text stays in the database as <c>translations.ar</c> (ADR-010 section 14). It is not visible while
+    /// <c>ar</c> is not available and enabled. The English text is the required default value.
+    /// </summary>
+    private static Dictionary<string, string> Arabic(string text) => new() { ["ar"] = text };
 
     private static Guid Priority(bool vip) => vip ? SeedIds.Vip : SeedIds.Normal;
 

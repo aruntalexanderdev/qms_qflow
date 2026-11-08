@@ -30,7 +30,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac25_company_admin_reads_and_branch_managers_read_but_cannot_write()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         foreach (var (method, url, body, isWrite) in Endpoints())
         {
@@ -55,7 +55,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac25_branch_manager_writes_change_nothing()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         foreach (var (method, url, body, isWrite) in Endpoints().Where(e => e.IsWrite))
         {
@@ -72,7 +72,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [InlineData(SetupUser.SuperAdmin)]
     public async Task Ac25_counter_staff_and_super_admin_get_403_on_all_ten_endpoints(SetupUser user)
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         foreach (var (method, url, body, _) in Endpoints())
         {
@@ -86,7 +86,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac25_without_a_token_every_endpoint_is_401()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         foreach (var (method, url, body, _) in Endpoints())
         {
@@ -102,7 +102,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac26_create_update_and_delete_write_three_audit_rows_in_order_and_reads_write_none()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var before = DateTimeOffset.UtcNow.AddSeconds(-1);
         var vip = (await setup.GetAsync(SetupUser.CompanyAdminC1, $"/api/v1/priority-types/{SeedIds.Vip}")).Json.Clone();
         var version = vip.GetProperty("version").GetString();
@@ -139,7 +139,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac27_failed_writes_change_nothing_and_write_no_audit_row()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var v1 = (await setup.GetAsync(SetupUser.CompanyAdminC1, "/api/v1/service-types/" + SeedIds.Service(3))).Json.Clone();
         var staleVersion = v1.GetProperty("version").GetString();
         (await setup.PutAsync(SetupUser.CompanyAdminC1, "/api/v1/service-types/" + SeedIds.Service(3),
@@ -164,7 +164,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac33_service_type_changes_that_devices_show_notify_once_after_the_commit()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var url = "/api/v1/service-types/" + SeedIds.Service(3);
         var current = (await setup.GetAsync(SetupUser.CompanyAdminC1, url)).Json.Clone();
 
@@ -202,7 +202,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac33_priority_type_name_prefix_active_paid_and_fee_notify_but_level_does_not()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var url = "/api/v1/priority-types/" + SeedIds.Vip;
         var current = (await setup.GetAsync(SetupUser.CompanyAdminC1, url)).Json.Clone();
 
@@ -235,7 +235,7 @@ public sealed class AccessAndAuditTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac37_error_responses_are_problem_json_with_a_code_and_never_show_internals()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var replies = new List<(ApiReply Reply, int Status, string Code)>
         {
             (await setup.PostAsync(SetupUser.CompanyAdminC1, "/api/v1/service-types", new { name = "", prefix = "h" }), 400, "validation.failed"),

@@ -16,12 +16,12 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
     {
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);
         await using var db = PostgresFixture.CreateContext(connectionString);
-        var company2 = new Company { NameEn = "Company 2", NameAr = "الشركة 2", Code = "C2", CurrencyCode = "SAR" };
+        var company2 = new Company { Name = "Company 2", Code = "C2", CurrencyCode = "SAR" };
         db.Companies.Add(company2);
-        db.ServiceTypes.Add(new ServiceType { CompanyId = company2.Id, NameEn = "Other service", NameAr = "خدمة أخرى", Prefix = "A" });
-        db.PriorityTypes.Add(new PriorityType { CompanyId = company2.Id, NameEn = "Normal", NameAr = "عادي", Prefix = "N", PriorityLevel = 2 });
-        db.Branches.Add(new Branch { Id = Company2Branch, CompanyId = company2.Id, NameEn = "Other branch", NameAr = "فرع آخر", Code = "X1", Timezone = "Asia/Riyadh" });
-        db.Zones.Add(new Zone { CompanyId = company2.Id, BranchId = Company2Branch, NameEn = "Main zone", NameAr = "المنطقة الرئيسية" });
+        db.ServiceTypes.Add(new ServiceType { CompanyId = company2.Id, Name = "Other service", Prefix = "A" });
+        db.PriorityTypes.Add(new PriorityType { CompanyId = company2.Id, Name = "Normal", Prefix = "N", PriorityLevel = 2 });
+        db.Branches.Add(new Branch { Id = Company2Branch, CompanyId = company2.Id, Name = "Other branch", Code = "X1", Timezone = "Asia/Riyadh" });
+        db.Zones.Add(new Zone { CompanyId = company2.Id, BranchId = Company2Branch, Name = "Main zone" });
         await db.SaveChangesAsync();
         return (connectionString, company2.Id);
     }
@@ -40,7 +40,7 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
         (await db.PriorityTypes.CountAsync()).ShouldBe(2);
 
         await using var other = PostgresFixture.CreateContext(connectionString, company2);
-        (await other.ServiceTypes.Select(s => s.NameEn).ToListAsync()).ShouldBe(["Other service"]);
+        (await other.ServiceTypes.Select(s => s.Name).ToListAsync()).ShouldBe(["Other service"]);
         (await other.Branches.Select(b => b.Code).ToListAsync()).ShouldBe(["X1"]);
         (await other.Zones.CountAsync()).ShouldBe(1);
     }
@@ -62,7 +62,7 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
     {
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);
         await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
-        var service = new ServiceType { NameEn = "Service 7", NameAr = "الخدمة 7", Prefix = "H" };
+        var service = new ServiceType { Name = "Service 7", Prefix = "H" };
 
         db.ServiceTypes.Add(service);
         await db.SaveChangesAsync();
@@ -75,7 +75,7 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
     {
         var (connectionString, company2) = await TwoCompaniesAsync();
         await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
-        db.ServiceTypes.Add(new ServiceType { CompanyId = company2, NameEn = "Sneaky", NameAr = "خفي", Prefix = "S" });
+        db.ServiceTypes.Add(new ServiceType { CompanyId = company2, Name = "Sneaky", Prefix = "S" });
 
         await Should.ThrowAsync<TenantViolationException>(() => db.SaveChangesAsync());
     }
@@ -86,7 +86,7 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
         var (connectionString, company2) = await TwoCompaniesAsync();
         await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
         var foreign = await db.ServiceTypes.IgnoreQueryFilters().SingleAsync(s => s.CompanyId == company2);
-        foreign.NameEn = "Hijacked";
+        foreign.Name = "Hijacked";
 
         await Should.ThrowAsync<TenantViolationException>(() => db.SaveChangesAsync());
     }
@@ -145,7 +145,7 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);
         await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
         var own = await db.ServiceTypes.FirstAsync();
-        own.NameEn = "Renamed";
+        own.Name = "Renamed";
 
         (await db.SaveChangesAsync()).ShouldBe(1);
     }
@@ -160,7 +160,7 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
 
         await using (var db = PostgresFixture.CreateContext(connectionString, timeProvider: new FixedTimeProvider(created)))
         {
-            var service = new ServiceType { CompanyId = SeedIds.Company1, NameEn = "Service 7", NameAr = "الخدمة 7", Prefix = "H" };
+            var service = new ServiceType { CompanyId = SeedIds.Company1, Name = "Service 7", Prefix = "H" };
             db.ServiceTypes.Add(service);
             await db.SaveChangesAsync();
             id = service.Id;
@@ -169,7 +169,7 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
         await using (var db = PostgresFixture.CreateContext(connectionString, timeProvider: new FixedTimeProvider(updated)))
         {
             var service = await db.ServiceTypes.IgnoreQueryFilters().SingleAsync(s => s.Id == id);
-            service.NameEn = "Renamed";
+            service.Name = "Renamed";
             await db.SaveChangesAsync();
         }
 
@@ -183,7 +183,7 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
     [Fact]
     public void New_entities_get_a_version_7_uuid()
     {
-        var id = new ServiceType { NameEn = "x", NameAr = "x", Prefix = "X" }.Id;
+        var id = new ServiceType { Name = "x", Prefix = "X" }.Id;
 
         id.Version.ShouldBe(7);
     }

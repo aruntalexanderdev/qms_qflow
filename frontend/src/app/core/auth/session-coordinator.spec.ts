@@ -57,7 +57,7 @@ describe('SessionCoordinator', () => {
     expect(user.role).toBe('CompanyAdmin');
     expect(tab.store.accessToken()).toBe('login-1');
     expect(tab.store.snapshot()?.validUntil).toBe(now + 900_000);
-    expect(localStorage.length).toBe(0);
+    expect(Object.keys(localStorage).filter((key) => key !== 'qms.lang')).toEqual([]);
     expect(sessionStorage.length).toBe(0);
   });
 

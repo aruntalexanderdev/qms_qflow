@@ -35,7 +35,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac1_list_returns_the_six_seeded_service_types_in_order_without_company_2_rows()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.GetAsync(SetupUser.CompanyAdminC1, Url);
 
@@ -60,7 +60,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac1_equal_sort_orders_fall_back_to_the_english_name()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         (await setup.PostAsync(SetupUser.CompanyAdminC1, Url, NewBody("H", nameEn: "Alpha", sortOrder: 6))).Status.ShouldBe(201);
 
         var names = (await setup.GetAsync(SetupUser.CompanyAdminC1, Url)).Json.EnumerateArray()
@@ -72,7 +72,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac2_the_isActive_filter_returns_the_inactive_or_the_active_rows()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var service6 = await GetAsync(setup, SeedIds.Service(6));
         (await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Service(6)}", UpdateBody(service6, isActive: false))).Status.ShouldBe(200);
 
@@ -88,7 +88,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac3_get_returns_one_service_type_with_its_arabic_name_unchanged()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.GetAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Service(2)}");
 
@@ -103,7 +103,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac4_create_returns_201_with_location_and_the_company_comes_from_the_token()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new
         {
@@ -131,7 +131,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac5_every_invalid_body_is_400_validation_failed_naming_the_field_and_saves_nothing()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var cases = new (string Field, object Body)[]
         {
             ("name", new { name = "", translations = new { ar = "ع" }, prefix = "H" }),
@@ -165,7 +165,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac5_a_null_target_is_accepted_and_a_padded_prefix_is_trimmed()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "  Cards  ", translations = new { ar = " البطاقات " }, prefix = " H " });
 
@@ -180,7 +180,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Translations_are_optional_empty_means_absent_and_other_languages_are_refused_for_now()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var none = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cards", prefix = "H" });
         var empty = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Loans", translations = new { ar = "  " }, prefix = "J" });
@@ -207,7 +207,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac4_empty_translations_create_a_type_with_no_translations()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var emptyObject = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cards", translations = new { }, prefix = "H" });
         var emptyArabic = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Loans", translations = new { ar = "" }, prefix = "J" });
@@ -222,7 +222,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac5_a_missing_name_is_400_on_name()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { prefix = "H" });
 
@@ -233,7 +233,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac7_put_with_empty_translations_clears_the_arabic_text_and_other_languages_are_refused()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var url = $"{Url}/{SeedIds.Service(3)}";
         var current = await GetAsync(setup, SeedIds.Service(3));
         object Body(JsonElement from, object translations) => new
@@ -259,7 +259,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Translation_keys_that_differ_only_by_case_are_rejected()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Cards", translations = new Dictionary<string, string> { ["ar"] = "أ", ["AR"] = "ب" }, prefix = "H" });
 
@@ -270,7 +270,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Put_never_defaults_a_missing_field()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var url = $"{Url}/{SeedIds.Service(3)}";
         var version = (await GetAsync(setup, SeedIds.Service(3))).GetProperty("version").GetString();
         var bodies = new (string Field, object Body)[]
@@ -300,7 +300,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac6_a_prefix_is_unique_per_company_on_create_and_on_update()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var create = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, NewBody("A"));
         var service2 = await GetAsync(setup, SeedIds.Service(2));
@@ -316,10 +316,11 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac6_prefixes_are_independent_per_company()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
-        var free = await setup.PostAsync(SetupUser.CompanyAdminC2, Url, NewBody("B"));
-        var taken = await setup.PostAsync(SetupUser.CompanyAdminC2, Url, NewBody("A"));
+        // Company 2 has only English enabled: no translations in its bodies.
+        var free = await setup.PostAsync(SetupUser.CompanyAdminC2, Url, new { name = "Cards", prefix = "B" });
+        var taken = await setup.PostAsync(SetupUser.CompanyAdminC2, Url, new { name = "Cards", prefix = "A" });
 
         free.Status.ShouldBe(201);
         taken.Status.ShouldBe(409);
@@ -329,7 +330,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac6_two_concurrent_creates_of_the_same_prefix_give_one_201_and_one_409()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         foreach (var prefix in new[] { "H", "J", "K" })
         {
             var replies = await Task.WhenAll(
@@ -349,7 +350,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac7_update_replaces_all_fields_and_returns_a_new_version()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var before = await GetAsync(setup, SeedIds.Service(3));
 
         var reply = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Service(3)}",
@@ -367,7 +368,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac8_a_stale_version_is_409_request_conflict_and_the_first_change_stays()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var v1 = await GetAsync(setup, SeedIds.Service(3));
 
         var first = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Service(3)}", UpdateBody(v1, nameEn: "First"));
@@ -383,7 +384,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac8_a_stale_version_conflicts_even_when_the_values_are_unchanged()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var v1 = await GetAsync(setup, SeedIds.Service(3));
         (await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Service(3)}", UpdateBody(v1, nameEn: "First"))).Status.ShouldBe(200);
 
@@ -396,7 +397,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac8_a_missing_empty_or_unreadable_version_is_400_with_an_error_on_version()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var bodies = new object[]
         {
             new { name = "x", translations = new { ar = "ع" }, prefix = "C", sortOrder = 3, isActive = true },
@@ -419,7 +420,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac9_a_service_type_in_the_company_mapping_can_be_deactivated_and_reactivated()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var service6 = await GetAsync(setup, SeedIds.Service(6));
 
         var off = await setup.PutAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Service(6)}", UpdateBody(service6, isActive: false));
@@ -438,7 +439,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac10_an_unused_service_type_is_deleted_with_204_and_an_audit_row()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var created = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, NewBody("H"));
         var id = SetupHost.Id(created);
 
@@ -456,7 +457,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac11_a_service_type_in_the_company_mapping_cannot_be_deleted()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
 
         var reply = await setup.DeleteAsync(SetupUser.CompanyAdminC1, $"{Url}/{SeedIds.Service(1)}");
 
@@ -473,7 +474,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [InlineData("token sequence")]
     public async Task Ac11_a_single_reference_of_each_kind_blocks_the_delete(string kind)
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, Url, NewBody("H")));
         switch (kind)
         {
@@ -502,7 +503,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac11_the_target_of_a_flow_blocks_the_delete_too()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, Url, NewBody("H")));
         await setup.AddFlowAsync(SeedIds.Service(1), id);
 
@@ -517,10 +518,10 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
     [Fact]
     public async Task Ac12_another_company_gets_404_service_type_not_found_exactly_like_an_unknown_id()
     {
-        using var setup = await SetupHost.StartAsync(postgres);
+        using var setup = await SetupHost.StartWithArabicAsync(postgres);
         var foreign = $"{Url}/{SeedIds.Service(2)}";
         var unknown = $"{Url}/{Guid.NewGuid()}";
-        var body = new { name = "Hacked", translations = new { ar = "ع" }, prefix = "B", sortOrder = 2, isActive = true, version = "AAAAAA" };
+        var body = new { name = "Hacked", prefix = "B", sortOrder = 2, isActive = true, version = "AAAAAA" };
 
         var results = new List<(ApiReply Foreign, ApiReply Unknown)>
         {

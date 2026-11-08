@@ -25,9 +25,9 @@ public sealed class UserAssignmentTests(PostgresFixture postgres)
     private static async Task<World> AddWorldAsync(string connectionString)
     {
         await using var db = PostgresFixture.CreateContext(connectionString);
-        var company2 = new Company { NameEn = "Company 2", NameAr = "الشركة 2", Code = "C2", CurrencyCode = "SAR" };
-        var branch2 = new Branch { CompanyId = company2.Id, NameEn = "Other branch", NameAr = "فرع آخر", Code = "X1", Timezone = "Asia/Riyadh" };
-        var zone2 = new Zone { CompanyId = company2.Id, BranchId = branch2.Id, NameEn = "Main zone", NameAr = "المنطقة الرئيسية" };
+        var company2 = new Company { Name = "Company 2", Code = "C2", CurrencyCode = "SAR" };
+        var branch2 = new Branch { CompanyId = company2.Id, Name = "Other branch", Code = "X1", Timezone = "Asia/Riyadh" };
+        var zone2 = new Zone { CompanyId = company2.Id, BranchId = branch2.Id, Name = "Main zone" };
         var counter2 = new Counter { CompanyId = company2.Id, BranchId = branch2.Id, ZoneId = zone2.Id, Name = "Counter X", Number = 1 };
         db.Companies.Add(company2);
         await db.SaveChangesAsync();
@@ -36,14 +36,47 @@ public sealed class UserAssignmentTests(PostgresFixture postgres)
         db.Zones.Add(zone2);
         await db.SaveChangesAsync();
         db.Counters.Add(counter2);
+        return await AddUsersAsync(db, connectionString, company2.Id, branch2.Id, counter2.Id);
+    }
+
+    private static async Task<World> AddUsersAsync(QmsDbContext db, string connectionString, Guid company2Id, Guid branch2Id, Guid counter2Id)
+    {
 
         var user1 = NewUser("user1", SeedIds.Company1);
-        var user2 = NewUser("user2", company2.Id);
+        var user2 = NewUser("user2", company2Id);
         var superAdmin = NewUser("superadmin", null);
         db.Users.AddRange(user1, user2, superAdmin);
         await db.SaveChangesAsync();
 
-        return new World(connectionString, company2.Id, branch2.Id, counter2.Id, user1.Id, user2.Id, superAdmin.Id);
+        return new World(connectionString, company2Id, branch2Id, counter2Id, user1.Id, user2.Id, superAdmin.Id);
+    }
+
+    /// <summary>
+    /// The same world for a database at the InitialSchema: plain SQL with the old column names (name_en / name_ar), because the
+    /// current entities no longer match that schema. Only the rows the migration tests refer to are written.
+    /// </summary>
+    private static async Task<World> AddOldWorldAsync(string connectionString)
+    {
+        var (company2, branch2, zone2, counter2) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        string[] statements =
+        [
+            $"INSERT INTO company (id, name_en, name_ar, code, currency_code, is_active, created_at, updated_at) VALUES ('{SeedIds.Company1}', 'Company 1', 'x', 'C1', 'AED', true, now(), now()), ('{company2}', 'Company 2', 'x', 'C2', 'SAR', true, now(), now())",
+            $"INSERT INTO branch (id, company_id, name_en, name_ar, code, timezone, is_active, created_at, updated_at) VALUES ('{SeedIds.Branch1}', '{SeedIds.Company1}', 'Branch 1', 'x', 'B1', 'Asia/Dubai', true, now(), now()), ('{branch2}', '{company2}', 'Other branch', 'x', 'X1', 'Asia/Riyadh', true, now(), now())",
+            $"INSERT INTO zone (id, company_id, branch_id, name_en, name_ar, sort_order, created_at, updated_at) VALUES ('{SeedIds.Zone(1)}', '{SeedIds.Company1}', '{SeedIds.Branch1}', 'Zone 1', 'x', 1, now(), now()), ('{zone2}', '{company2}', '{branch2}', 'Main zone', 'x', 0, now(), now())",
+            $"INSERT INTO counter (id, company_id, branch_id, zone_id, name, number, status, created_at, updated_at) VALUES ('{SeedIds.Counter(1)}', '{SeedIds.Company1}', '{SeedIds.Branch1}', '{SeedIds.Zone(1)}', 'Counter 1', 1, 'Closed', now(), now()), ('{SeedIds.Counter(2)}', '{SeedIds.Company1}', '{SeedIds.Branch1}', '{SeedIds.Zone(1)}', 'Counter 2', 2, 'Closed', now(), now()), ('{counter2}', '{company2}', '{branch2}', '{zone2}', 'Counter X', 1, 'Closed', now(), now())",
+        ];
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            foreach (var statement in statements)
+            {
+                await using var command = new NpgsqlCommand(statement, connection);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        await using var db = PostgresFixture.CreateContext(connectionString);
+        return await AddUsersAsync(db, connectionString, company2, branch2, counter2);
     }
 
     private async Task<World> WorldAsync() => await AddWorldAsync(await postgres.NewDatabaseAsync(seeded: true));
@@ -248,17 +281,12 @@ public sealed class UserAssignmentTests(PostgresFixture postgres)
         await db.GetService<IMigrator>().MigrateAsync(target);
     }
 
-    /// <summary>A database at InitialSchema with the seed, Company 2 and users (the shape of an existing dev database).</summary>
+    /// <summary>A database at InitialSchema with Company 1 / Branch 1 rows, Company 2 and users (the shape of an existing dev database).</summary>
     private async Task<World> OldWorldAsync()
     {
         var connectionString = await postgres.NewBlankDatabaseAsync();
         await MigrateToAsync(connectionString, InitialSchema);
-        await using (var db = PostgresFixture.CreateContext(connectionString))
-        {
-            await new DevSeeder(db).SeedAsync();
-        }
-
-        return await AddWorldAsync(connectionString);
+        return await AddOldWorldAsync(connectionString);
     }
 
     private static async Task InsertOldAssignmentAsync(string connectionString, string table, string column, Guid userId, Guid targetId)

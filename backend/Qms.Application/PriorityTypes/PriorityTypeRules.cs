@@ -1,5 +1,6 @@
 using FluentValidation;
 using Qms.Application.Common;
+using Qms.Application.Localisation;
 
 namespace Qms.Application.PriorityTypes;
 
@@ -23,10 +24,10 @@ public interface IPriorityTypeFields
 public abstract class PriorityTypeFieldsValidator<T> : AbstractValidator<T>
     where T : IPriorityTypeFields
 {
-    protected PriorityTypeFieldsValidator()
+    protected PriorityTypeFieldsValidator(ICompanyLanguages languages)
     {
-        RuleFor(command => command.Name).LocalizedName();
-        RuleFor(command => command.Translations).LocalizedTranslations();
+        RuleFor(command => command.Name).DefaultValue();
+        RuleFor(command => command.Translations).Translations(languages);
         RuleFor(command => command.Prefix).PrefixLetter();
         RuleFor(command => command.PriorityLevel).Sent();
         RuleFor(command => command.PriorityLevel).GreaterThanOrEqualTo(1).When(command => command.PriorityLevel is not null).WithMessage("'{PropertyName}' must be 1 or more.");

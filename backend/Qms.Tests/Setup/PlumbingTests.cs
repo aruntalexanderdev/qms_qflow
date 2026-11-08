@@ -118,7 +118,7 @@ public sealed class PlumbingTests(PostgresFixture postgres)
         priority.Code.ShouldBe("priority_type.in_use");
 
         // A reference of another kind: the token FK names are in the catalog too.
-        var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, "/api/v1/service-types", new { name = "x", translations = new { ar = "ع" }, prefix = "H" }));
+        var id = SetupHost.Id(await setup.PostAsync(SetupUser.CompanyAdminC1, "/api/v1/service-types", new { name = "x", prefix = "H" }));
         await setup.AddTokenAsync(id, SeedIds.Normal);
         var token = await setup.CallAsync(SetupUser.CompanyAdminC1, HttpMethod.Delete, $"{Test}/service-types/{id}/unchecked");
         token.Code.ShouldBe("service_type.in_use");

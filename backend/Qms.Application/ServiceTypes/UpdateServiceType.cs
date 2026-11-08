@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Qms.Application.Common;
+using Qms.Application.Localisation;
 
 namespace Qms.Application.ServiceTypes;
 
@@ -11,10 +12,10 @@ public sealed record UpdateServiceTypeCommand(
 
 public sealed class UpdateServiceTypeValidator : AbstractValidator<UpdateServiceTypeCommand>
 {
-    public UpdateServiceTypeValidator()
+    public UpdateServiceTypeValidator(ICompanyLanguages languages)
     {
-        RuleFor(command => command.Name).LocalizedName();
-        RuleFor(command => command.Translations).LocalizedTranslations();
+        RuleFor(command => command.Name).DefaultValue();
+        RuleFor(command => command.Translations).Translations(languages);
         RuleFor(command => command.Prefix).PrefixLetter();
         RuleFor(command => command.TargetMinutes).GreaterThan(0).When(command => command.TargetMinutes is not null);
         RuleFor(command => command.SortOrder).Sent();
@@ -25,7 +26,7 @@ public sealed class UpdateServiceTypeValidator : AbstractValidator<UpdateService
 }
 
 public sealed class UpdateServiceTypeHandler(
-    IQmsDbContext db, IPostCommitActions postCommit, IDeviceConfigNotifier notifier)
+    IQmsDbContext db, ICompanyLanguages languages, IPostCommitActions postCommit, IDeviceConfigNotifier notifier)
     : ICommandHandler<UpdateServiceTypeCommand, ServiceTypeDto>
 {
     public async Task<Result<ServiceTypeDto>> HandleAsync(UpdateServiceTypeCommand command, CancellationToken cancellationToken)
@@ -52,10 +53,13 @@ public sealed class UpdateServiceTypeHandler(
         // The UPDATE then carries "AND xmin = version": a save racing between the load and here fails with a concurrency error (409).
         db.Entry(row).Property(r => r.RowVersion).OriginalValue = version;
 
-        var (nameEn, nameAr) = LocalizedText.ToStorage(command.Name!, command.Translations);
-        var devicesAffected = row.NameEn != nameEn || row.NameAr != nameAr || row.Prefix != prefix || row.IsActive != command.IsActive!.Value;
-        row.NameEn = nameEn;
-        row.NameAr = nameAr;
+        // Translations of languages that are not enabled stay as they are (BR-9); the enabled ones are replaced.
+        var company = await languages.GetCompanySettingsAsync(cancellationToken);
+        var name = command.Name!.Trim();
+        var translations = LocalizedTextRules.Merge(row.NameTranslations, command.Translations, company);
+        var devicesAffected = row.Name != name || !LocalizedTextRules.Same(row.NameTranslations, translations) || row.Prefix != prefix || row.IsActive != command.IsActive!.Value;
+        row.Name = name;
+        row.NameTranslations = translations;
         row.Prefix = prefix;
         row.TargetMinutes = command.TargetMinutes;
         row.SortOrder = command.SortOrder!.Value;
@@ -68,6 +72,6 @@ public sealed class UpdateServiceTypeHandler(
             postCommit.Enqueue(token => notifier.ConfigChangedAsync(change, token));
         }
 
-        return ServiceTypeDto.From(row);
+        return ServiceTypeDto.From(row, company);
     }
 }

@@ -130,7 +130,7 @@ public sealed class SetupTestController : QmsControllerBase
     public async Task<IActionResult> CreateServiceTypeUnchecked(
         [FromQuery] string prefix, [FromServices] IQmsDbContext db, [FromServices] ICurrentTenant tenant, CancellationToken cancellationToken)
     {
-        db.ServiceTypes.Add(new Qms.Domain.Entities.ServiceType { CompanyId = tenant.CompanyId!.Value, NameEn = "x", NameAr = "x", Prefix = prefix });
+        db.ServiceTypes.Add(new Qms.Domain.Entities.ServiceType { CompanyId = tenant.CompanyId!.Value, Name = "x", Prefix = prefix });
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
@@ -139,7 +139,7 @@ public sealed class SetupTestController : QmsControllerBase
     [HttpPost("service-types/unchecked-invalid")]
     public async Task<IActionResult> CreateInvalidServiceTypeUnchecked([FromServices] IQmsDbContext db, [FromServices] ICurrentTenant tenant, CancellationToken cancellationToken)
     {
-        db.ServiceTypes.Add(new Qms.Domain.Entities.ServiceType { CompanyId = tenant.CompanyId!.Value, NameEn = "x", NameAr = "x", Prefix = "Y", TargetMinutes = 0 });
+        db.ServiceTypes.Add(new Qms.Domain.Entities.ServiceType { CompanyId = tenant.CompanyId!.Value, Name = "x", Prefix = "Y", TargetMinutes = 0 });
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
@@ -149,10 +149,16 @@ public sealed class SetupTestController : QmsControllerBase
     public async Task<IActionResult> RawSqlDuplicate([FromServices] QmsDbContext db, CancellationToken cancellationToken)
     {
         await db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO service_type (id, company_id, name_en, name_ar, prefix, sort_order, is_active, created_at, updated_at) VALUES ({Guid.NewGuid()}, {Qms.Infrastructure.Persistence.Seed.SeedIds.Company1}, 'raw', 'raw', 'A', 0, true, now(), now())",
+            $"INSERT INTO service_type (id, company_id, name, prefix, sort_order, is_active, created_at, updated_at) VALUES ({Guid.NewGuid()}, {Qms.Infrastructure.Persistence.Seed.SeedIds.Company1}, 'raw', 'A', 0, true, now(), now())",
             cancellationToken);
         return NoContent();
     }
+
+    /// <summary>STORY-051 AC-26: the language <see cref="Qms.Application.Localisation.IRequestLanguage"/> negotiated for this request.</summary>
+    [HttpGet("request-language")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RequestLanguage([FromServices] Qms.Application.Localisation.IRequestLanguage language, CancellationToken cancellationToken) =>
+        Ok(new { language = await language.GetCurrentAsync(cancellationToken) });
 
     [HttpGet("branch-scope/{branchId:guid}")]
     public async Task<IActionResult> BranchScope(

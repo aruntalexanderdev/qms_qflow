@@ -14,6 +14,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../core/auth/auth.service';
 import { mapHttpError } from '../../core/errors/api-error';
 import { NotificationService } from '../../core/notifications/notification.service';
+import { LanguageService } from '../../core/i18n/language.service';
 import { LanguageSwitchComponent } from '../../shared/language-switch.component';
 import { initialsOf } from '../../shared/utils/initials';
 
@@ -28,6 +29,7 @@ import { initialsOf } from '../../shared/utils/initials';
 export class TopbarComponent {
   private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationService);
+  protected readonly language = inject(LanguageService);
 
   readonly navExpanded = input(false);
   readonly menuToggle = output<void>();

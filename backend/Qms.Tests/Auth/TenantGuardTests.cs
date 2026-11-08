@@ -16,7 +16,7 @@ namespace Qms.Tests.Auth;
 public sealed class TenantGuardTests(PostgresFixture postgres)
 {
     private static Branch NewBranch(Guid companyId, string code = "G1") =>
-        new() { CompanyId = companyId, NameEn = "Guard", NameAr = "حارس", Code = code, Timezone = "Asia/Dubai" };
+        new() { CompanyId = companyId, Name = "Guard", Code = code, Timezone = "Asia/Dubai" };
 
     private async Task<string> SeededAsync() => await postgres.NewDatabaseAsync(seeded: true);
 
@@ -60,7 +60,7 @@ public sealed class TenantGuardTests(PostgresFixture postgres)
     public async Task Ac9_a_Company_row_with_no_company_and_no_section_throws_NoTenant()
     {
         await using var db = PostgresFixture.CreateContext(await SeededAsync(), crossTenant: false);
-        db.Companies.Add(new Company { NameEn = "C", NameAr = "ش", Code = "ZZ", CurrencyCode = "AED" });
+        db.Companies.Add(new Company { Name = "C", Code = "ZZ", CurrencyCode = "AED" });
 
         (await Should.ThrowAsync<TenantViolationException>(() => db.SaveChangesAsync())).Reason.ShouldBe(TenantViolationReason.NoTenant);
     }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Qms.Application.Common;
+using Qms.Application.Localisation;
 using Qms.Domain.Entities;
 
 namespace Qms.Application.PriorityTypes;
@@ -20,12 +21,14 @@ public sealed record PriorityTypeDto(
     bool IsActive,
     string Version)
 {
-    public static PriorityTypeDto From(PriorityType row, string currencyCode) => From(
-        row.Id, row.NameEn, row.NameAr, row.Prefix, row.PriorityLevel, row.IsPaid, row.FeeAmount, currencyCode, row.IsActive, row.RowVersion);
+    /// <summary>The admin form: only the translations of the company's enabled languages are returned (BR-11).</summary>
+    public static PriorityTypeDto From(PriorityType row, string currencyCode, CompanyLanguageSettings languages) => From(
+        row.Id, row.Name, row.NameTranslations, row.Prefix, row.PriorityLevel, row.IsPaid, row.FeeAmount, currencyCode, row.IsActive, row.RowVersion, languages);
 
     public static PriorityTypeDto From(
-        Guid id, string nameEn, string nameAr, string prefix, int priorityLevel, bool isPaid, decimal? feeAmount, string currencyCode, bool isActive, uint rowVersion) =>
-        new(id, nameEn, LocalizedText.FromStorage(nameAr), prefix.Trim(), priorityLevel, isPaid, feeAmount, currencyCode.Trim(), isActive, RowVersionCodec.Encode(rowVersion));
+        Guid id, string name, IReadOnlyDictionary<string, string> nameTranslations, string prefix, int priorityLevel, bool isPaid, decimal? feeAmount, string currencyCode, bool isActive, uint rowVersion,
+        CompanyLanguageSettings languages) =>
+        new(id, name, LocalizedTextRules.ForAdmin(nameTranslations, languages), prefix.Trim(), priorityLevel, isPaid, feeAmount, currencyCode.Trim(), isActive, RowVersionCodec.Encode(rowVersion));
 
     /// <summary>The currency of the current company (the tenant filter on <c>company</c> leaves exactly one row).</summary>
     internal static Task<string> CurrencyOfCompanyAsync(IQmsDbContext db, CancellationToken cancellationToken) =>

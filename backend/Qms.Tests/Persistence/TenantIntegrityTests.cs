@@ -35,11 +35,11 @@ public sealed class TenantIntegrityTests(PostgresFixture postgres)
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);
         await using var db = PostgresFixture.CreateContext(connectionString);
 
-        var company2 = new Company { NameEn = "Company 2", NameAr = "الشركة 2", Code = "C2", CurrencyCode = "SAR" };
-        var service2 = new ServiceType { CompanyId = company2.Id, NameEn = "Other service", NameAr = "خدمة أخرى", Prefix = "A" };
-        var priority2 = new PriorityType { CompanyId = company2.Id, NameEn = "Normal", NameAr = "عادي", Prefix = "N", PriorityLevel = 2 };
-        var branch2 = new Branch { CompanyId = company2.Id, NameEn = "Other branch", NameAr = "فرع آخر", Code = "X1", Timezone = "Asia/Riyadh" };
-        var zone2 = new Zone { CompanyId = company2.Id, BranchId = branch2.Id, NameEn = "Main zone", NameAr = "المنطقة الرئيسية" };
+        var company2 = new Company { Name = "Company 2", Code = "C2", CurrencyCode = "SAR" };
+        var service2 = new ServiceType { CompanyId = company2.Id, Name = "Other service", Prefix = "A" };
+        var priority2 = new PriorityType { CompanyId = company2.Id, Name = "Normal", Prefix = "N", PriorityLevel = 2 };
+        var branch2 = new Branch { CompanyId = company2.Id, Name = "Other branch", Code = "X1", Timezone = "Asia/Riyadh" };
+        var zone2 = new Zone { CompanyId = company2.Id, BranchId = branch2.Id, Name = "Main zone" };
         var counter2 = new Counter { CompanyId = company2.Id, BranchId = branch2.Id, ZoneId = zone2.Id, Name = "Counter X", Number = 1 };
         var device2 = new Device { CompanyId = company2.Id, BranchId = branch2.Id, ZoneId = zone2.Id, Type = DeviceType.Dispenser, Name = "Other dispenser" };
         var token2 = new Token
@@ -48,8 +48,8 @@ public sealed class TenantIntegrityTests(PostgresFixture postgres)
             PriorityTypeId = priority2.Id, CurrentServiceTypeId = service2.Id, CurrentZoneId = zone2.Id, IssuedAt = DateTimeOffset.UtcNow,
         };
 
-        var branchB = new Branch { CompanyId = SeedIds.Company1, NameEn = "Branch 2", NameAr = "الفرع 2", Code = "B2", Timezone = "Asia/Dubai" };
-        var zoneB = new Zone { CompanyId = SeedIds.Company1, BranchId = branchB.Id, NameEn = "Zone B", NameAr = "المنطقة ب" };
+        var branchB = new Branch { CompanyId = SeedIds.Company1, Name = "Branch 2", Code = "B2", Timezone = "Asia/Dubai" };
+        var zoneB = new Zone { CompanyId = SeedIds.Company1, BranchId = branchB.Id, Name = "Zone B" };
         var counterB = new Counter { CompanyId = SeedIds.Company1, BranchId = branchB.Id, ZoneId = zoneB.Id, Name = "Counter B", Number = 1 };
         var token1 = new Token
         {
@@ -264,7 +264,7 @@ public sealed class TenantIntegrityTests(PostgresFixture postgres)
     {
         await using var check = PostgresFixture.CreateContext(world.ConnectionString);
         var service = await check.ServiceTypes.IgnoreQueryFilters().SingleAsync(s => s.CompanyId == world.Company2);
-        service.NameEn.ShouldBe("Other service");
+        service.Name.ShouldBe("Other service");
         (await check.Counters.IgnoreQueryFilters().SingleAsync(c => c.Id == world.Counter2)).Name.ShouldBe("Counter X");
         (await check.Devices.IgnoreQueryFilters().AnyAsync(d => d.Id == world.Device2)).ShouldBeTrue();
     }
@@ -275,7 +275,7 @@ public sealed class TenantIntegrityTests(PostgresFixture postgres)
         var world = await WorldAsync();
         await using var db = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
         var forged = await ForgedServiceTypeAsync(db, world.Company2);
-        forged.NameEn = "Hijacked";
+        forged.Name = "Hijacked";
 
         db.ServiceTypes.Update(forged);
 
@@ -414,10 +414,10 @@ public sealed class TenantIntegrityTests(PostgresFixture postgres)
         (await db.Counters.Where(c => c.Id == world.Counter2).ExecuteUpdateAsync(s => s.SetProperty(c => c.Name, "Hijacked"))).ShouldBe(0);
         (await db.Counters.Where(c => c.Id == world.Counter2).ExecuteDeleteAsync()).ShouldBe(0);
         (await db.Devices.Where(d => d.Id == world.Device2).ExecuteDeleteAsync()).ShouldBe(0);
-        (await db.ServiceTypes.ExecuteUpdateAsync(s => s.SetProperty(x => x.NameEn, "Bulk"))).ShouldBe(6);
+        (await db.ServiceTypes.ExecuteUpdateAsync(s => s.SetProperty(x => x.Name, "Bulk"))).ShouldBe(6);
 
         await AssertForeignRowsUntouchedAsync(world);
         await using var check = PostgresFixture.CreateContext(world.ConnectionString, SeedIds.Company1);
-        (await check.ServiceTypes.CountAsync(s => s.NameEn == "Bulk")).ShouldBe(6);
+        (await check.ServiceTypes.CountAsync(s => s.Name == "Bulk")).ShouldBe(6);
     }
 }

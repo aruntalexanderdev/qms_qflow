@@ -74,9 +74,11 @@ internal sealed class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
 {
     public void Configure(EntityTypeBuilder<AppUser> builder)
     {
-        builder.ToTable(table => table.HasCheckConstraint("ck_asp_net_users_language", "language IN ('en', 'ar')"));
         builder.Property(u => u.DisplayName).HasMaxLength(200).IsRequired();
         builder.Property(u => u.Language).HasMaxLength(8).IsRequired();
+        // The registry replaces the former check (en, ar): a stored language that is later disabled stays stored (ADR-010 section 9).
+        builder.HasOne<Language>().WithMany().HasForeignKey(u => u.Language).HasPrincipalKey(l => l.Code)
+            .OnDelete(DeleteBehavior.Restrict).HasConstraintName("fk_asp_net_users_language_language_code");
         builder.Property(u => u.CreatedAt).IsRequired();
         builder.Property(u => u.UpdatedAt).IsRequired();
         // Null for Super Admin. Sign-in finds users before a tenant is known, so there is no tenant filter here.

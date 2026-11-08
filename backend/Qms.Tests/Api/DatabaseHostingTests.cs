@@ -133,9 +133,9 @@ public sealed class DatabaseHostingTests(PostgresFixture postgres)
         Guid company2;
         await using (var setup = PostgresFixture.CreateContext(connectionString))
         {
-            var other = new Company { NameEn = "Company 2", NameAr = "الشركة 2", Code = "C2", CurrencyCode = "SAR" };
+            var other = new Company { Name = "Company 2", Code = "C2", CurrencyCode = "SAR" };
             setup.Companies.Add(other);
-            setup.ServiceTypes.Add(new ServiceType { CompanyId = other.Id, NameEn = "Other", NameAr = "أخرى", Prefix = "A" });
+            setup.ServiceTypes.Add(new ServiceType { CompanyId = other.Id, Name = "Other", Prefix = "A" });
             await setup.SaveChangesAsync();
             company2 = other.Id;
         }
@@ -155,7 +155,7 @@ public sealed class DatabaseHostingTests(PostgresFixture postgres)
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<QmsDbContext>();
-            (await db.ServiceTypes.Select(s => s.NameEn).ToListAsync()).ShouldBe(["Other"]);
+            (await db.ServiceTypes.Select(s => s.Name).ToListAsync()).ShouldBe(["Other"]);
         }
     }
 

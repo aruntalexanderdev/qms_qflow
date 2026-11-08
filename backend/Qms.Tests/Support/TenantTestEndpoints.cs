@@ -60,7 +60,7 @@ public sealed class CreateBranchForCompanyHandler(QmsDbContext db, HandlerSpy sp
         spy.SawCrossTenant = tenant.IsCrossTenant;
         var branch = new Branch
         {
-            CompanyId = command.CompanyId, NameEn = "Created", NameAr = "أنشئ", Code = command.Code, Timezone = "Asia/Dubai",
+            CompanyId = command.CompanyId, Name = "Created", Code = command.Code, Timezone = "Asia/Dubai",
         };
         db.Branches.Add(branch);
         await db.SaveChangesAsync(cancellationToken);
@@ -119,7 +119,7 @@ public sealed class TenantTestController(QmsDbContext db) : QmsControllerBase
         }
 
         var sectionOpenAfterHandler = tenant.IsCrossTenant;
-        db.Branches.Add(new Branch { CompanyId = command.CompanyId, NameEn = "Late", NameAr = "متأخر", Code = command.Code + "L", Timezone = "Asia/Dubai" });
+        db.Branches.Add(new Branch { CompanyId = command.CompanyId, Name = "Late", Code = command.Code + "L", Timezone = "Asia/Dubai" });
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -160,7 +160,7 @@ public sealed class TenantTestController(QmsDbContext db) : QmsControllerBase
                 // A forged detached row of another company: the guard refuses it before SQL is sent.
                 db.Branches.Update(new Branch
                 {
-                    Id = request.BranchId, CompanyId = request.OtherCompanyId, NameEn = "x", NameAr = "x", Code = "X", Timezone = "UTC",
+                    Id = request.BranchId, CompanyId = request.OtherCompanyId, Name = "x", Code = "X", Timezone = "UTC",
                 });
                 break;
             case "change-company":
@@ -170,7 +170,7 @@ public sealed class TenantTestController(QmsDbContext db) : QmsControllerBase
             case "no-tenant":
                 db.Branches.Add(new Branch
                 {
-                    CompanyId = request.OtherCompanyId, NameEn = "x", NameAr = "x", Code = "NT", Timezone = "UTC",
+                    CompanyId = request.OtherCompanyId, Name = "x", Code = "NT", Timezone = "UTC",
                 });
                 break;
             default:

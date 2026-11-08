@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { makeUser } from '../../../testing/auth-fakes';
+import { ARABIC, ENGLISH, fakeLanguageService } from '../../../testing/language-fakes';
 import { provideTestTranslations } from '../../../testing/translations';
 import { UserRole } from '../../core/api/models/auth.models';
 import { AuthService } from '../../core/auth/auth.service';
@@ -29,7 +30,7 @@ describe('ShellComponent', () => {
         { provide: AuthService, useValue: auth },
         { provide: NotificationService, useValue: notifications },
         { provide: BreakpointObserver, useValue: { observe: () => of({ matches: drawer, breakpoints: {} }) } },
-        { provide: LanguageService, useValue: { current: signal(language), choose: vi.fn() } },
+        { provide: LanguageService, useValue: fakeLanguageService([ENGLISH, ARABIC], language) },
       ],
     }).compileComponents();
     await firstValueFrom(TestBed.inject(TranslateService).use(language));
