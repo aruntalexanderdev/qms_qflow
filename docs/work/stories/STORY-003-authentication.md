@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-003 |
-| Status | Code Review |
+| Status | QA |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2 (Auth), 8 (roles), 10 (`/auth/*`), 11 (Security) |
@@ -359,3 +359,46 @@ Result: N/A — No device API change (stage plan)
 Changed: none
 Notes for next stage: Ready for code review (stage 6).
 Open questions: none
+
+### Stage 6 — Code review — code-reviewer — 2026-11-08
+Result: Approved
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` Passed 246, Failed 0, Skipped 0, 1 m 46 s, Docker/Testcontainers) · web N/A · android N/A
+ACs checked: AC-1 ✅ (HS256, 900 s, sub/company_id/role/name/lang, iss/aud, cookie flags and path, `Cache-Control: no-store`), AC-2 ✅ (same body; decoy PBKDF2 for unknown and inactive users), AC-3 ✅, AC-4 ✅, AC-5 ✅ (reuse and the concurrent race revoke the family), AC-6 ✅, AC-7 ✅, AC-8 ✅, AC-9 ✅, AC-10 ✅, AC-11 ✅, AC-12 ✅, AC-13 ✅, AC-14 ✅, AC-15 ✅, AC-16 ✅, AC-17 ✅, AC-18 ✅, AC-19 ✅, AC-20 ✅, AC-21 ✅, AC-22 ✅, AC-23 ✅
+Reviewed: `git diff origin/main -- backend docker-compose.yml .env.example CLAUDE.md docs/PROJECT_SPEC.md docs/adr` (HEAD 48b8a96), the story, TASK-004/007/008, ADR-002/003 (Amendment 1)/004, spec sections 8–11, and STORY-002 findings S2/S3/S5/N7.
+
+Security checks (all pass):
+- JWT (ADR-004): `ValidAlgorithms` = HS256 only (`alg: none` and HS384 are rejected by tests). The key must be at least 32 bytes, checked by `ValidateOnStart` in every environment. Issuer, audience, lifetime, `RequireExpirationTime` and a 30 s skew are validated. `MapInboundClaims` is off. `access_token` is read from the query only under `/hubs`.
+- Refresh token: 32 bytes from `RandomNumberGenerator`, base64url. Only the SHA-256 hex hash is stored (unique index). The lookup is by hash, then compared with `FixedTimeEquals`. Rotation is atomic: insert the successor, then a conditional `ExecuteUpdate` (`revoked_at IS NULL AND replaced_by_id IS NULL`) in one transaction. Under READ COMMITTED the losing request matches 0 rows, rolls back and revokes the family. Reuse of a rotated or revoked token revokes the family. The cookie is cleared on every refresh 401 and on logout.
+- Lockout 5 / 15 min (`AllowedForNewUsers`). The rate limiter allows 10/min per address and returns a 429 problem with `Retry-After`. Login, wrong password, unknown and inactive users give one response. No password, token or hash reaches a log (Serilog request logging uses the path only, `Microsoft.AspNetCore` is at Warning, no `EnableSensitiveDataLogging`, the seeder logs only Identity error codes). Seed users come only from `Seed:*` and only in Development.
+- Authorization: the fallback policy requires an authenticated user. The anonymous endpoints are exactly login, refresh, logout, health live/ready, and openapi (Development only; Swagger UI is middleware and Development only). `UnmatchedRouteAuthorizationResultHandler` skips authorization only when `GetEndpoint()` is null. `UseRouting` runs before `UseAuthorization` and nothing in between clears the endpoint, and method mismatch (405) is a non-null endpoint. So a matched endpoint can never pass through. Role names match spec section 8.
+- Tenant: `BeginCrossTenant` has exactly two production callers, `MigrateAndSeedAsync` and the two decorators. The only production `IgnoreQueryFilters` is `UserAccounts` (by the user's own id) plus the pre-existing seeder existence check, both justified. The write guard follows ADR-003 A.2 in order, including `Company` rows and `Guid.Empty` inside a section. A missing or malformed `company_id` gives `CompanyId = null`, so reads are empty and writes fail `NoTenant` (fail closed; unit test included). A Super Admin sees no tenant rows without `[CrossTenant]` (AC-22). The decorator checks the `SuperAdmin` role before opening the section and before the handler.
+- S3 migration: the guard `DO` block runs first (`IS DISTINCT FROM` also catches users without a company), then the backfill, NOT NULL, the composite FKs and the raw-SQL unique/FKs. It runs in a single migration transaction (AC-23 test: fails and changes nothing). Down drops everything and restores the single-column FKs. The drift test plus the constraint-existence test cover the raw SQL. `IUserDirectory` returns the same 404 `user.not_found` for unknown and foreign users.
+- S5: 409 `request.conflict` (Warning), 404 `resource.not_found` for OtherCompany/CompanyChanged (Warning with reason, method and path only; no exception object), and 500 `server.unexpected_error` for NoTenant (Error with exception, nothing in the body). Tests check the body and the log contents.
+- Config: `.env.example` placeholders are blank. Compose uses `${JWT_SIGNING_KEY:?…}`. `UserSecretsId` is set and the README documents user-secrets.
+- Stage 3 deviations accepted: `UserManager` instead of `SignInManager` (same lockout API, no cookie scheme). Anonymous logout (the cookie is the credential and `SameSite=Strict` limits CSRF). The unknown-route handler (above). The optional `typeFilter`. The fixture defaulting to a cross-tenant section, with `crossTenant: false` used by the fail-closed tests. The `UserAssignmentTests.Ac15` assertion change is correct because the guard now fires before the database.
+
+Must fix
+- none
+
+Should fix
+- S1 [stage 3 / hosting story] backend/Qms.Api/Auth/AuthenticationSetup.cs:61-62 — the login limiter is partitioned by `Connection.RemoteIpAddress`, with fallback `"unknown"`. Behind the Azure Container Apps ingress or a Docker userland proxy, every client shares one address. That is 10 logins per minute for the whole deployment, which would block the morning sign-in of 50 branches × 20 counters. → Before any deployment, configure `ForwardedHeaders` with known proxies (ADR-006). Consider partitioning by address + normalised user name. Track it as a follow-up task linked to the hosting story; the stage 3 handoff already notes it.
+- S2 [stage 3] backend/Qms.Tests/Auth — the story NFR "no tokens in logs" (section 9) has no test. → Add one integration test that runs login, refresh (including reuse), logout and a failed login against the in-memory `LogSink`, and asserts that no event (rendered message, properties, exception) contains the password, the refresh token, its hash or the access token.
+- S3 [stage 3] backend/Qms.Tests/Auth/ProtectionTests.cs — protection by default is proven with one test endpoint only. → Add an endpoint-metadata test: enumerate `EndpointDataSource` in the production host and assert that the set of endpoints carrying `IAllowAnonymous` equals the allow-list (login, refresh, logout, health live/ready, openapi). A new `[AllowAnonymous]` then needs a deliberate test change.
+- S4 [stage 0] docs/adr/ADR-002, ADR-004 — stage 3's commit changed the ADR status lines and the ADR-004 "Spec impact" text, which the architect owns. Its handoff still says "ADR-004 is still `Proposed`" and "refresh_token … still blocks merge". → The architect confirms the status edits (section 10 already records ADR-004 accepted, and spec section 9 now lists `refresh_token`) and clears the stale open question in the stage 3 handoff.
+
+Nice to have
+- N1 [stage 0] ADR-004 — record the residual risks that AC-3 implies. `auth.locked_out` appears only for existing active users, so 5 wrong attempts reveal that an account exists (mitigated by the rate limiter, S1). And any caller can lock a known user name for 15 minutes.
+- N2 [stage 0 / STORY-004] Reuse detection also fires when two tabs of the same browser refresh at the same moment: the loser revokes the family and the user is signed out. ADR-004 decision 3 makes this intended. STORY-004 should serialise refresh across tabs (Web Locks / BroadcastChannel), or the architect should decide on a short grace window.
+- N3 [stage 3] backend/Qms.Infrastructure/Identity/RefreshTokenStore.cs:98 — each rotation gives a fresh 7 days, so a family can live forever while used. Expired and revoked rows are never purged. → Consider an absolute family lifetime and a cleanup job (ADR-005).
+- N4 [stage 3] backend/Qms.Application/Common/DependencyInjection.cs:64-69 — validation runs before the `[CrossTenant]` role check (as ADR-003 A.4 says). A non-Super Admin can therefore get 400 validation details from a cross-tenant command instead of 403. Harmless today; revisit with the first real `[CrossTenant]` command (Companies feature).
+- N5 [stage 3] backend/Qms.Tests/Auth/AuthEndpointsTests.cs:347 — `ShouldBeLessThanOrEqualTo(1)` also passes when every refresh fails. Exactly one winner is guaranteed (someone always commits the conditional update first), so assert `== 1`, and also assert that R2 of the winner is revoked afterwards.
+- N6 [stage 3] AuthEndpointsTests.cs:118-128 — the timing test (best of 3, unknown > 0.4 × known) is low risk: both paths do one PBKDF2 verification of tens of ms, and the known path adds one UPDATE. Keep it. If it ever flakes on CI, lower the factor rather than delete the test.
+- N7 [stage 3] JwtOptions.cs:54-59 — `ClockSkewSeconds` is not range-checked (for example 0–120).
+- N8 [stage 3] UserAccounts.cs / RefreshSessionHandler — a locked-out user can keep refreshing an existing session. This is acceptable because lockout guards the password, not the session; mention it in ADR-004 if the bank asks.
+- N9 STORY-011 notes (already in the TASK-008 handoff): `asp_net_users` writes are not tenant-guarded (not an `ITenantEntity`), so user CRUD must check company scope in the handler. Map residual 23503 on the four assignment constraint names.
+- N10 docs/PROJECT_SPEC.md:525 — the new section 9 sentence reads as one run-on clause before "and `refresh_token`". Put the `company_id` rule in parentheses (wording only, architect).
+
+Notes for next stage (QA): start with the negative cases. These are: wrong and unknown user, lockout, refresh reuse and concurrent refresh, an expired or tampered JWT, a Company Admin calling a `[CrossTenant]` test endpoint, cross-company `user_branch` / `user_counter` inserts, and a tenant write with no company. Local stack: set `JWT_SIGNING_KEY` and `SEED_*` in `.env`.
+Open questions: none
+
+Orchestrator note (2026-11-08) on review S4: the ADR-002/003/004 status lines and the ADR-004 spec-impact line were updated by the orchestrator, not by stage 3. The Phase 0 PR (aruntalexanderdev/qms_qflow#3) stated that merging it accepts ADR-002, ADR-003 and ADR-004, and the product owner approved the spec §9 additions on 2026-11-08. The "ADR-004 still Proposed" and "refresh_token blocks merge" remarks in the stage 3 handoff are superseded. Review N10 (run-on sentence in spec §9) fixed.
