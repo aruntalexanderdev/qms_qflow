@@ -22,12 +22,20 @@ public sealed class QmsApiFactory : WebApplicationFactory<Program>
     /// string, skips the Development migrate-and-seed and drops the database readiness check, so tests that do
     /// not need a database also do not need Docker.
     /// </param>
-    public QmsApiFactory(string environment = "Development", bool failingReadyCheck = false, string? connectionString = null)
+    /// <param name="extraConfiguration">Extra settings, for example <c>Seed:*</c> or rate limiter limits.</param>
+    public QmsApiFactory(
+        string environment = "Development",
+        bool failingReadyCheck = false,
+        string? connectionString = null,
+        IReadOnlyDictionary<string, string?>? extraConfiguration = null)
     {
         Environment = environment;
         FailingReadyCheck = failingReadyCheck;
         ConnectionString = connectionString;
+        ExtraConfiguration = extraConfiguration;
     }
+
+    public IReadOnlyDictionary<string, string?>? ExtraConfiguration { get; }
 
     public string? ConnectionString { get; }
 
@@ -43,6 +51,7 @@ public sealed class QmsApiFactory : WebApplicationFactory<Program>
         // No file sink in tests: hosts would share one logs/ file. Turn sink 1 (File in appsettings.json) into a
         // console sink that only emits Fatal events; the in-memory sink is added below.
         builder.ConfigureAppConfiguration((_, configuration) =>
+        {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Serilog:WriteTo:1:Name"] = "Console",
@@ -52,12 +61,24 @@ public sealed class QmsApiFactory : WebApplicationFactory<Program>
                 ["Serilog:WriteTo:1:Args:restrictedToMinimumLevel"] = "Fatal",
                 ["ConnectionStrings:Qms"] = ConnectionString ?? UnusedConnectionString,
                 ["Database:MigrateOnStartup"] = ConnectionString is null ? "false" : "true",
-            }));
+                ["Jwt:SigningKey"] = TestAccounts.JwtSigningKey,
+                ["Seed:SuperAdmin:UserName"] = TestAccounts.SuperAdminUserName,
+                ["Seed:SuperAdmin:Password"] = TestAccounts.SuperAdminPassword,
+                ["Seed:CompanyAdmin:UserName"] = TestAccounts.CompanyAdminUserName,
+                ["Seed:CompanyAdmin:Password"] = TestAccounts.CompanyAdminPassword,
+            });
+            if (ExtraConfiguration is not null)
+            {
+                configuration.AddInMemoryCollection(ExtraConfiguration);
+            }
+        });
         builder.ConfigureServices(services =>
         {
             services.AddSingleton<ILogEventSink>(LogSink);
+            services.AddSingleton<HandlerSpy>();
             services.AddControllers().AddApplicationPart(typeof(QmsApiFactory).Assembly);
-            services.AddHandlersAndValidators(typeof(QmsApiFactory).Assembly);
+            // Only the Support namespace: handlers declared inside other test classes are unit-test fakes.
+            services.AddHandlersAndValidators(typeof(QmsApiFactory).Assembly, type => type.Namespace == typeof(QmsApiFactory).Namespace);
             if (ConnectionString is null)
             {
                 services.Configure<HealthCheckServiceOptions>(options =>

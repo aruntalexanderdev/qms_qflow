@@ -41,4 +41,5 @@ Fill these in during milestone M1 and keep them correct.
 - Migrations (from the repository root): `dotnet tool restore` (once), then `dotnet ef migrations add <Name> -p backend/Qms.Infrastructure -s backend/Qms.Api`
 - Web: `cd frontend && npm ci && npm run build && npm test -- --watch=false`
 - Android: `cd android && ./gradlew assembleDebug testDebugUnitTest`
-- Full stack: `cp .env.example .env` (once), then `docker compose up --build` (API at http://localhost:8080/health/live)
+- Full stack: `cp .env.example .env` (once; set `JWT_SIGNING_KEY`, optionally the `SEED_*` admin users), then `docker compose up --build` (API at http://localhost:8080/health/live)
+- Local API (Development): needs `ConnectionStrings:Qms` and `Jwt:SigningKey` (user-secrets or env, see `backend/README.md`, "Authentication settings")

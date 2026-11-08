@@ -12,8 +12,9 @@ namespace Qms.Infrastructure.Persistence;
 
 /// <summary>
 /// The QMS database (spec section 9) plus ASP.NET Identity. Every <see cref="ITenantEntity"/> is filtered on the
-/// current company (ADR-003): with no company the filter returns nothing. Use <c>IgnoreQueryFilters()</c> only
-/// in handlers marked <c>[CrossTenant]</c>, in the seeder, and in system jobs.
+/// current company (ADR-003): with no company the filter returns nothing, and a tenant write fails unless a
+/// cross-tenant section is open (Amendment 1). Use <c>IgnoreQueryFilters()</c> only in handlers marked
+/// <c>[CrossTenant]</c>, in the seeder, in system jobs, and for a user's own assignment lookups at sign-in.
 /// </summary>
 public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant currentTenant)
     : IdentityDbContext<AppUser, AppRole, Guid>(options)
@@ -147,16 +148,22 @@ public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant
         modelBuilder.Entity<TEntity>().HasQueryFilter(entity => entity.CompanyId == CurrentCompanyId);
 
     /// <summary>
-    /// A tenant row never changes company after insert (always checked). With a current company: stamp it on new
-    /// tenant rows that have none, and refuse to write any row of another company (ADR-003); modified and deleted
-    /// rows are judged by their ORIGINAL company, so a row loaded with IgnoreQueryFilters cannot be moved into the
-    /// current tenant. Without a current company (seeder, Super Admin, system jobs) nothing is stamped or tenant-checked.
+    /// Fail-closed tenant rules (ADR-003 Amendment 1), in this order:
+    /// 1. A tenant row never changes company after insert (always checked).
+    /// 2. Current company set: stamp new tenant rows that have none, refuse rows of another company. Modified and
+    ///    deleted rows are judged by their ORIGINAL company, so a row loaded with IgnoreQueryFilters cannot be moved
+    ///    into the current tenant.
+    /// 3. No company, cross-tenant section open: nothing is stamped or tenant-checked, but a new tenant row must
+    ///    carry its company (<see cref="Guid.Empty"/> throws).
+    /// 4. No company, no section: any added, modified or deleted tenant or Company row throws (NoTenant).
+    /// Non-tenant tables (asp_net_*, refresh_token) are not affected, so sign-in needs no section.
     /// </summary>
     private void EnforceTenantRules()
     {
         RejectCompanyChanges();
 
         var currentCompanyId = CurrentCompanyId;
+        var crossTenant = currentTenant.IsCrossTenant;
 
         foreach (var entry in ChangeTracker.Entries().Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
         {
@@ -172,20 +179,42 @@ public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant
                     }
                     else if (entry.OriginalValues.GetValue<Guid>(nameof(ITenantEntity.CompanyId)) != tenantEntity.CompanyId)
                     {
-                        throw new TenantViolationException($"The company of a {entry.Metadata.ClrType.Name} row cannot be changed.");
+                        throw new TenantViolationException(
+                            TenantViolationReason.CompanyChanged, $"The company of a {entry.Metadata.ClrType.Name} row cannot be changed.");
                     }
 
                     var rowCompanyId = entry.State == EntityState.Added
                         ? tenantEntity.CompanyId
                         : entry.OriginalValues.GetValue<Guid>(nameof(ITenantEntity.CompanyId));
-                    if (currentCompanyId is { } companyId && rowCompanyId != companyId)
+                    if (currentCompanyId is { } companyId)
                     {
-                        throw new TenantViolationException($"A {entry.Metadata.ClrType.Name} row belongs to another company.");
+                        if (rowCompanyId != companyId)
+                        {
+                            throw new TenantViolationException(
+                                TenantViolationReason.OtherCompany, $"A {entry.Metadata.ClrType.Name} row belongs to another company.");
+                        }
+                    }
+                    else if (!crossTenant || rowCompanyId == Guid.Empty)
+                    {
+                        throw new TenantViolationException(
+                            TenantViolationReason.NoTenant, $"A {entry.Metadata.ClrType.Name} row was written with no current company.");
                     }
 
                     break;
-                case Company company when currentCompanyId is { } currentId && company.Id != currentId:
-                    throw new TenantViolationException("A Company row belongs to another company.");
+                case Company company:
+                    if (currentCompanyId is { } currentId)
+                    {
+                        if (company.Id != currentId)
+                        {
+                            throw new TenantViolationException(TenantViolationReason.OtherCompany, "A Company row belongs to another company.");
+                        }
+                    }
+                    else if (!crossTenant)
+                    {
+                        throw new TenantViolationException(TenantViolationReason.NoTenant, "A Company row was written with no current company.");
+                    }
+
+                    break;
             }
         }
     }
@@ -204,7 +233,8 @@ public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant
             {
                 if (entry.OriginalValues.GetValue<Guid>(nameof(ITenantEntity.CompanyId)) != entry.Entity.CompanyId)
                 {
-                    throw new TenantViolationException($"The company of a {entry.Metadata.ClrType.Name} row cannot be changed.");
+                    throw new TenantViolationException(
+                        TenantViolationReason.CompanyChanged, $"The company of a {entry.Metadata.ClrType.Name} row cannot be changed.");
                 }
             }
         }

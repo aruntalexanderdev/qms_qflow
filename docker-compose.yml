@@ -32,6 +32,12 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Qms: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      # Auth (STORY-003). The signing key is required; the seed users are read only in Development (empty = skipped).
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?set JWT_SIGNING_KEY in .env (openssl rand -base64 48)}
+      Seed__SuperAdmin__UserName: ${SEED_SUPERADMIN_USERNAME:-}
+      Seed__SuperAdmin__Password: ${SEED_SUPERADMIN_PASSWORD:-}
+      Seed__CompanyAdmin__UserName: ${SEED_COMPANYADMIN_USERNAME:-}
+      Seed__CompanyAdmin__Password: ${SEED_COMPANYADMIN_PASSWORD:-}
     ports:
       # Loopback only; Swagger (Development) must not be reachable from the LAN. See backend/README.md.
       - "127.0.0.1:${API_PORT:-8080}:8080"

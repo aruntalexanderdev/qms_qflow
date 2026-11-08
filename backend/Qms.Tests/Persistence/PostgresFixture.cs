@@ -7,10 +7,22 @@ using Testcontainers.PostgreSql;
 
 namespace Qms.Tests.Persistence;
 
-/// <summary>An <see cref="ICurrentTenant"/> a test sets directly (the API implementation arrives with STORY-003).</summary>
-public sealed class SettableCurrentTenant(Guid? companyId = null) : ICurrentTenant
+/// <summary>
+/// An <see cref="ICurrentTenant"/> and <see cref="ITenantScope"/> a test sets directly. <see cref="IsCrossTenant"/> is true
+/// while <see cref="ForceCrossTenant"/> is set or a section opened with <see cref="BeginCrossTenant"/> is active.
+/// </summary>
+public sealed class SettableCurrentTenant(Guid? companyId = null, bool crossTenant = false) : ICurrentTenant, ITenantScope
 {
+    private readonly CrossTenantSection _section = new();
+
     public Guid? CompanyId { get; set; } = companyId;
+
+    /// <summary>Stands for a test that writes setup data with no company, like the seeder does.</summary>
+    public bool ForceCrossTenant { get; set; } = crossTenant;
+
+    public bool IsCrossTenant => ForceCrossTenant || _section.IsActive;
+
+    public IDisposable BeginCrossTenant() => _section.Begin();
 }
 
 /// <summary>A clock tests can fix.</summary>
@@ -67,11 +79,20 @@ public sealed class PostgresFixture : IAsyncLifetime
         return ConnectionStringFor(name);
     }
 
-    public static QmsDbContext CreateContext(string connectionString, Guid? companyId = null, TimeProvider? timeProvider = null)
+    /// <summary>
+    /// A context for the tests. With no company it runs inside a cross-tenant section by default (ADR-003 Amendment 1),
+    /// like the seeder, so setup code can write rows of any company; pass <c>crossTenant: false</c> to test the
+    /// fail-closed behaviour of a request with no company.
+    /// </summary>
+    public static QmsDbContext CreateContext(
+        string connectionString,
+        Guid? companyId = null,
+        TimeProvider? timeProvider = null,
+        bool? crossTenant = null)
     {
         var builder = new DbContextOptionsBuilder<QmsDbContext>();
         builder.UseQmsPostgres(connectionString).AddInterceptors(new AuditableEntityInterceptor(timeProvider ?? TimeProvider.System));
-        return new QmsDbContext(builder.Options, new SettableCurrentTenant(companyId));
+        return new QmsDbContext(builder.Options, new SettableCurrentTenant(companyId, crossTenant ?? companyId is null));
     }
 
     private string ConnectionStringFor(string database) =>

@@ -1,6 +1,6 @@
 # ADR-004 — Access and refresh tokens for users, keys for devices
 
-Status: Proposed
+Status: Accepted (merged with the Phase 0 PR, aruntalexanderdev/qms_qflow#3, 2026-11-07)
 Date: 2026-11-07
 Story: STORY-003
 
@@ -22,4 +22,4 @@ The spec requires ASP.NET Core Identity, a JWT access token valid for 15 minutes
 - XSS cannot read the refresh token; CSRF is limited by `SameSite=Strict` and the narrow cookie path.
 
 ## Spec impact
-Section 9: add table `refresh_token` (columns above). **Needs product owner approval**, and is part of the Phase 0 pull request.
+Section 9: table `refresh_token` added (approved 2026-11-08).

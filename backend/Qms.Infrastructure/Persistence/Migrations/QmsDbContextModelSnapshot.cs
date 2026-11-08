@@ -169,6 +169,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("at");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -227,6 +228,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("code");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -288,6 +290,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("close_time");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -349,6 +352,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("close_time");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -397,6 +401,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -446,6 +451,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -506,6 +512,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -617,6 +624,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -659,6 +667,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -700,6 +709,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasAlternateKey("BranchId", "Id")
                         .HasName("ak_counter_branch_id_id");
 
+                    b.HasAlternateKey("CompanyId", "Id")
+                        .HasName("ak_counter_company_id_id");
+
                     b.HasIndex("CurrentUserId")
                         .HasDatabaseName("ix_counter_current_user_id");
 
@@ -733,6 +745,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -786,6 +799,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -879,6 +893,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -975,6 +990,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1037,6 +1053,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("channel");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1109,6 +1126,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("channel");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1151,6 +1169,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1291,6 +1310,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1345,6 +1365,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1412,6 +1433,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1488,6 +1510,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("closed_at");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1654,6 +1677,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("business_date");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1714,6 +1738,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("called_at");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -1827,6 +1852,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("branch_id");
 
+                    b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1845,6 +1875,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasIndex("BranchId")
                         .HasDatabaseName("ix_user_branch_branch_id");
 
+                    b.HasIndex("CompanyId", "BranchId")
+                        .HasDatabaseName("ix_user_branch_company_id_branch_id");
+
                     b.HasIndex("UserId", "BranchId")
                         .IsUnique()
                         .HasDatabaseName("ix_user_branch_user_id_branch_id");
@@ -1857,6 +1890,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
 
                     b.Property<Guid>("CounterId")
                         .HasColumnType("uuid")
@@ -1880,6 +1918,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasIndex("CounterId")
                         .HasDatabaseName("ix_user_counter_counter_id");
 
+                    b.HasIndex("CompanyId", "CounterId")
+                        .HasDatabaseName("ix_user_counter_company_id_counter_id");
+
                     b.HasIndex("UserId", "CounterId")
                         .IsUnique()
                         .HasDatabaseName("ix_user_counter_user_id_counter_id");
@@ -1898,6 +1939,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnName("branch_id");
 
                     b.Property<Guid>("CompanyId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
@@ -2798,12 +2840,12 @@ namespace Qms.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Qms.Domain.Entities.UserBranch", b =>
                 {
-                    b.HasOne("Qms.Domain.Entities.Branch", "Branch")
+                    b.HasOne("Qms.Domain.Entities.Company", null)
                         .WithMany()
-                        .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_user_branch_branch_branch_id");
+                        .HasConstraintName("fk_user_branch_company_company_id");
 
                     b.HasOne("Qms.Infrastructure.Persistence.Identity.AppUser", null)
                         .WithMany()
@@ -2812,17 +2854,25 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_user_branch_asp_net_users_user_id");
 
+                    b.HasOne("Qms.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_branch_branch_company_id_branch_id");
+
                     b.Navigation("Branch");
                 });
 
             modelBuilder.Entity("Qms.Domain.Entities.UserCounter", b =>
                 {
-                    b.HasOne("Qms.Domain.Entities.Counter", "Counter")
+                    b.HasOne("Qms.Domain.Entities.Company", null)
                         .WithMany()
-                        .HasForeignKey("CounterId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_user_counter_counter_counter_id");
+                        .HasConstraintName("fk_user_counter_company_company_id");
 
                     b.HasOne("Qms.Infrastructure.Persistence.Identity.AppUser", null)
                         .WithMany()
@@ -2830,6 +2880,14 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_user_counter_asp_net_users_user_id");
+
+                    b.HasOne("Qms.Domain.Entities.Counter", "Counter")
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "CounterId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_counter_counter_company_id_counter_id");
 
                     b.Navigation("Counter");
                 });

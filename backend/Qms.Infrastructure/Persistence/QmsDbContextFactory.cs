@@ -21,5 +21,7 @@ public sealed class QmsDbContextFactory : IDesignTimeDbContextFactory<QmsDbConte
     private sealed class NoTenant : ICurrentTenant
     {
         public Guid? CompanyId => null;
+
+        public bool IsCrossTenant => false;
     }
 }

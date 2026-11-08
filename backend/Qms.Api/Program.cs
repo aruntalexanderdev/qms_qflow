@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Qms.Api.Auth;
 using Qms.Api.Common;
 using Qms.Application.Common;
 using DependencyInjection = Qms.Infrastructure.DependencyInjection;
@@ -44,6 +45,7 @@ builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
     };
 });
 builder.Services.AddQmsProblemDetails();
+builder.Services.AddQmsAuthentication();
 builder.Services.AddQmsHealthChecks();
 builder.Services.AddQmsOpenApi();
 
@@ -72,13 +74,18 @@ if (!app.Environment.IsDevelopment())
 }
 else
 {
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
     app.UseSwaggerUI(options =>
     {
         options.RoutePrefix = "swagger";
         options.SwaggerEndpoint("/openapi/v1.json", "Bank QMS API v1");
     });
 }
+
+app.UseRouting();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapQmsHealthChecks();

@@ -47,7 +47,11 @@ internal sealed class UserBranchConfiguration() : EntityConfiguration<UserBranch
     protected override void Map(EntityTypeBuilder<UserBranch> builder)
     {
         builder.HasOne<AppUser>().WithMany().HasForeignKey(u => u.UserId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasOne(u => u.Branch).WithMany().HasForeignKey(u => u.BranchId).OnDelete(DeleteBehavior.Cascade);
+        // Same-company guarantee for the branch. The matching guarantee for the user ((user_id, company_id) ->
+        // asp_net_users (id, company_id)) is raw SQL in the UserAssignmentCompany migration: EF cannot key the nullable
+        // AppUser.CompanyId. QmsDbContext tests assert those constraints exist (UserAssignmentTests).
+        builder.HasOne(u => u.Branch).WithMany().HasForeignKey(u => new { u.CompanyId, u.BranchId })
+            .HasPrincipalKey(b => new { b.CompanyId, b.Id }).OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(u => new { u.UserId, u.BranchId }).IsUnique();
         builder.HasIndex(u => u.BranchId);
     }
@@ -58,7 +62,9 @@ internal sealed class UserCounterConfiguration() : EntityConfiguration<UserCount
     protected override void Map(EntityTypeBuilder<UserCounter> builder)
     {
         builder.HasOne<AppUser>().WithMany().HasForeignKey(u => u.UserId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasOne(u => u.Counter).WithMany().HasForeignKey(u => u.CounterId).OnDelete(DeleteBehavior.Cascade);
+        // Same-company guarantee for the counter; the user side is raw SQL (see UserBranchConfiguration).
+        builder.HasOne(u => u.Counter).WithMany().HasForeignKey(u => new { u.CompanyId, u.CounterId })
+            .HasPrincipalKey(c => new { c.CompanyId, c.Id }).OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(u => new { u.UserId, u.CounterId }).IsUnique();
         builder.HasIndex(u => u.CounterId);
     }

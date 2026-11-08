@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-003 |
-| Status | Backend |
+| Status | Done |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2 (Auth), 8 (roles), 10 (`/auth/*`), 11 (Security) |
@@ -32,13 +32,30 @@ Depends on STORY-001 and STORY-002 (Identity tables, `refresh_token`, `user_bran
 - `ICurrentUser` implementation (ADR-003) from claims.
 - Swagger: bearer security scheme so authorised endpoints can be tried.
 
+**In scope — amendment 2026-11-08 (STORY-002 review follow-ups, ADR-003 Amendment 1)**
+- S2: tenant writes fail closed when there is no company; explicit cross-tenant scope (`ITenantScope`, `[CrossTenant]`, `CrossTenantDecorator`) restricted to Super Admin; the seeder runs in a cross-tenant section.
+- S3: `user_branch` and `user_counter` carry `company_id` with composite FKs, so a cross-company or Super Admin assignment is rejected by the database (new additive migration); `IUserDirectory` validates user ids that come from request input.
+- S5: `GlobalExceptionHandler` maps `DbUpdateConcurrencyException` and `TenantViolationException` to problem details.
+- N7: one claims-based `RequestTenantContext` provides `ICurrentTenant` and `ITenantScope`, registered in `AddQmsAuthentication`.
+
 **Out of scope**
 - User management CRUD (STORY-011). Device keys (STORY-015). Active Directory / LDAP (later).
+- Production endpoints that write tenant data or assignments (STORY-011 and later); the amendment is proven with endpoints registered only in the test host.
+- Composite FKs on the actor-user columns (`token.issued_by_user_id`, `token.fee_settled_by_user_id`, `token_visit.user_id`, `counter.current_user_id`); they stay Application-only (ADR-003 Amendment 1 B.3).
+- Web, Android and displays: no change.
 
 ## 4. Business rules
 1. The access token is valid for 15 minutes; the refresh token is rotated on every use (spec 11).
 2. Passwords are hashed by Identity (spec 11).
 3. Roles and scopes are as in spec section 8.
+
+Amendment 2026-11-08 (no new business rules; these implement spec 8, 9 and 11 and ADR-003 Amendment 1):
+
+4. Tenant tables carry `company_id` so no row can reference another company's data (spec 9). This now includes `user_branch` and `user_counter` (listing `company_id` in spec 9 awaits product owner approval, section 10).
+5. A Company Admin sees only their own company; Branch Manager and Counter Staff only their assigned branches or counters; Super Admin is not tied to a company and has no branch or counter assignments (spec 8). Assignments therefore only exist between a user and a branch or counter of the user's own company (spec 8, 9).
+6. A write to tenant data needs a current company, or an explicit cross-tenant section opened only by the seeder, a background job, or a handler marked `[CrossTenant]` that only a Super Admin may call (spec 8, 11; ADR-003 A.4).
+7. Actor columns (who issued, settled, served) are set only from the signed-in user, never from the request body. A user id that does come from the request must belong to the current company, otherwise the response is `user.not_found`, which does not reveal whether the user exists in another company (spec 11; ADR-003 B.3).
+8. Error responses do not confirm that another company's data exists (404 `resource.not_found`) and never expose internal details on server misconfiguration (500 `server.unexpected_error`) (spec 11, RFC 7807 per project rules).
 
 ## 5. Acceptance criteria
 
@@ -82,6 +99,86 @@ Depends on STORY-001 and STORY-002 (Identity tables, `refresh_token`, `user_bran
 - When Swagger UI is opened
 - Then it lists `/auth/login`, `/auth/refresh`, `/auth/logout` and `/auth/me`, and supports the bearer scheme (M1 done-when, spec 12).
 
+Wording check for the amendment: AC-1 to AC-8 are unchanged; no fix needed.
+
+### Amendment 2026-11-08 — S2, S3, S5, N7
+Test hosts for AC-9 to AC-22 register test-only endpoints or call the use cases / DbContext directly; STORY-003 adds no production tenant-write endpoint.
+
+**AC-9: Tenant write with no company is rejected (S2)**
+- Given a request with no `company_id` (no company in the current tenant) and no cross-tenant section
+- When a handler saves a new `branch` row, or modifies or deletes an existing `counter` row
+- Then `SaveChanges` throws `TenantViolationException` with reason `NoTenant`, nothing is stored, and the same save for `asp_net_users`, `refresh_token` (login, refresh, logout, lockout) still succeeds.
+
+**AC-10: Seeder and cross-tenant section still work (S2)**
+- Given an empty database and no signed-in user
+- When `MigrateAndSeedAsync` runs the development seeder
+- Then Company 1 with Branch 1, Zones 1 and 2, Counters 1 to 4 and the example mappings are created; a second run changes nothing; and a new tenant row inside a cross-tenant section with `CompanyId = Guid.Empty` is rejected.
+
+**AC-11: `[CrossTenant]` handler refuses a non-Super Admin (S2)**
+- Given the seeded Company Admin of Company 1 is signed in
+- When a handler marked `[CrossTenant]` is called
+- Then the result is `Forbidden` (HTTP 403, code `auth.forbidden`), the handler body does not run, and no cross-tenant section is opened.
+
+**AC-12: `[CrossTenant]` handler works for Super Admin (S2)**
+- Given the seeded Super Admin is signed in (no company)
+- When a handler marked `[CrossTenant]` creates a branch row for Company 2 with an explicit `CompanyId`
+- Then the decorator opens the cross-tenant section, the row is saved with Company 2, and after the handler returns the section is closed (a following tenant write in the same scope fails as in AC-9). In a unit test of `ITenantScope`, disposing an inner handle does not end the outer section.
+
+**AC-13: Company 2 user cannot be assigned to Branch 1 (S3)**
+- Given a user of Company 2 and Branch 1 of Company 1
+- When a `user_branch` row for that user and Branch 1 is inserted (with `company_id` of Company 1 or Company 2)
+- Then the database rejects it: with Company 1 by `fk_user_branch_user_company`, with Company 2 by the composite FK `(company_id, branch_id)` to `branch`.
+
+**AC-14: Company 2 user cannot be assigned to Counter 2 (S3)**
+- Given a user of Company 2 and Counter 2 (Zone 1, Branch 1) of Company 1
+- When a `user_counter` row for that user and Counter 2 is inserted (with `company_id` of either company)
+- Then the database rejects it: with Company 1 by `fk_user_counter_user_company`, with Company 2 by the composite FK `(company_id, counter_id)` to `counter`.
+
+**AC-15: Super Admin cannot be assigned (S3)**
+- Given the seeded Super Admin (no company)
+- When a `user_branch` row for the Super Admin and Branch 1, or a `user_counter` row for the Super Admin and Counter 2, is inserted
+- Then the database rejects both rows (no `asp_net_users (id, company_id)` match), and the seeder created no assignments for the Super Admin or the Company Admin.
+
+**AC-16: Same-company assignment is accepted (S3)**
+- Given a Counter Staff user of Company 1, Branch 1 and Counter 2
+- When `user_branch` (Branch 1) and `user_counter` (Counter 2) rows are inserted with `company_id` of Company 1
+- Then both are saved; and changing that user's `company_id` to Company 2 while the rows exist is rejected by the database.
+
+**AC-17: Request-supplied user id of another company (S3)**
+- Given a signed-in Company Admin of Company 1 and a user of Company 2
+- When a handler receives that user's id from the request and checks it with `IUserDirectory.IsInCompanyAsync(userId, Company 1)`
+- Then the check returns false and the handler returns `NotFound` (HTTP 404, code `user.not_found`) with the same response as for a user id that does not exist; a Company 1 user id passes.
+
+**AC-18: Concurrency conflict returns 409 (S5)**
+- Given a test-host endpoint that updates Counter 2 and another request changed the same row first
+- When the save raises `DbUpdateConcurrencyException`
+- Then the response is 409 problem details with code `request.conflict`.
+
+**AC-19: Cross-company access returns 404 (S5)**
+- Given a signed-in Company Admin of Company 1 and a test-host endpoint that updates a Company 2 row, or changes the `company_id` of a Company 1 row
+- When the save raises `TenantViolationException` with reason `OtherCompany` or `CompanyChanged`
+- Then the response is 404 problem details with code `resource.not_found`, the body contains no entity values, and a Warning is logged without entity values.
+
+**AC-20: Missing tenant returns 500 without details (S5)**
+- Given a test-host endpoint that writes a tenant row with no company and no cross-tenant section
+- When the save raises `TenantViolationException` with reason `NoTenant`
+- Then the response is 500 problem details with code `server.unexpected_error`, the body contains no exception type, message, stack trace or entity values, and an Error is logged.
+
+**AC-21: Tenant context comes from the sign-in claims (N7)**
+- Given the seeded Company Admin of Company 1 signed in, and rows exist for Company 1 and Company 2
+- When a test-host endpoint lists branches
+- Then only Company 1 rows are returned; the same call with a Company 2 token returns only Company 2 rows; the tenant is registered outside `AddQmsHealthChecks` and `NoCompanyCurrentTenant` no longer exists.
+
+**AC-22: Super Admin sees nothing tenant-scoped by default (N7)**
+- Given the seeded Super Admin is signed in (no `company_id` claim)
+- When a test-host endpoint lists branches without a cross-tenant read, and then through a `[CrossTenant]` handler that reads with `IgnoreQueryFilters()`
+- Then the first call returns an empty list and the second returns the branches of Company 1 and Company 2.
+
+**AC-23: Migration is additive and reversible (S3)**
+- Given a database at `InitialSchema` with Company 1 data, and with one `user_branch` row whose user belongs to another company
+- When the new migration `UserAssignmentCompany` is applied
+- Then for same-company rows `company_id` is backfilled from `branch.company_id` / `counter.company_id`; with the mismatched row the migration fails and changes nothing; and on migrate down all added columns, keys and constraints are removed and `InitialSchema` data is intact.
+
 ## 6. UI / UX
 No screen in this story; the login page is STORY-004. Error codes are translated by the web app.
 
@@ -90,24 +187,77 @@ No screen in this story; the login page is STORY-004. Error codes are translated
 - Endpoints: `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`.
 - Configuration: `Jwt:Issuer`, `Jwt:Audience`, `Jwt:SigningKey` (secret), `Seed:SuperAdmin:*`, `Seed:CompanyAdmin:*` (secrets).
 
+**Scope amendment 2026-11-08 (STORY-002 review follow-ups S2, S3, S5, N7; design in ADR-003 Amendment 1)**
+- Spec: sections 8, 9, 11. No business rule changes. Section 9 needs `company_id` listed on `user_branch` and `user_counter` (product owner approval, see Open questions).
+- Database (S3), in a new additive migration, e.g. `UserAssignmentCompany`. `InitialSchema` is merged and must not be regenerated.
+  - New columns `user_branch.company_id` and `user_counter.company_id`: uuid, not null.
+    - Backfill from `branch.company_id` / `counter.company_id`.
+    - The migration fails if an existing row's user belongs to another company.
+    - Both entities become `ITenantEntity`: tenant filter, stamping, immutable `company_id`, concurrency token.
+  - New alternate key `counter (company_id, id)`.
+  - Composite FKs:
+    - `user_branch (company_id, branch_id)` → `branch (company_id, id)`
+    - `user_counter (company_id, counter_id)` → `counter (company_id, id)`
+  - Raw SQL in the migration, because EF cannot model a key on the nullable `AppUser.CompanyId`:
+    - unique `ux_asp_net_users_id_company_id` on `asp_net_users (id, company_id)`;
+    - FKs `fk_user_branch_user_company` and `fk_user_counter_user_company` on `(user_id, company_id)` → `asp_net_users (id, company_id)`, on delete cascade.
+    - Effect: a Super Admin (no company) can never have assignments, and a user's company cannot change while assignments exist.
+  - The Down migration drops all of the above.
+  - Tests:
+    - a cross-company `user_branch` or `user_counter` row is rejected by each named constraint;
+    - a Super Admin assignment is rejected;
+    - a valid same-company row is accepted;
+    - migrate down for this migration.
+  - No change to the actor-user FKs (`token.issued_by_user_id`, `token.fee_settled_by_user_id`, `token_visit.user_id`, `counter.current_user_id`). They stay single-column (ADR-003 Amendment 1 B.3).
+  - Seed: no new rows. The seeder creates no assignments; Super Admin and Company Admin need none.
+- Backend:
+  - S2 (fail-closed writes):
+    - `ICurrentTenant.IsCrossTenant`.
+    - New `ITenantScope.BeginCrossTenant()`, returning a nesting-safe `IDisposable`.
+    - `QmsDbContext` throws `TenantViolationException` (reason `NoTenant`) on any tenant write when there is no company and no cross-tenant section.
+    - `MigrateAndSeedAsync` wraps the seeder in a cross-tenant section.
+    - `[CrossTenant]` attribute plus `CrossTenantDecorator`: the caller needs role `SuperAdmin`, otherwise `Forbidden` `auth.forbidden`. The decorator opens the section for the handler call.
+    - `SettableCurrentTenant` and the existing persistence tests that write with no company are updated to use the flag.
+  - N7:
+    - One scoped `RequestTenantContext` in Qms.Api implements both `ICurrentTenant` and `ITenantScope`. Its `CompanyId` comes from `ICurrentUser` (the `company_id` claim).
+    - It is registered in `AddQmsAuthentication`, and the registration is removed from `AddQmsHealthChecks`.
+    - `NoCompanyCurrentTenant.cs` is deleted.
+  - S3 (Application side):
+    - `IUserDirectory.IsInCompanyAsync(userId, companyId)`: Application interface, Infrastructure implementation over `asp_net_users`. A failed check returns `NotFound` `user.not_found`.
+    - Rule: actor columns are set only from `ICurrentUser.UserId`. It is documented in ADR-003, and STORY-011 and STORY-014 to STORY-020 must follow it.
+    - Unit and integration tests.
+  - S5 (exception mapping in `GlobalExceptionHandler`):
+    - `DbUpdateConcurrencyException` → 409 `request.conflict`.
+    - `TenantViolationException` with reason `OtherCompany` or `CompanyChanged` → 404 `resource.not_found` (Warning log, no entity values).
+    - `TenantViolationException` with reason `NoTenant` → 500 `server.unexpected_error` (Error log).
+    - One integration test per mapping. STORY-003 has no tenant-write endpoint, so the tests use endpoints registered only in the test host.
+  - No new production endpoints and no SignalR events.
+- Web: none. The auth contract is unchanged, and `request.conflict` and `resource.not_found` already exist as default codes.
+- Android, displays: none.
+- Cross-cutting:
+  - Security: closes the fail-open write path and adds defence in depth for branch scope.
+  - Performance: one extra FK lookup per assignment write; nothing on the token or Call Next path.
+  - Audit: unchanged.
+
 ## 8. Stage plan (filled by architect, stage 0)
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
-| 0 Architect | Yes | — | ADR-004, ADR-003 |
-| 1 BA | Yes | — | |
-| 2 Database | N/A | — | All tables are created in STORY-002 |
-| 3 Backend | Yes | TASK-004 | |
-| 4 Frontend | N/A | — | Login page is STORY-004 |
-| 5 Android | N/A | — | Devices use keys (M3) |
-| 6 Code review | Yes | — | Security focus |
-| 7 QA | Yes | — | |
+| 0 Architect | Yes | — | ADR-004, ADR-003 (+ Amendment 1, 2026-11-08) |
+| 1 BA | Yes | — | Done: AC-9 to AC-23 added; TASK-007 (stage 2) and TASK-008 (stage 3) created |
+| 2 Database | Yes (amended 2026-11-08) | TASK-007 (AC-13 to AC-16, AC-23) | Additive migration: `company_id` and composite FKs on `user_branch` / `user_counter`; `counter (company_id, id)` alternate key; raw-SQL `asp_net_users (id, company_id)` key and user FKs. Entities become `ITenantEntity`. DB tests. Must run before stage 3 |
+| 3 Backend | Yes | TASK-004 (AC-1 to AC-8) + TASK-008 (AC-9 to AC-12, AC-17 to AC-22; AC-13 to AC-16 and AC-23 depend on TASK-007) | Auth as before. Also: fail-closed tenant writes, `ITenantScope` / `[CrossTenant]`, claims-based tenant context (N7), `IUserDirectory`, exception mapping with integration tests |
+| 4 Frontend | N/A | — | Login page is STORY-004; the amendment does not change the auth contract or error codes |
+| 5 Android | N/A | — | Devices use keys (M3); no device API change |
+| 6 Code review | Yes | — | Security focus: grep `BeginCrossTenant`, `[CrossTenant]`, `IgnoreQueryFilters`; check the raw-SQL constraints in the migration |
+| 7 QA | Yes | — | Includes the negative cases for cross-company assignments and tenant writes |
 
 ## 9. Non-functional notes
 - Security review focus: no user enumeration, constant-time compare of token hashes, the signing key at least 256 bits, no tokens in logs.
 - `/auth/login` answers within 300 ms at p95 under normal load (excluding lockout delay).
 
 ## 10. Open questions
-- [ ] Depends on ADR-004 (Proposed), accepted with the Phase 0 PR.
+- [x] ADR-004 accepted (Phase 0 PR merged 2026-11-07).
+- [x] Approved by the product owner on 2026-11-08 and written into spec section 9 (commit 61929cf). Original question: approve adding `company_id` to `user_branch` and `user_counter` in spec section 9 (ADR-003 Amendment 1, spec impact). This follows the section 9 tenant-table rule. It does not block analysis or starting stage 2, but it blocks merging the stage 2 migration (TASK-007) until approved.
 
 ## 11. Stage log
 
@@ -121,4 +271,178 @@ Open questions: none
 Result: Done
 Changed: this story (sections 1–6, 9–10), docs/work/tasks/TASK-004-authentication-api.md
 Notes for next stage: Start at stage 3 (TASK-004) once STORY-002 is Done.
+Open questions: none
+
+### Stage 0 — Architecture review (scope amendment) — project-architect — 2026-11-08
+Result: Done
+Changed: docs/adr/ADR-003-tenant-and-branch-scoping.md (Amendment 1), this story (status, sections 7, 8, 10)
+Notes for next stage:
+- Scope grows by the STORY-002 review follow-ups S2, S3, S5 and N7. The design is in ADR-003 Amendment 1; the impact is in section 7.
+- S3 decision: a database guarantee on `user_branch` / `user_counter`, with Application validation on top.
+  - Database: new `company_id` with composite FKs to `branch` / `counter`, plus a raw-SQL `(user_id, company_id)` FK to `asp_net_users (id, company_id)`.
+  - Why: these rows feed `IBranchScope`, the query filter does not cover them today, and they are the only branch-level tables without a same-company key.
+  - Super Admin is not affected: a Super Admin needs no assignments.
+  - The four actor-user FKs stay Application-only: values come from `ICurrentUser.UserId`, and `IUserDirectory` checks user ids that come from input.
+- Stage 2 now applies, as a new additive migration (`InitialSchema` is merged).
+- Order is stage 2, then stage 3. Stage 3 owns:
+  - S2: the `QmsDbContext` write guard, `ITenantScope`, the `[CrossTenant]` decorator, the seeder wrap and the test-fixture updates;
+  - N7;
+  - S5.
+- BA: write Given/When/Then ACs for these cases, then create the stage 2 task and the stage 3 task (or extend TASK-004):
+  - a tenant write with no company fails;
+  - the seeder still seeds;
+  - `[CrossTenant]` refuses a caller who is not a Super Admin;
+  - cross-company `user_branch` / `user_counter` rows are rejected;
+  - a Super Admin cannot be assigned;
+  - 409 for a concurrency conflict;
+  - 404 for a tenant violation;
+  - 500 for a missing tenant;
+  - `ICurrentTenant` comes from the `company_id` claim and is registered outside the health checks.
+- Stages 4 and 5 stay N/A.
+Open questions: the product owner must approve listing `user_branch.company_id` / `user_counter.company_id` in spec section 9. Not blocking for analysis; needed before the stage 2 merge.
+
+### Stage 1 — Analysis (scope amendment) — business-analyst — 2026-11-08
+Result: Done
+Changed: this story (status, sections 3, 4, 5 AC-9 to AC-23, 8, 10), docs/work/tasks/TASK-007-user-assignment-company-migration.md, docs/work/tasks/TASK-008-tenant-guard-and-error-mapping.md
+Notes for next stage:
+- Stage 2 (TASK-007): AC-13 to AC-16 and AC-23. Start now; do not merge until the product owner approves `company_id` on `user_branch` / `user_counter` in spec section 9.
+- Stage 3 (TASK-008) follows TASK-007; TASK-004 (AC-1 to AC-8) is unchanged.
+- AC-1 to AC-8 unchanged. AC-9 to AC-22 use test-host-only endpoints or direct use-case calls; no production tenant-write endpoint exists in this story.
+- Stages 4 and 5 stay N/A.
+Open questions: product owner approval of spec section 9 (blocks the TASK-007 merge only).
+
+### Stage 2 — Database — database-architect — 2026-11-08
+Result: Done
+Changed: backend/Qms.Domain/Entities/Identity/UserBranch.cs, UserCounter.cs; backend/Qms.Infrastructure/Persistence/Configurations/MessagingAndIdentityConfigurations.cs, OrganizationConfigurations.cs; backend/Qms.Infrastructure/Persistence/Migrations/20261108025641_UserAssignmentCompany(.Designer).cs and QmsDbContextModelSnapshot.cs; backend/Qms.Tests/Persistence/UserAssignmentTests.cs, SchemaTests.cs; docs/work/tasks/TASK-007-user-assignment-company-migration.md
+Notes for next stage:
+- `UserBranch` / `UserCounter` are now `ITenantEntity` (non-null `CompanyId`, stamped from the current tenant on insert, immutable, concurrency token). With no current company the query filter returns no rows: login / token-refresh lookups of a user's branches and counters must use `IgnoreQueryFilters()` filtered by `UserId` (AppUser and RefreshToken are not tenant-filtered). Inserts with no current tenant must set `CompanyId` explicitly (the user's company); with a tenant set, a row of another company throws `TenantViolationException` before reaching the database.
+- Constraint names the API can map (SQLSTATE 23503): `fk_user_branch_user_company`, `fk_user_counter_user_company` (user of another company, Super Admin, or changing an assigned user's company), `fk_user_branch_branch_company_id_branch_id`, `fk_user_counter_counter_company_id_counter_id` (target in another company).
+- Super Admin (company_id null) can never be assigned; a user cannot change company (or become Super Admin) while assignments exist: delete assignments first.
+- Seed unchanged; no users or assignments seeded.
+- Tests that insert old-shape rows use raw SQL at InitialSchema; migration tests use `IMigrator.MigrateAsync(target)`.
+- Merge blocked until the product owner approves `company_id` on `user_branch` / `user_counter` in spec section 9 (spec not edited).
+Open questions: product owner approval of spec section 9 (blocks merge only).
+
+### Stage 3 — Backend — backend-developer — 2026-11-08
+Result: Done
+Changed:
+- Application: `backend/Qms.Application/Auth/**` (Login, RefreshSession, Logout, GetCurrentUser, ports, `Roles`, `AuthErrors`, `UserErrors`, DTOs); `Common/` `ICurrentUser`, `ITenantScope`, `CrossTenantSection`, `CrossTenantAttribute`, `CrossTenantDecorator`, `ICurrentTenant.IsCrossTenant`, `DependencyInjection` (decorator chain, optional type filter).
+- Infrastructure: `Identity/**` (`JwtOptions`, `JwtTokenService`, `RefreshTokenStore`, `RefreshTokenHasher`, `UserAccounts`, `IdentitySeeder`), `DependencyInjection.cs` (Identity, options, seeding in a cross-tenant section); named in TASK-008 and outside the usual stage-3 folders: `Persistence/QmsDbContext.cs`, `TenantViolationException.cs`, `QmsDbContextFactory.cs`.
+- Api: `Auth/**` (`HttpContextCurrentUser`, `RequestTenantContext`, `RefreshCookie`, `AuthenticationSetup`), `Controllers/AuthController.cs`, `Common/ProblemDetailsSetup.cs` (S5), `Common/ApplicationBuilderExtensions.cs` (tenant removed, OpenAPI Bearer), `Program.cs`, `appsettings.json` (`Jwt:Issuer/Audience`), `Qms.Api.csproj` (JwtBearer, `UserSecretsId`); `NoCompanyCurrentTenant.cs` deleted.
+- Packages: `Microsoft.AspNetCore.Authentication.JwtBearer` 10.0.14, `Microsoft.IdentityModel.JsonWebTokens` 8.19.2 (`backend/Directory.Packages.props`).
+- Config and docs: `.env.example`, `docker-compose.yml` (`JWT_SIGNING_KEY` required, `SEED_*` optional), `CLAUDE.md`, `backend/README.md`, TASK-004, TASK-008.
+- Tests: `backend/Qms.Tests/Auth/**` (5 files), `Support/AuthHost.cs`, `TenantTestEndpoints.cs`, `TestAccounts.cs`; updated `QmsApiFactory`, `TestThings`, `Persistence/PostgresFixture.cs`, `UserAssignmentTests.cs` (one assertion).
+Notes for next stage:
+- Stages 4 and 5 are N/A (see section 8). The orchestrator logs them. Next real consumers: STORY-004 (Angular shell), STORY-011.
+- API contract for the web app (all under `/api/v1/auth`, problem details with a stable `code`):
+  - `POST /login` body `{ "userName": "...", "password": "..." }` gives 200 `{ "accessToken", "tokenType": "Bearer", "expiresIn": 900, "expiresAt", "user": { "id", "userName", "name", "role", "companyId" (null for Super Admin), "language", "branchIds": [], "counterIds": [] } }` and `Set-Cookie: qms_refresh=...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` (7 days). Errors: 400 `validation.failed`, 401 `auth.invalid_credentials`, 401 `auth.locked_out`, 429 `request.rate_limited` (10/min per address, `Retry-After`).
+  - `POST /refresh` (no body; the browser sends the cookie) gives the same 200 body and a rotated cookie. 401 `auth.refresh_invalid` (missing, unknown, expired token or inactive user) or `auth.refresh_reused` (family revoked); the cookie is cleared on every 401.
+  - `POST /logout` (no body, no bearer needed) gives 204 and clears the cookie.
+  - `GET /me` (bearer) gives the `user` object above; 401 `auth.unauthorized`.
+  - The access token has claims `sub`, `company_id` (absent for Super Admin), `role` (`SuperAdmin` | `CompanyAdmin` | `BranchManager` | `CounterStaff`), `name`, `lang`, `iss` `qms-api`, `aud` `qms-clients`. SignalR: pass it as `access_token` on `/hubs/*`.
+  - Any other endpoint returns 401 problem details (`auth.unauthorized`) without a valid token and 403 `auth.forbidden` for a role it does not allow. Cross-company access is 404 `resource.not_found`; a lost update is 409 `request.conflict`.
+  - Web and the API must be served from one origin (ADR-004/006); the cookie is `Secure`, so local web development needs https or `localhost`.
+- Configuration: `Jwt:SigningKey` (>= 32 characters) is required everywhere; `Seed:SuperAdmin:*` and `Seed:CompanyAdmin:*` are read only in Development. See `backend/README.md`, "Authentication settings". The local stack needs `JWT_SIGNING_KEY` in `.env`.
+- For STORY-011 and later: actor columns only from `ICurrentUser.UserId`; validate request-supplied user ids with `IUserDirectory.IsInCompanyAsync`; map residual 23503 on the four user-assignment constraint names (not mapped yet, no endpoint can hit them); only `[CrossTenant]` handlers, the seeder and jobs open a cross-tenant section.
+- Follow-ups: rate limiter needs forwarded headers behind a proxy (hosting story); access tokens of deactivated users live up to 15 minutes; password policy is the Identity default.
+- AC evidence: AC-1..AC-8 and AC-9..AC-12, AC-17..AC-22 have integration tests (`Qms.Tests/Auth`); AC-13..AC-16, AC-23 are covered by TASK-007's tests. Manual check with curl against a throwaway `postgres:18` (login, me, refresh, reuse, logout, lockout, Swagger) passed.
+Open questions: product owner approval of spec section 9 (`company_id` on `user_branch` / `user_counter`, and the `refresh_token` table from ADR-004) still blocks merge only; ADR-004 is still `Proposed`.
+
+### Stage 4 — Frontend — frontend-developer — 2026-11-08
+Result: N/A — Auth contract and error codes are consumed by STORY-004 (stage plan)
+Changed: none
+Notes for next stage: none
+Open questions: none
+
+### Stage 5 — Android — android-developer — 2026-11-08
+Result: N/A — No device API change (stage plan)
+Changed: none
+Notes for next stage: Ready for code review (stage 6).
+Open questions: none
+
+### Stage 6 — Code review — code-reviewer — 2026-11-08
+Result: Approved
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` Passed 246, Failed 0, Skipped 0, 1 m 46 s, Docker/Testcontainers) · web N/A · android N/A
+ACs checked: AC-1 ✅ (HS256, 900 s, sub/company_id/role/name/lang, iss/aud, cookie flags and path, `Cache-Control: no-store`), AC-2 ✅ (same body; decoy PBKDF2 for unknown and inactive users), AC-3 ✅, AC-4 ✅, AC-5 ✅ (reuse and the concurrent race revoke the family), AC-6 ✅, AC-7 ✅, AC-8 ✅, AC-9 ✅, AC-10 ✅, AC-11 ✅, AC-12 ✅, AC-13 ✅, AC-14 ✅, AC-15 ✅, AC-16 ✅, AC-17 ✅, AC-18 ✅, AC-19 ✅, AC-20 ✅, AC-21 ✅, AC-22 ✅, AC-23 ✅
+Reviewed: `git diff origin/main -- backend docker-compose.yml .env.example CLAUDE.md docs/PROJECT_SPEC.md docs/adr` (HEAD 48b8a96), the story, TASK-004/007/008, ADR-002/003 (Amendment 1)/004, spec sections 8–11, and STORY-002 findings S2/S3/S5/N7.
+
+Security checks (all pass):
+- JWT (ADR-004): `ValidAlgorithms` = HS256 only (`alg: none` and HS384 are rejected by tests). The key must be at least 32 bytes, checked by `ValidateOnStart` in every environment. Issuer, audience, lifetime, `RequireExpirationTime` and a 30 s skew are validated. `MapInboundClaims` is off. `access_token` is read from the query only under `/hubs`.
+- Refresh token: 32 bytes from `RandomNumberGenerator`, base64url. Only the SHA-256 hex hash is stored (unique index). The lookup is by hash, then compared with `FixedTimeEquals`. Rotation is atomic: insert the successor, then a conditional `ExecuteUpdate` (`revoked_at IS NULL AND replaced_by_id IS NULL`) in one transaction. Under READ COMMITTED the losing request matches 0 rows, rolls back and revokes the family. Reuse of a rotated or revoked token revokes the family. The cookie is cleared on every refresh 401 and on logout.
+- Lockout 5 / 15 min (`AllowedForNewUsers`). The rate limiter allows 10/min per address and returns a 429 problem with `Retry-After`. Login, wrong password, unknown and inactive users give one response. No password, token or hash reaches a log (Serilog request logging uses the path only, `Microsoft.AspNetCore` is at Warning, no `EnableSensitiveDataLogging`, the seeder logs only Identity error codes). Seed users come only from `Seed:*` and only in Development.
+- Authorization: the fallback policy requires an authenticated user. The anonymous endpoints are exactly login, refresh, logout, health live/ready, and openapi (Development only; Swagger UI is middleware and Development only). `UnmatchedRouteAuthorizationResultHandler` skips authorization only when `GetEndpoint()` is null. `UseRouting` runs before `UseAuthorization` and nothing in between clears the endpoint, and method mismatch (405) is a non-null endpoint. So a matched endpoint can never pass through. Role names match spec section 8.
+- Tenant: `BeginCrossTenant` has exactly two production callers, `MigrateAndSeedAsync` and the two decorators. The only production `IgnoreQueryFilters` is `UserAccounts` (by the user's own id) plus the pre-existing seeder existence check, both justified. The write guard follows ADR-003 A.2 in order, including `Company` rows and `Guid.Empty` inside a section. A missing or malformed `company_id` gives `CompanyId = null`, so reads are empty and writes fail `NoTenant` (fail closed; unit test included). A Super Admin sees no tenant rows without `[CrossTenant]` (AC-22). The decorator checks the `SuperAdmin` role before opening the section and before the handler.
+- S3 migration: the guard `DO` block runs first (`IS DISTINCT FROM` also catches users without a company), then the backfill, NOT NULL, the composite FKs and the raw-SQL unique/FKs. It runs in a single migration transaction (AC-23 test: fails and changes nothing). Down drops everything and restores the single-column FKs. The drift test plus the constraint-existence test cover the raw SQL. `IUserDirectory` returns the same 404 `user.not_found` for unknown and foreign users.
+- S5: 409 `request.conflict` (Warning), 404 `resource.not_found` for OtherCompany/CompanyChanged (Warning with reason, method and path only; no exception object), and 500 `server.unexpected_error` for NoTenant (Error with exception, nothing in the body). Tests check the body and the log contents.
+- Config: `.env.example` placeholders are blank. Compose uses `${JWT_SIGNING_KEY:?…}`. `UserSecretsId` is set and the README documents user-secrets.
+- Stage 3 deviations accepted: `UserManager` instead of `SignInManager` (same lockout API, no cookie scheme). Anonymous logout (the cookie is the credential and `SameSite=Strict` limits CSRF). The unknown-route handler (above). The optional `typeFilter`. The fixture defaulting to a cross-tenant section, with `crossTenant: false` used by the fail-closed tests. The `UserAssignmentTests.Ac15` assertion change is correct because the guard now fires before the database.
+
+Must fix
+- none
+
+Should fix
+- S1 [stage 3 / hosting story] backend/Qms.Api/Auth/AuthenticationSetup.cs:61-62 — the login limiter is partitioned by `Connection.RemoteIpAddress`, with fallback `"unknown"`. Behind the Azure Container Apps ingress or a Docker userland proxy, every client shares one address. That is 10 logins per minute for the whole deployment, which would block the morning sign-in of 50 branches × 20 counters. → Before any deployment, configure `ForwardedHeaders` with known proxies (ADR-006). Consider partitioning by address + normalised user name. Track it as a follow-up task linked to the hosting story; the stage 3 handoff already notes it.
+- S2 [stage 3] backend/Qms.Tests/Auth — the story NFR "no tokens in logs" (section 9) has no test. → Add one integration test that runs login, refresh (including reuse), logout and a failed login against the in-memory `LogSink`, and asserts that no event (rendered message, properties, exception) contains the password, the refresh token, its hash or the access token.
+- S3 [stage 3] backend/Qms.Tests/Auth/ProtectionTests.cs — protection by default is proven with one test endpoint only. → Add an endpoint-metadata test: enumerate `EndpointDataSource` in the production host and assert that the set of endpoints carrying `IAllowAnonymous` equals the allow-list (login, refresh, logout, health live/ready, openapi). A new `[AllowAnonymous]` then needs a deliberate test change.
+- S4 [stage 0] docs/adr/ADR-002, ADR-004 — stage 3's commit changed the ADR status lines and the ADR-004 "Spec impact" text, which the architect owns. Its handoff still says "ADR-004 is still `Proposed`" and "refresh_token … still blocks merge". → The architect confirms the status edits (section 10 already records ADR-004 accepted, and spec section 9 now lists `refresh_token`) and clears the stale open question in the stage 3 handoff.
+
+Nice to have
+- N1 [stage 0] ADR-004 — record the residual risks that AC-3 implies. `auth.locked_out` appears only for existing active users, so 5 wrong attempts reveal that an account exists (mitigated by the rate limiter, S1). And any caller can lock a known user name for 15 minutes.
+- N2 [stage 0 / STORY-004] Reuse detection also fires when two tabs of the same browser refresh at the same moment: the loser revokes the family and the user is signed out. ADR-004 decision 3 makes this intended. STORY-004 should serialise refresh across tabs (Web Locks / BroadcastChannel), or the architect should decide on a short grace window.
+- N3 [stage 3] backend/Qms.Infrastructure/Identity/RefreshTokenStore.cs:98 — each rotation gives a fresh 7 days, so a family can live forever while used. Expired and revoked rows are never purged. → Consider an absolute family lifetime and a cleanup job (ADR-005).
+- N4 [stage 3] backend/Qms.Application/Common/DependencyInjection.cs:64-69 — validation runs before the `[CrossTenant]` role check (as ADR-003 A.4 says). A non-Super Admin can therefore get 400 validation details from a cross-tenant command instead of 403. Harmless today; revisit with the first real `[CrossTenant]` command (Companies feature).
+- N5 [stage 3] backend/Qms.Tests/Auth/AuthEndpointsTests.cs:347 — `ShouldBeLessThanOrEqualTo(1)` also passes when every refresh fails. Exactly one winner is guaranteed (someone always commits the conditional update first), so assert `== 1`, and also assert that R2 of the winner is revoked afterwards.
+- N6 [stage 3] AuthEndpointsTests.cs:118-128 — the timing test (best of 3, unknown > 0.4 × known) is low risk: both paths do one PBKDF2 verification of tens of ms, and the known path adds one UPDATE. Keep it. If it ever flakes on CI, lower the factor rather than delete the test.
+- N7 [stage 3] JwtOptions.cs:54-59 — `ClockSkewSeconds` is not range-checked (for example 0–120).
+- N8 [stage 3] UserAccounts.cs / RefreshSessionHandler — a locked-out user can keep refreshing an existing session. This is acceptable because lockout guards the password, not the session; mention it in ADR-004 if the bank asks.
+- N9 STORY-011 notes (already in the TASK-008 handoff): `asp_net_users` writes are not tenant-guarded (not an `ITenantEntity`), so user CRUD must check company scope in the handler. Map residual 23503 on the four assignment constraint names.
+- N10 docs/PROJECT_SPEC.md:525 — the new section 9 sentence reads as one run-on clause before "and `refresh_token`". Put the `company_id` rule in parentheses (wording only, architect).
+
+Notes for next stage (QA): start with the negative cases. These are: wrong and unknown user, lockout, refresh reuse and concurrent refresh, an expired or tampered JWT, a Company Admin calling a `[CrossTenant]` test endpoint, cross-company `user_branch` / `user_counter` inserts, and a tenant write with no company. Local stack: set `JWT_SIGNING_KEY` and `SEED_*` in `.env`.
+Open questions: none
+
+Orchestrator note (2026-11-08) on review S4: the ADR-002/003/004 status lines and the ADR-004 spec-impact line were updated by the orchestrator, not by stage 3. The Phase 0 PR (aruntalexanderdev/qms_qflow#3) stated that merging it accepts ADR-002, ADR-003 and ADR-004, and the product owner approved the spec §9 additions on 2026-11-08. The "ADR-004 still Proposed" and "refresh_token blocks merge" remarks in the stage 3 handoff are superseded. Review N10 (run-on sentence in spec §9) fixed.
+
+### Stage 7 — QA — qa-tester — 2026-11-08
+Result: Done
+Environment: `dotnet run -c Release --project backend/Qms.Api` (Development, .NET SDK 10.0.114) against a throwaway `postgres:18` container; made-up signing key and seed passwords via env vars. Full suite: `dotnet test backend/Qms.slnx -c Release` Passed 246, Failed 0, Skipped 0 (1 m 41 s). Containers and processes removed afterwards.
+
+Test cases (TC-003-n | AC | steps | expected | result). "Live" = curl against the running API; "SQL" = psql against the migrated DB; "Test" = automated test class read and run.
+
+| TC | AC | Evidence | Result |
+|---|---|---|---|
+| TC-003-1 | AC-1 | Live: login Company Admin gives 200, `Cache-Control: no-store`, body `expiresIn` 900. JWT decoded: HS256, claims `sub`, `company_id`, `role`=CompanyAdmin, `name`, `lang`=en, `iss`/`aud`; `exp - nbf` = 900 s. `Set-Cookie: qms_refresh=...; path=/api/v1/auth; secure; samesite=strict; httponly` (7 days) | Pass |
+| TC-003-2 | AC-2 | Live: wrong password and unknown user both 401 `auth.invalid_credentials`, identical title/detail/problem shape. Empty body gives 400 | Pass |
+| TC-003-3 | AC-3 | Live: 5 wrong passwords (401), then correct password gives 401 `auth.locked_out`; DB `lockout_end` = now + 15 min | Pass |
+| TC-003-4 | AC-4 | Live: refresh with R1 gives 200, new access token and new cookie R2 (R2 != R1). SQL: R1 row `revoked_at` set and `replaced_by_id` set; only the token hash is stored (raw token not in DB) | Pass |
+| TC-003-5 | AC-5 | Live: refresh with R1 again gives 401 `auth.refresh_reused` with cookie cleared; R2 then also 401 `auth.refresh_reused`. SQL: both rows of the family revoked. Test: concurrent refresh test in `AuthEndpointsTests` | Pass |
+| TC-003-6 | AC-6 | Live: `/auth/me` without token 401 `auth.unauthorized` (`WWW-Authenticate: Bearer`); garbage token 401; expired token (signed with the test key, exp 10 min ago) 401; wrong issuer 401; payload tampered (role -> SuperAdmin, old signature) 401; `alg: none` 401; corrupted signature 401. Control: a freshly forged valid token with the same method gives 200, so the 401s are for the stated reason. Valid token gives 200 with company, role, language | Pass |
+| TC-003-7 | AC-7 | Live: logout gives 204 with cookie cleared (expired `qms_refresh`, same path/flags); refresh with the old cookie gives 401. Logout without a cookie gives 204 | Pass |
+| TC-003-8 | AC-8 | Live: `/swagger/index.html` 200; `/openapi/v1.json` lists `POST /api/v1/auth/login`, `/refresh`, `/logout`, `GET /api/v1/auth/me`, security scheme `Bearer` (http, bearer, JWT), applied globally | Pass |
+| TC-003-9 | AC-9 | Test: `TenantGuardTests` Ac9 x4 (branch add, counter modify and delete, company row: `NoTenant`, nothing stored; users, refresh tokens and lockout still save). Assertions match the AC | Pass |
+| TC-003-10 | AC-10 | Test: `TenantGuardTests` Ac10 x3 (seed creates 1 company, 1 branch, 2 zones, 4 counters, 7 counter mappings; second run identical; `Guid.Empty` inside a section rejected). Live: the API start-up seeded the same data in Development | Pass |
+| TC-003-11 | AC-11 | Test: `CrossTenantAndErrorMappingTests` Ac11 x3: Company Admin 403 `auth.forbidden`, `HandlerSpy.Runs` = 0, no section, no row stored; anonymous 401; Branch Manager 403 | Pass |
+| TC-003-12 | AC-12 | Test: Ac12 branch created for Company 2, section closed afterwards, follow-up tenant write fails `NoTenant`. Nested-scope unit test in `TokenAndScopeUnitTests` | Pass |
+| TC-003-13 | AC-13 | SQL: Company 2 user to Branch 1 with Company 1 rejected by `fk_user_branch_user_company`; with Company 2 rejected by `fk_user_branch_branch_company_id_branch_id`. Test: `UserAssignmentTests.Ac13` | Pass |
+| TC-003-14 | AC-14 | SQL: Company 2 user to Counter 2 with Company 1 rejected by `fk_user_counter_user_company`; with Company 2 by `fk_user_counter_counter_company_id_counter_id`. Test: `Ac14` | Pass |
+| TC-003-15 | AC-15 | SQL: live seeded Super Admin to Branch 1 / Counter 2 (company_id of Company 1) rejected by `fk_user_*_user_company`; with Company 2 rejected by the branch composite FK. Seeded DB has 0 `user_branch` and 0 `user_counter` rows. Test: `Ac15`, `The_seed_creates_no_assignments` | Pass |
+| TC-003-16 | AC-16 | SQL: Company 1 user to Branch 1 and Counter 2 accepted (INSERT 0 1 each); changing `company_id` to Company 2 rejected by `fk_user_branch_user_company` (also setting it to NULL); after deleting the assignments the change is allowed. Test: `Ac16` x2 | Pass |
+| TC-003-17 | AC-17 | Test: Ac17 x2: foreign and unknown user id both 404 `user.not_found` with identical title and detail; own user 200; `IsInCompanyAsync` true/false matrix. Independent: Company Admin `/auth/me` company = Company 1 | Pass |
+| TC-003-18 | AC-18 | Test: Ac18 `DbUpdateConcurrencyException` gives 409 `request.conflict`, no exception name in the body | Pass |
+| TC-003-19 | AC-19 | Test: Ac19 (OtherCompany, CompanyChanged) gives 404 `resource.not_found`, body has no company or branch ids, Warning logged without entity values and without exception, row unchanged | Pass |
+| TC-003-20 | AC-20 | Test: Ac20 gives 500 `server.unexpected_error`, body has no exception type, message, stack or ids; Error logged with `TenantViolationException`; nothing stored | Pass |
+| TC-003-21 | AC-21 | Test: Ac21 x2 (Company 1 token sees only Company 1 branches, Company 2 token only Company 2; `RequestTenantContext` registered, `NoCompanyCurrentTenant` absent, no `ICurrentTenant` in `ApplicationBuilderExtensions`). Live: Company Admin `/auth/me` `companyId` = 01930000-...-000100000001 | Pass |
+| TC-003-22 | AC-22 | Test: Ac22 (Super Admin plain list is empty, `[CrossTenant]` list has both companies). Live: Super Admin token has no `company_id` claim; `/auth/me` `companyId` = null | Pass |
+| TC-003-23 | AC-23 | SQL/CLI on a second database: at `InitialSchema` with 1 same-company and 1 cross-company `user_branch` row, `dotnet ef database update UserAssignmentCompany` fails with the named exception and history/columns are unchanged; after removing the bad row it applies and `company_id` is backfilled to Company 1; down to `InitialSchema` removes the column and constraints, branch and `user_branch` data intact. Live DB `__EFMigrationsHistory` has `20261108021220_InitialSchema` and `20261108025641_UserAssignmentCompany`. Test: `Ac23` x3 | Pass |
+
+Extra negative and NFR checks (no AC, all Pass):
+- TC-003-24 login rate limit: 10 requests 401, the 11th and 12th gave 429 `request.rate_limited` with `Retry-After: 60`.
+- TC-003-25 no secrets in logs: after all calls above (Debug level, 7,605 lines plus the rolling file under `backend/Qms.Api/logs`), `grep -F` found 0 matches for both seed passwords, a wrong password, refresh tokens R1/R2, any `eyJhbGci` string and the signing key.
+- TC-003-26 role seeding: DB has the 4 roles; Super Admin and Company Admin users exist with the right roles; refresh tokens are stored as hashes only.
+- Known review follow-ups S1 to S4 and N1 to N10 were not re-opened as defects; none breaks an AC. S2 (no automated log test) was covered here by the manual log grep.
+
+AC results: AC-1 Pass, AC-2 Pass, AC-3 Pass, AC-4 Pass, AC-5 Pass, AC-6 Pass, AC-7 Pass, AC-8 Pass, AC-9 Pass, AC-10 Pass, AC-11 Pass, AC-12 Pass, AC-13 Pass, AC-14 Pass, AC-15 Pass, AC-16 Pass, AC-17 Pass, AC-18 Pass, AC-19 Pass, AC-20 Pass, AC-21 Pass, AC-22 Pass, AC-23 Pass
+Bugs: none
+Manual device checks pending: none (no web, Android or device change; stages 4 and 5 were N/A)
+Sign-off: all 23 acceptance criteria pass, no open bugs, the suite is green. Story status set to Done.
 Open questions: none

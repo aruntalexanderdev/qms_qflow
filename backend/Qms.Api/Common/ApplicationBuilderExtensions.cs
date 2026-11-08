@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
-using Qms.Application.Common;
 
 namespace Qms.Api.Common;
 
@@ -9,6 +8,7 @@ public static class ApplicationBuilderExtensions
 {
     public const string LiveTag = "live";
     public const string ReadyTag = "ready";
+    public const string BearerScheme = "Bearer";
 
     public static IServiceCollection AddQmsHealthChecks(this IServiceCollection services)
     {
@@ -16,8 +16,6 @@ public static class ApplicationBuilderExtensions
         services.AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: [LiveTag])
             .AddCheck<DatabaseHealthCheck>(DatabaseHealthCheck.Name, timeout: TimeSpan.FromSeconds(5), tags: [ReadyTag]);
-        // No signed-in caller until STORY-003; the tenant filter therefore fails closed.
-        services.AddScoped<ICurrentTenant, NoCompanyCurrentTenant>();
         return services;
     }
 
@@ -27,6 +25,20 @@ public static class ApplicationBuilderExtensions
             options.AddDocumentTransformer((document, _, _) =>
             {
                 document.Info = new OpenApiInfo { Title = "Bank QMS API", Version = "v1" };
+
+                // Bearer scheme so Swagger UI's "Authorize" button sends the access token (ADR-004). Endpoints marked
+                // [AllowAnonymous] simply ignore the header.
+                document.AddComponent(BearerScheme, new OpenApiSecurityScheme
+                {
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "bearer",
+                    BearerFormat = "JWT",
+                    Description = "Access token from POST /api/v1/auth/login.",
+                });
+                document.Security =
+                [
+                    new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference(BearerScheme, document)] = [] },
+                ];
                 return Task.CompletedTask;
             }));
         return services;

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
+using Qms.Infrastructure.Persistence;
 
 namespace Qms.Api.Common;
 
@@ -37,7 +39,12 @@ public static class ProblemDetailsSetup
     };
 }
 
-/// <summary>Turns unexpected exceptions into a 500 problem details response without leaking details.</summary>
+/// <summary>
+/// Turns exceptions into problem details without leaking details (ADR-002, ADR-003 Amendment 1, C):
+/// a concurrency conflict is 409 <c>request.conflict</c>; a write to another company's row is 404 <c>resource.not_found</c>
+/// (it does not confirm the row exists; Warning log, no entity values); a tenant write with no company is a server
+/// set-up error, 500 <c>server.unexpected_error</c> (Error log); anything else is the same 500.
+/// </summary>
 public sealed partial class GlobalExceptionHandler : IExceptionHandler
 {
     private readonly IProblemDetailsService _problemDetailsService;
@@ -51,20 +58,41 @@ public sealed partial class GlobalExceptionHandler : IExceptionHandler
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        LogUnhandled(exception, httpContext.Request.Method, httpContext.Request.Path.Value);
-        httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        var method = httpContext.Request.Method;
+        var path = httpContext.Request.Path.Value;
+        (int status, string title, string? code) outcome;
+        switch (exception)
+        {
+            case DbUpdateConcurrencyException:
+                LogConflict(method, path);
+                outcome = (StatusCodes.Status409Conflict, "The data was changed by someone else. Reload and try again.", null);
+                break;
+            case TenantViolationException { Reason: TenantViolationReason.OtherCompany or TenantViolationReason.CompanyChanged } violation:
+                // Not the exception itself: its message names the entity type. The reason is enough for the security log.
+                LogTenantViolation(violation.Reason, method, path);
+                outcome = (StatusCodes.Status404NotFound, "The requested resource was not found.", null);
+                break;
+            default:
+                // Includes TenantViolationException NoTenant: the server is set up wrong, not the client.
+                LogUnhandled(exception, method, path);
+                outcome = (StatusCodes.Status500InternalServerError, "An unexpected error occurred.", null);
+                break;
+        }
 
+        httpContext.Response.StatusCode = outcome.status;
         return await _problemDetailsService.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = httpContext,
-            ProblemDetails =
-            {
-                Status = StatusCodes.Status500InternalServerError,
-                Title = "An unexpected error occurred.",
-            },
+            ProblemDetails = { Status = outcome.status, Title = outcome.title },
         });
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception for {Method} {Path}")]
     private partial void LogUnhandled(Exception exception, string method, string? path);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Concurrency conflict for {Method} {Path}")]
+    private partial void LogConflict(string method, string? path);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Tenant violation ({Reason}) for {Method} {Path}")]
+    private partial void LogTenantViolation(TenantViolationReason reason, string method, string? path);
 }

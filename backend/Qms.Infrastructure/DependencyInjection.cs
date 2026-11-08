@@ -1,7 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Qms.Application.Auth;
+using Qms.Application.Common;
+using Qms.Infrastructure.Identity;
 using Qms.Infrastructure.Persistence;
+using Qms.Infrastructure.Persistence.Identity;
 using Qms.Infrastructure.Persistence.Seed;
 
 namespace Qms.Infrastructure;
@@ -13,7 +18,8 @@ public static class DependencyInjection
 
     /// <summary>
     /// Registers the clock, <see cref="QmsDbContext"/> (Npgsql, snake_case, audit-timestamp interceptor) and
-    /// <see cref="DevSeeder"/>. The context needs an <c>ICurrentTenant</c> registered by the host (Qms.Api).
+    /// <see cref="DevSeeder"/>, Identity (users, roles, lockout), the JWT and refresh token services and
+    /// <see cref="IdentitySeeder"/>. The host (Qms.Api) must register <c>ICurrentTenant</c> and <c>ITenantScope</c>.
     /// The connection string is read when the context is first resolved, so a missing value fails with a clear
     /// message (see <see cref="GetRequiredConnectionString"/>; the API also calls it at startup).
     /// </summary>
@@ -38,7 +44,32 @@ public static class DependencyInjection
                 .AddInterceptors(new AuditableEntityInterceptor(serviceProvider.GetRequiredService<TimeProvider>()));
         });
         services.AddScoped<DevSeeder>();
+        services.AddQmsIdentity();
         return services;
+    }
+
+    private static void AddQmsIdentity(this IServiceCollection services)
+    {
+        services.AddOptions<JwtOptions>().BindConfiguration(JwtOptions.SectionName).ValidateOnStart();
+        services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
+
+        // Core only (no cookies, no SignInManager): the API signs in through JWT. Lockout: 5 failures, 15 minutes (ADR-004).
+        services.AddIdentityCore<AppUser>(options =>
+            {
+                options.Lockout.AllowedForNewUsers = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.User.RequireUniqueEmail = false;
+            })
+            .AddRoles<AppRole>()
+            .AddEntityFrameworkStores<QmsDbContext>();
+
+        services.AddScoped<UserAccounts>();
+        services.AddScoped<IUserAccounts>(provider => provider.GetRequiredService<UserAccounts>());
+        services.AddScoped<IUserDirectory>(provider => provider.GetRequiredService<UserAccounts>());
+        services.AddScoped<ITokenService, JwtTokenService>();
+        services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
+        services.AddScoped<IdentitySeeder>();
     }
 
     /// <summary>Returns <c>ConnectionStrings:Qms</c> or throws with a message that names the setting.</summary>
@@ -54,8 +85,9 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Applies pending migrations, then the idempotent development seed. For Development and test hosts only;
-    /// Azure applies migrations with a bundle (ADR-006). The caller decides when this runs.
+    /// Applies pending migrations, then the idempotent development seed (example data, roles and the configured
+    /// admin users) inside a cross-tenant section (ADR-003 Amendment 1). For Development and test hosts only; Azure
+    /// applies migrations with a bundle (ADR-006). The caller decides when this runs.
     /// </summary>
     public static async Task MigrateAndSeedAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
@@ -63,6 +95,12 @@ public static class DependencyInjection
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<QmsDbContext>();
         await db.Database.MigrateAsync(cancellationToken);
-        await scope.ServiceProvider.GetRequiredService<DevSeeder>().SeedAsync(cancellationToken);
+
+        // One of the three places allowed to open a cross-tenant section: the seeder writes every company's rows.
+        using (scope.ServiceProvider.GetRequiredService<ITenantScope>().BeginCrossTenant())
+        {
+            await scope.ServiceProvider.GetRequiredService<DevSeeder>().SeedAsync(cancellationToken);
+            await scope.ServiceProvider.GetRequiredService<IdentitySeeder>().SeedAsync(cancellationToken);
+        }
     }
 }

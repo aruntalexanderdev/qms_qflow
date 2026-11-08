@@ -1,6 +1,6 @@
 # ADR-002 — Application layer: plain command/query handlers and Result<T>
 
-Status: Proposed
+Status: Accepted (merged with the Phase 0 PR, aruntalexanderdev/qms_qflow#3, 2026-11-07)
 Date: 2026-11-07
 Story: STORY-001
 

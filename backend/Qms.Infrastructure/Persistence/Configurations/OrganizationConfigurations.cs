@@ -157,6 +157,8 @@ internal sealed class CounterConfiguration() : EntityConfiguration<Counter>("cou
         builder.HasIndex(c => new { c.BranchId, c.Number }).IsUnique();
         builder.HasIndex(c => c.ZoneId);
         builder.HasAlternateKey(c => new { c.BranchId, c.Id });
+        // Target of user_counter (company_id, counter_id): a staff assignment stays inside the counter's company.
+        builder.HasAlternateKey(c => new { c.CompanyId, c.Id });
     }
 }
 
