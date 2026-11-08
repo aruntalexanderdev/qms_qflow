@@ -110,8 +110,10 @@ None.
 - `token_sequence` is designed for `SELECT … FOR UPDATE` row locking (M3).
 
 ## 10. Open questions
-- [ ] `refresh_token` depends on ADR-004 (Proposed). If ADR-004 is rejected in the Phase 0 PR, remove the table from this story.
-- [ ] Branch 1 working hours are sample values (spec section 4 does not list hours). Confirm or change them.
+- [x] `refresh_token` depends on ADR-004 — resolved: ADR-004 merged with the Phase 0 PR; table added to spec §9 (2026-11-08).
+- [x] Branch 1 working hours — product owner keeps the sample values Sunday–Thursday 08:00–15:00 (2026-11-08).
+- [x] Spec §9 additions (company_id on branch-level tables; branch_id on counter_service_priority, dispenser_zone_service, token_visit; device.registration_code_expires_at; nullable device.zone_id; user columns; refresh_token) — approved by the product owner and written into spec §9 (2026-11-08). Phase 2 message statuses stay out of the spec for now.
+- [x] S4 (`close_time > open_time`) — product owner confirms branches never open past midnight; rule kept and recorded in spec §9 and §13 (2026-11-08).
 
 ## 11. Stage log
 
