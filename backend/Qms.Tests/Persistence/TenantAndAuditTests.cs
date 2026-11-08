@@ -92,6 +92,65 @@ public sealed class TenantAndAuditTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task A_row_of_another_company_cannot_be_moved_into_the_current_company()
+    {
+        // Review S1: load with IgnoreQueryFilters, then set CompanyId to the current company. The ORIGINAL company decides.
+        var (connectionString, company2) = await TwoCompaniesAsync();
+        await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
+        var foreign = await db.ServiceTypes.IgnoreQueryFilters().SingleAsync(s => s.CompanyId == company2);
+        foreign.CompanyId = SeedIds.Company1;
+
+        await Should.ThrowAsync<TenantViolationException>(() => db.SaveChangesAsync());
+
+        await using var check = PostgresFixture.CreateContext(connectionString);
+        (await check.ServiceTypes.IgnoreQueryFilters().SingleAsync(s => s.Id == foreign.Id)).CompanyId.ShouldBe(company2);
+    }
+
+    [Fact]
+    public async Task The_company_of_a_row_of_the_current_company_cannot_be_changed()
+    {
+        var (connectionString, company2) = await TwoCompaniesAsync();
+        await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
+        var own = await db.ServiceTypes.FirstAsync();
+        own.CompanyId = company2;
+
+        await Should.ThrowAsync<TenantViolationException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task The_company_of_a_row_cannot_be_changed_even_without_a_current_company()
+    {
+        var (connectionString, company2) = await TwoCompaniesAsync();
+        await using var db = PostgresFixture.CreateContext(connectionString, companyId: null);
+        var row = await db.ServiceTypes.IgnoreQueryFilters().FirstAsync(s => s.CompanyId == SeedIds.Company1);
+        row.CompanyId = company2;
+
+        await Should.ThrowAsync<TenantViolationException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task Deleting_a_row_of_another_company_throws()
+    {
+        var (connectionString, company2) = await TwoCompaniesAsync();
+        await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
+        var foreign = await db.ServiceTypes.IgnoreQueryFilters().SingleAsync(s => s.CompanyId == company2);
+        db.ServiceTypes.Remove(foreign);
+
+        await Should.ThrowAsync<TenantViolationException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task A_row_of_the_current_company_can_still_be_updated()
+    {
+        var connectionString = await postgres.NewDatabaseAsync(seeded: true);
+        await using var db = PostgresFixture.CreateContext(connectionString, SeedIds.Company1);
+        var own = await db.ServiceTypes.FirstAsync();
+        own.NameEn = "Renamed";
+
+        (await db.SaveChangesAsync()).ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Timestamps_are_set_in_utc_from_the_time_provider()
     {
         var connectionString = await postgres.NewDatabaseAsync(seeded: true);

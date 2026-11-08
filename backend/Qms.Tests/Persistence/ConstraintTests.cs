@@ -274,7 +274,7 @@ public sealed class ConstraintTests(PostgresFixture postgres)
         db.Tokens.Add(token);
         db.TokenVisits.Add(new TokenVisit
         {
-            CompanyId = SeedIds.Company1, TokenId = token.Id, ServiceTypeId = SeedIds.Service(2), PriorityTypeId = SeedIds.Vip, ZoneId = SeedIds.Zone(1),
+            CompanyId = SeedIds.Company1, BranchId = SeedIds.Branch1, TokenId = token.Id, ServiceTypeId = SeedIds.Service(2), PriorityTypeId = SeedIds.Vip, ZoneId = SeedIds.Zone(1),
             QueuedAt = DateTimeOffset.UtcNow, IsFront = false,
         });
         await db.SaveChangesAsync();

@@ -5,6 +5,11 @@ namespace Qms.Domain.Entities;
 /// <summary>One stage of a visit. The queue is branch + zone + service type + priority type.</summary>
 public class TokenVisit : TenantEntity
 {
+    /// <summary>The branch of the visit. Composite foreign keys force the token, zone and counter into this branch and the branch into this company.</summary>
+    public Guid BranchId { get; set; }
+
+    public Branch? Branch { get; set; }
+
     public Guid TokenId { get; set; }
 
     public Token? Token { get; set; }

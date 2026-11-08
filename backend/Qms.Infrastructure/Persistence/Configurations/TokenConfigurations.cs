@@ -38,6 +38,9 @@ internal sealed class TokenConfiguration() : EntityConfiguration<Token>("token")
         // Safety net behind the row-locked token_sequence.
         builder.HasIndex(t => new { t.BranchId, t.BusinessDate, t.Number }).IsUnique().HasDatabaseName("ux_token_branch_date_number");
         builder.HasIndex(t => new { t.BranchId, t.BusinessDate, t.Status });
+        // Targets of the composite foreign keys from token_visit (same branch) and message_log (same company).
+        builder.HasAlternateKey(t => new { t.BranchId, t.Id });
+        builder.HasAlternateKey(t => new { t.CompanyId, t.Id });
     }
 }
 
@@ -47,17 +50,25 @@ internal sealed class TokenVisitConfiguration() : EntityConfiguration<TokenVisit
     {
         builder.ToTable(table => table.HasCheckConstraint("ck_token_visit_recall_count", "recall_count >= 0"));
         builder.Property(v => v.Note).HasMaxLength(500);
-        builder.HasOne(v => v.Token).WithMany().HasForeignKey(v => v.TokenId).OnDelete(DeleteBehavior.Cascade);
+        // The branch belongs to the visit's company; token, zone and counter must belong to that same branch.
+        builder.HasOne(v => v.Branch).WithMany().HasForeignKey(v => new { v.CompanyId, v.BranchId })
+            .HasPrincipalKey(b => new { b.CompanyId, b.Id });
+        builder.HasOne(v => v.Token).WithMany().HasForeignKey(v => new { v.BranchId, v.TokenId })
+            .HasPrincipalKey(t => new { t.BranchId, t.Id }).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(v => v.ServiceType).WithMany().HasForeignKey(v => new { v.CompanyId, v.ServiceTypeId })
             .HasPrincipalKey(s => new { s.CompanyId, s.Id });
         builder.HasOne(v => v.PriorityType).WithMany().HasForeignKey(v => new { v.CompanyId, v.PriorityTypeId })
             .HasPrincipalKey(p => new { p.CompanyId, p.Id });
-        builder.HasOne(v => v.Zone).WithMany().HasForeignKey(v => v.ZoneId);
-        builder.HasOne(v => v.Counter).WithMany().HasForeignKey(v => v.CounterId);
+        builder.HasOne(v => v.Zone).WithMany().HasForeignKey(v => new { v.BranchId, v.ZoneId })
+            .HasPrincipalKey(z => new { z.BranchId, z.Id });
+        // counter_id is nullable (not yet called): the composite key is MATCH SIMPLE, so a null counter skips the check.
+        builder.HasOne(v => v.Counter).WithMany().HasForeignKey(v => new { v.BranchId, v.CounterId })
+            .HasPrincipalKey(c => new { c.BranchId, c.Id });
         builder.HasOne<AppUser>().WithMany().HasForeignKey(v => v.UserId);
         builder.HasIndex(v => v.TokenId);
 
         // Call Next (spec sections 6 and 9): open visits of one queue, front tokens first, then oldest.
+        // branch_id is not in the index: a zone belongs to exactly one branch, so zone_id first is already as selective.
         // Direction is_front DESC matches "ORDER BY is_front DESC, queued_at" so the planner needs no sort.
         builder.HasIndex(v => new { v.ZoneId, v.ServiceTypeId, v.PriorityTypeId, v.IsFront, v.QueuedAt })
             .HasDatabaseName("ix_token_visit_queue")

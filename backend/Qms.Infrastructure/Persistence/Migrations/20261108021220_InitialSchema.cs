@@ -804,6 +804,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("pk_device", x => x.id);
                     table.UniqueConstraint("ak_device_branch_id_id", x => new { x.branch_id, x.id });
+                    table.UniqueConstraint("ak_device_company_id_id", x => new { x.company_id, x.id });
                     table.ForeignKey(
                         name: "fk_device_branch_company_id_branch_id",
                         columns: x => new { x.company_id, x.branch_id },
@@ -874,6 +875,12 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("pk_counter_service_priority", x => x.id);
                     table.ForeignKey(
+                        name: "fk_counter_service_priority_branch_company_id_branch_id",
+                        columns: x => new { x.company_id, x.branch_id },
+                        principalTable: "branch",
+                        principalColumns: new[] { "company_id", "id" },
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
                         name: "fk_counter_service_priority_branch_service_priority_branch_id_",
                         columns: x => new { x.branch_id, x.service_type_id, x.priority_type_id },
                         principalTable: "branch_service_priority",
@@ -925,10 +932,10 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_dispenser_setting_device_device_id",
-                        column: x => x.device_id,
+                        name: "fk_dispenser_setting_device_company_id_device_id",
+                        columns: x => new { x.company_id, x.device_id },
                         principalTable: "device",
-                        principalColumn: "id",
+                        principalColumns: new[] { "company_id", "id" },
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "fk_dispenser_setting_ticket_templates_company_id_ticket_templa",
@@ -955,6 +962,12 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_dispenser_zone_service", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_dispenser_zone_service_branch_company_id_branch_id",
+                        columns: x => new { x.company_id, x.branch_id },
+                        principalTable: "branch",
+                        principalColumns: new[] { "company_id", "id" },
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_dispenser_zone_service_company_company_id",
                         column: x => x.company_id,
@@ -1015,6 +1028,8 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_token", x => x.id);
+                    table.UniqueConstraint("ak_token_branch_id_id", x => new { x.branch_id, x.id });
+                    table.UniqueConstraint("ak_tokens_company_id_id", x => new { x.company_id, x.id });
                     table.CheckConstraint("ck_token_fee_not_negative", "fee_amount IS NULL OR fee_amount >= 0");
                     table.CheckConstraint("ck_token_priority_prefix", "priority_prefix ~ '^[A-Z]$'");
                     table.CheckConstraint("ck_token_sequence", "sequence BETWEEN 1 AND 9999");
@@ -1096,10 +1111,10 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_message_log_tokens_token_id",
-                        column: x => x.token_id,
+                        name: "fk_message_log_tokens_company_id_token_id",
+                        columns: x => new { x.company_id, x.token_id },
                         principalTable: "token",
-                        principalColumn: "id",
+                        principalColumns: new[] { "company_id", "id" },
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -1108,6 +1123,7 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
+                    branch_id = table.Column<Guid>(type: "uuid", nullable: false),
                     token_id = table.Column<Guid>(type: "uuid", nullable: false),
                     service_type_id = table.Column<Guid>(type: "uuid", nullable: false),
                     priority_type_id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -1137,16 +1153,22 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
+                        name: "fk_token_visit_branch_company_id_branch_id",
+                        columns: x => new { x.company_id, x.branch_id },
+                        principalTable: "branch",
+                        principalColumns: new[] { "company_id", "id" },
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
                         name: "fk_token_visit_company_company_id",
                         column: x => x.company_id,
                         principalTable: "company",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_token_visit_counter_counter_id",
-                        column: x => x.counter_id,
+                        name: "fk_token_visit_counter_branch_id_counter_id",
+                        columns: x => new { x.branch_id, x.counter_id },
                         principalTable: "counter",
-                        principalColumn: "id",
+                        principalColumns: new[] { "branch_id", "id" },
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_token_visit_priority_type_company_id_priority_type_id",
@@ -1161,16 +1183,16 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         principalColumns: new[] { "company_id", "id" },
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_token_visit_token_token_id",
-                        column: x => x.token_id,
+                        name: "fk_token_visit_token_branch_id_token_id",
+                        columns: x => new { x.branch_id, x.token_id },
                         principalTable: "token",
-                        principalColumn: "id",
+                        principalColumns: new[] { "branch_id", "id" },
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "fk_token_visit_zones_zone_id",
-                        column: x => x.zone_id,
+                        name: "fk_token_visit_zones_branch_id_zone_id",
+                        columns: x => new { x.branch_id, x.zone_id },
                         principalTable: "zone",
-                        principalColumn: "id",
+                        principalColumns: new[] { "branch_id", "id" },
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -1338,9 +1360,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 columns: new[] { "branch_id", "service_type_id", "priority_type_id" });
 
             migrationBuilder.CreateIndex(
-                name: "ix_counter_service_priority_company_id",
+                name: "ix_counter_service_priority_company_id_branch_id",
                 table: "counter_service_priority",
-                column: "company_id");
+                columns: new[] { "company_id", "branch_id" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_counter_service_priority_counter_id_service_type_id_priorit",
@@ -1378,6 +1400,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 filter: "registration_code IS NOT NULL");
 
             migrationBuilder.CreateIndex(
+                name: "ix_dispenser_setting_company_id_device_id",
+                table: "dispenser_setting",
+                columns: new[] { "company_id", "device_id" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_dispenser_setting_company_id_ticket_template_id",
                 table: "dispenser_setting",
                 columns: new[] { "company_id", "ticket_template_id" });
@@ -1399,6 +1426,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 columns: new[] { "branch_id", "zone_id" });
 
             migrationBuilder.CreateIndex(
+                name: "ix_dispenser_zone_service_company_id_branch_id",
+                table: "dispenser_zone_service",
+                columns: new[] { "company_id", "branch_id" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_dispenser_zone_service_company_id_service_type_id",
                 table: "dispenser_zone_service",
                 columns: new[] { "company_id", "service_type_id" });
@@ -1410,9 +1442,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "ix_message_log_company_id",
+                name: "ix_message_log_company_id_token_id",
                 table: "message_log",
-                column: "company_id");
+                columns: new[] { "company_id", "token_id" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_message_log_token_id",
@@ -1542,6 +1574,26 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "ix_token_visit_branch_id_counter_id",
+                table: "token_visit",
+                columns: new[] { "branch_id", "counter_id" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_token_visit_branch_id_token_id",
+                table: "token_visit",
+                columns: new[] { "branch_id", "token_id" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_token_visit_branch_id_zone_id",
+                table: "token_visit",
+                columns: new[] { "branch_id", "zone_id" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_token_visit_company_id_branch_id",
+                table: "token_visit",
+                columns: new[] { "company_id", "branch_id" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_token_visit_company_id_priority_type_id",
                 table: "token_visit",
                 columns: new[] { "company_id", "priority_type_id" });
@@ -1550,11 +1602,6 @@ namespace Qms.Infrastructure.Persistence.Migrations
                 name: "ix_token_visit_company_id_service_type_id",
                 table: "token_visit",
                 columns: new[] { "company_id", "service_type_id" });
-
-            migrationBuilder.CreateIndex(
-                name: "ix_token_visit_counter_id",
-                table: "token_visit",
-                column: "counter_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_token_visit_queue",

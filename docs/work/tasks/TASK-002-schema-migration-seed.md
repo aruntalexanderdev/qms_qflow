@@ -50,3 +50,6 @@ All in `backend/Qms.Tests/Persistence/` (Testcontainers PostgreSQL 18, one conta
 
 ## 7. Notes / result
 Result: done. Migration `InitialSchema` (35 tables: 27 spec tables incl. `refresh_token`, `user_branch`, `user_counter`; 7 Identity tables; `__EFMigrationsHistory`). Design notes and the backend hand-off are in the story's Stage 2 entry.
+
+Review loop 1 (2026-11-08): stage 6 asked for tenant/branch integrity fixes (M1, M2, S1). `InitialSchema` was regenerated (never deployed). New: `token_visit.branch_id`; composite foreign keys for `token_visit` (branch, token, zone, counter), `dispenser_zone_service` and `counter_service_priority` (company + branch), `dispenser_setting` (company + device) and `message_log` (company + token); alternate keys `token (branch_id, id)`, `token (company_id, id)`, `device (company_id, id)`; `company_id` is immutable after insert and tenant checks use the original company. 19 new tests (`TenantIntegrityTests`, 5 in `TenantAndAuditTests`); suite 129 passed / 0 failed / 0 skipped. See the story's "Stage 2 — Database (review loop 1)" entry.
+

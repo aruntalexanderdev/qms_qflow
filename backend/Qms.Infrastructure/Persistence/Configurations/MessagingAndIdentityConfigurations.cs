@@ -13,7 +13,8 @@ internal sealed class MessageLogConfiguration() : EntityConfiguration<MessageLog
         builder.Property(m => m.ToPhone).HasMaxLength(32).IsRequired();
         builder.Property(m => m.ProviderRef).HasMaxLength(200);
         builder.Property(m => m.Error).HasMaxLength(1000);
-        builder.HasOne(m => m.Token).WithMany().HasForeignKey(m => m.TokenId);
+        builder.HasOne(m => m.Token).WithMany().HasForeignKey(m => new { m.CompanyId, m.TokenId })
+            .HasPrincipalKey(t => new { t.CompanyId, t.Id });
         builder.HasIndex(m => m.TokenId);
     }
 }

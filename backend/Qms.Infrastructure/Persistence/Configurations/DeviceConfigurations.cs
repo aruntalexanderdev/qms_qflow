@@ -21,6 +21,8 @@ internal sealed class DeviceConfiguration() : EntityConfiguration<Device>("devic
         builder.HasIndex(d => d.RegistrationCode).IsUnique().HasFilter("registration_code IS NOT NULL");
         builder.HasIndex(d => d.DeviceKeyHash).IsUnique().HasFilter("device_key_hash IS NOT NULL");
         builder.HasAlternateKey(d => new { d.BranchId, d.Id });
+        // Target of dispenser_setting's composite foreign key (same company).
+        builder.HasAlternateKey(d => new { d.CompanyId, d.Id });
     }
 }
 
@@ -38,7 +40,8 @@ internal sealed class DispenserSettingConfiguration() : EntityConfiguration<Disp
         builder.Property(s => s.DefaultCountryCode).HasMaxLength(8);
         builder.Property(s => s.DefaultLanguage).HasMaxLength(8).IsRequired();
         builder.Property(s => s.ShowVip).HasDefaultValue(true);
-        builder.HasOne(s => s.Device).WithMany().HasForeignKey(s => s.DeviceId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(s => s.Device).WithMany().HasForeignKey(s => new { s.CompanyId, s.DeviceId })
+            .HasPrincipalKey(d => new { d.CompanyId, d.Id }).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(s => s.TicketTemplate).WithMany().HasForeignKey(s => new { s.CompanyId, s.TicketTemplateId })
             .HasPrincipalKey(t => new { t.CompanyId, t.Id });
         builder.HasIndex(s => s.DeviceId).IsUnique();
@@ -49,6 +52,9 @@ internal sealed class DispenserZoneServiceConfiguration() : EntityConfiguration<
 {
     protected override void Map(EntityTypeBuilder<DispenserZoneService> builder)
     {
+        // The branch belongs to the row's company; device and zone must belong to that same branch.
+        builder.HasOne<Branch>().WithMany().HasForeignKey(m => new { m.CompanyId, m.BranchId })
+            .HasPrincipalKey(b => new { b.CompanyId, b.Id });
         builder.HasOne(m => m.Device).WithMany().HasForeignKey(m => new { m.BranchId, m.DeviceId })
             .HasPrincipalKey(d => new { d.BranchId, d.Id });
         builder.HasOne(m => m.Zone).WithMany().HasForeignKey(m => new { m.BranchId, m.ZoneId })

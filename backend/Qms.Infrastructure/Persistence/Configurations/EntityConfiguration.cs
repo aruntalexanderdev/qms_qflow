@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Qms.Domain.Entities;
 
@@ -19,7 +20,9 @@ internal abstract class EntityConfiguration<TEntity>(string tableName) : IEntity
         if (typeof(ITenantEntity).IsAssignableFrom(typeof(TEntity)))
         {
             // company_id is required and points at company (the composite keys below add the same-company guarantee).
-            builder.Property(nameof(ITenantEntity.CompanyId)).IsRequired();
+            // The company of a row never changes after insert (backstop for the check in QmsDbContext).
+            builder.Property(nameof(ITenantEntity.CompanyId)).IsRequired()
+                .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
             builder.HasOne<Company>().WithMany().HasForeignKey(nameof(ITenantEntity.CompanyId));
         }
 

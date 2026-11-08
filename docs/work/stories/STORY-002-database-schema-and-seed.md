@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-002 |
-| Status | Database |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 4 (4.1–4.4), 9, 11 (time, audit), 13 |
@@ -221,3 +221,20 @@ Spec §9 additions (stage 2 decisions), my view for the product owner:
 
 Status: stays `Code Review` (Changes requested) as instructed by the caller. Owning stage of the first Must fix: stage 2 (database-architect), then back to stage 6.
 Open questions: none
+
+### Stage 2 — Database (review loop 1) — database-architect — 2026-11-08
+Result: Done
+Changed:
+- Domain: `backend/Qms.Domain/Entities/Tokens/TokenVisit.cs` (new `BranchId`, `Branch`).
+- Infrastructure: `Persistence/Configurations/{TokenConfigurations,DeviceConfigurations,MappingConfigurations,MessagingAndIdentityConfigurations,EntityConfiguration}.cs`, `Persistence/QmsDbContext.cs`, `Persistence/Migrations/*` (old `InitialSchema` and snapshot removed, one new `InitialSchema` generated with `dotnet ef migrations add InitialSchema -o Persistence/Migrations`; pass `-o` when the snapshot is gone, otherwise EF writes to `Migrations/`). Seeder unchanged (token_visit is not seeded; the other rows already carried `branch_id`).
+- Tests: new `backend/Qms.Tests/Persistence/TenantIntegrityTests.cs` (14), 5 added to `TenantAndAuditTests.cs`, `ConstraintTests.cs` (token visit now sets `BranchId`).
+- Task: TASK-002 notes.
+Fixes:
+- M1: `token_visit.branch_id` added. Composite FKs: `(company_id, branch_id)` to branch, `(branch_id, token_id)` to token (cascade), `(branch_id, zone_id)` to zone, `(branch_id, counter_id)` to counter. Token got alternate key `(branch_id, id)`. `counter_id` stays nullable: PostgreSQL composite FKs are MATCH SIMPLE, so a null counter skips the check and a non-null counter must be in the same branch (tested both ways). Queue index `ix_token_visit_queue` is unchanged `(zone_id, service_type_id, priority_type_id, is_front DESC, queued_at) WHERE ended_at IS NULL`: a zone belongs to exactly one branch, so `branch_id` adds no selectivity and would only widen the index; spec 9 order kept. Raw Call Next SQL should still add `branch_id` / `company_id` predicates (filtered on the heap row).
+- M2: `dispenser_zone_service` and `counter_service_priority` got FK `(company_id, branch_id)` to branch. `dispenser_setting` FK is now `(company_id, device_id)` to new alternate key `device (company_id, id)` (cascade kept). `message_log` FK is now `(company_id, token_id)` to new alternate key `token (company_id, id)`. The reviewer's three proofs are reproduced as tests and now fail with 23503 (named constraints asserted).
+- S1: new `RejectCompanyChanges()` runs before change detection and throws `TenantViolationException` when a tracked tenant row's `CompanyId` differs from its original value (any tenant, also with no current company). It must run before `DetectChanges`: on entities whose alternate key contains `company_id` EF would otherwise throw its own InvalidOperationException first. The tenant check now judges Modified/Deleted rows by the original company. `CompanyId` also has `AfterSaveBehavior = Throw` as a backstop.
+Scan of every other FK between tenant tables (no gap found beyond the above): token (branch, priority, service, zone, device), token_sequence, branch_hours / calendar / setting / priority fee / service priority, service_flow, zone, counter, device (zone, counter), ticket_template use in dispenser_setting, company_service_priority are all composite on company or branch already. `audit_log` has only the plain `company_id` FK by design (no references to other tenant rows). Remaining single-column FKs, left open on purpose: `token.issued_by_user_id`, `token.fee_settled_by_user_id`, `token_visit.user_id`, `counter.current_user_id`, `user_branch`, `user_counter` all point at `asp_net_users`, whose `company_id` is nullable (Super Admin), so a composite key would exclude Super Admin; this is the same class as S3 and belongs to Application validation in STORY-003. Also not enforced by the database: that a visit's counter is in the visit's zone (a forwarded token may be queued in a zone before any counter calls it).
+Notes for next stage: no DI or wiring change; stage 3 is unaffected. Callers that create `TokenVisit` must set `BranchId` (= the token's branch). Tests that edit `CompanyId` expect `TenantViolationException`.
+Verification (Release): `dotnet build backend/Qms.slnx -c Release --no-incremental` 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release` run twice: Passed 129, Failed 0, Skipped 0 (both runs; 110 before, 19 new). The model-drift test is green.
+Open questions: none new. S2/S3 stay tracked for STORY-003, S4 waits for the product owner, N-items untouched. Spec section 9 additions list (architect): add `token_visit.branch_id`.
+

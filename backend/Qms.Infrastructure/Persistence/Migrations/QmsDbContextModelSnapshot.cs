@@ -759,11 +759,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_counter_service_priority");
 
-                    b.HasIndex("CompanyId")
-                        .HasDatabaseName("ix_counter_service_priority_company_id");
-
                     b.HasIndex("BranchId", "CounterId")
                         .HasDatabaseName("ix_counter_service_priority_branch_id_counter_id");
+
+                    b.HasIndex("CompanyId", "BranchId")
+                        .HasDatabaseName("ix_counter_service_priority_company_id_branch_id");
 
                     b.HasIndex("BranchId", "ServiceTypeId", "PriorityTypeId")
                         .HasDatabaseName("ix_counter_service_priority_branch_id_service_type_id_priority");
@@ -846,6 +846,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
 
                     b.HasAlternateKey("BranchId", "Id")
                         .HasName("ak_device_branch_id_id");
+
+                    b.HasAlternateKey("CompanyId", "Id")
+                        .HasName("ak_device_company_id_id");
 
                     b.HasIndex("DeviceKeyHash")
                         .IsUnique()
@@ -947,6 +950,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_dispenser_setting_device_id");
 
+                    b.HasIndex("CompanyId", "DeviceId")
+                        .HasDatabaseName("ix_dispenser_setting_company_id_device_id");
+
                     b.HasIndex("CompanyId", "TicketTemplateId")
                         .HasDatabaseName("ix_dispenser_setting_company_id_ticket_template_id");
 
@@ -1004,6 +1010,9 @@ namespace Qms.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BranchId", "ZoneId")
                         .HasDatabaseName("ix_dispenser_zone_service_branch_id_zone_id");
+
+                    b.HasIndex("CompanyId", "BranchId")
+                        .HasDatabaseName("ix_dispenser_zone_service_company_id_branch_id");
 
                     b.HasIndex("CompanyId", "ServiceTypeId")
                         .HasDatabaseName("ix_dispenser_zone_service_company_id_service_type_id");
@@ -1078,11 +1087,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_message_log");
 
-                    b.HasIndex("CompanyId")
-                        .HasDatabaseName("ix_message_log_company_id");
-
                     b.HasIndex("TokenId")
                         .HasDatabaseName("ix_message_log_token_id");
+
+                    b.HasIndex("CompanyId", "TokenId")
+                        .HasDatabaseName("ix_message_log_company_id_token_id");
 
                     b.ToTable("message_log", (string)null);
                 });
@@ -1584,6 +1593,12 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_token");
 
+                    b.HasAlternateKey("BranchId", "Id")
+                        .HasName("ak_token_branch_id_id");
+
+                    b.HasAlternateKey("CompanyId", "Id")
+                        .HasName("ak_tokens_company_id_id");
+
                     b.HasIndex("FeeSettledByUserId")
                         .HasDatabaseName("ix_token_fee_settled_by_user_id");
 
@@ -1690,6 +1705,10 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
                     b.Property<DateTimeOffset?>("CalledAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("called_at");
@@ -1763,14 +1782,23 @@ namespace Qms.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_token_visit");
 
-                    b.HasIndex("CounterId")
-                        .HasDatabaseName("ix_token_visit_counter_id");
-
                     b.HasIndex("TokenId")
                         .HasDatabaseName("ix_token_visit_token_id");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_token_visit_user_id");
+
+                    b.HasIndex("BranchId", "CounterId")
+                        .HasDatabaseName("ix_token_visit_branch_id_counter_id");
+
+                    b.HasIndex("BranchId", "TokenId")
+                        .HasDatabaseName("ix_token_visit_branch_id_token_id");
+
+                    b.HasIndex("BranchId", "ZoneId")
+                        .HasDatabaseName("ix_token_visit_branch_id_zone_id");
+
+                    b.HasIndex("CompanyId", "BranchId")
+                        .HasDatabaseName("ix_token_visit_company_id_branch_id");
 
                     b.HasIndex("CompanyId", "PriorityTypeId")
                         .HasDatabaseName("ix_token_visit_company_id_priority_type_id");
@@ -2336,6 +2364,14 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_counter_service_priority_counter_branch_id_counter_id");
 
+                    b.HasOne("Qms.Domain.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_counter_service_priority_branch_company_id_branch_id");
+
                     b.HasOne("Qms.Domain.Entities.BranchServicePriority", "BranchServicePriority")
                         .WithMany()
                         .HasForeignKey("BranchId", "ServiceTypeId", "PriorityTypeId")
@@ -2398,10 +2434,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Qms.Domain.Entities.Device", "Device")
                         .WithMany()
-                        .HasForeignKey("DeviceId")
+                        .HasForeignKey("CompanyId", "DeviceId")
+                        .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_dispenser_setting_device_device_id");
+                        .HasConstraintName("fk_dispenser_setting_device_company_id_device_id");
 
                     b.HasOne("Qms.Domain.Entities.TicketTemplate", "TicketTemplate")
                         .WithMany()
@@ -2440,6 +2477,14 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_dispenser_zone_service_zones_branch_id_zone_id");
 
+                    b.HasOne("Qms.Domain.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_dispenser_zone_service_branch_company_id_branch_id");
+
                     b.HasOne("Qms.Domain.Entities.ServiceType", "ServiceType")
                         .WithMany()
                         .HasForeignKey("CompanyId", "ServiceTypeId")
@@ -2466,10 +2511,11 @@ namespace Qms.Infrastructure.Persistence.Migrations
 
                     b.HasOne("Qms.Domain.Entities.Token", "Token")
                         .WithMany()
-                        .HasForeignKey("TokenId")
+                        .HasForeignKey("CompanyId", "TokenId")
+                        .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_message_log_tokens_token_id");
+                        .HasConstraintName("fk_message_log_tokens_company_id_token_id");
 
                     b.Navigation("Token");
                 });
@@ -2684,31 +2730,42 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_token_visit_company_company_id");
 
-                    b.HasOne("Qms.Domain.Entities.Counter", "Counter")
-                        .WithMany()
-                        .HasForeignKey("CounterId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_token_visit_counter_counter_id");
-
-                    b.HasOne("Qms.Domain.Entities.Token", "Token")
-                        .WithMany()
-                        .HasForeignKey("TokenId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_token_visit_token_token_id");
-
                     b.HasOne("Qms.Infrastructure.Persistence.Identity.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_token_visit_asp_net_users_user_id");
 
+                    b.HasOne("Qms.Domain.Entities.Counter", "Counter")
+                        .WithMany()
+                        .HasForeignKey("BranchId", "CounterId")
+                        .HasPrincipalKey("BranchId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_token_visit_counter_branch_id_counter_id");
+
+                    b.HasOne("Qms.Domain.Entities.Token", "Token")
+                        .WithMany()
+                        .HasForeignKey("BranchId", "TokenId")
+                        .HasPrincipalKey("BranchId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_token_visit_token_branch_id_token_id");
+
                     b.HasOne("Qms.Domain.Entities.Zone", "Zone")
                         .WithMany()
-                        .HasForeignKey("ZoneId")
+                        .HasForeignKey("BranchId", "ZoneId")
+                        .HasPrincipalKey("BranchId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_token_visit_zones_zone_id");
+                        .HasConstraintName("fk_token_visit_zones_branch_id_zone_id");
+
+                    b.HasOne("Qms.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_token_visit_branch_company_id_branch_id");
 
                     b.HasOne("Qms.Domain.Entities.PriorityType", "PriorityType")
                         .WithMany()
@@ -2725,6 +2782,8 @@ namespace Qms.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_token_visit_service_type_company_id_service_type_id");
+
+                    b.Navigation("Branch");
 
                     b.Navigation("Counter");
 

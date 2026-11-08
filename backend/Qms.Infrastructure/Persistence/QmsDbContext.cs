@@ -147,35 +147,70 @@ public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant
         modelBuilder.Entity<TEntity>().HasQueryFilter(entity => entity.CompanyId == CurrentCompanyId);
 
     /// <summary>
-    /// With a current company: stamp it on new tenant rows that have none, and refuse to write any row of another
-    /// company (ADR-003). Without a current company (seeder, Super Admin, system jobs) nothing is stamped or checked.
+    /// A tenant row never changes company after insert (always checked). With a current company: stamp it on new
+    /// tenant rows that have none, and refuse to write any row of another company (ADR-003); modified and deleted
+    /// rows are judged by their ORIGINAL company, so a row loaded with IgnoreQueryFilters cannot be moved into the
+    /// current tenant. Without a current company (seeder, Super Admin, system jobs) nothing is stamped or tenant-checked.
     /// </summary>
     private void EnforceTenantRules()
     {
-        if (CurrentCompanyId is not { } companyId)
-        {
-            return;
-        }
+        RejectCompanyChanges();
+
+        var currentCompanyId = CurrentCompanyId;
 
         foreach (var entry in ChangeTracker.Entries().Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
         {
             switch (entry.Entity)
             {
                 case ITenantEntity tenantEntity:
-                    if (entry.State == EntityState.Added && tenantEntity.CompanyId == Guid.Empty)
+                    if (entry.State == EntityState.Added)
                     {
-                        tenantEntity.CompanyId = companyId;
+                        if (tenantEntity.CompanyId == Guid.Empty && currentCompanyId is { } stamp)
+                        {
+                            tenantEntity.CompanyId = stamp;
+                        }
+                    }
+                    else if (entry.OriginalValues.GetValue<Guid>(nameof(ITenantEntity.CompanyId)) != tenantEntity.CompanyId)
+                    {
+                        throw new TenantViolationException($"The company of a {entry.Metadata.ClrType.Name} row cannot be changed.");
                     }
 
-                    if (tenantEntity.CompanyId != companyId)
+                    var rowCompanyId = entry.State == EntityState.Added
+                        ? tenantEntity.CompanyId
+                        : entry.OriginalValues.GetValue<Guid>(nameof(ITenantEntity.CompanyId));
+                    if (currentCompanyId is { } companyId && rowCompanyId != companyId)
                     {
                         throw new TenantViolationException($"A {entry.Metadata.ClrType.Name} row belongs to another company.");
                     }
 
                     break;
-                case Company company when company.Id != companyId:
+                case Company company when currentCompanyId is { } currentId && company.Id != currentId:
                     throw new TenantViolationException("A Company row belongs to another company.");
             }
+        }
+    }
+
+    /// <summary>
+    /// Runs before change detection: EF's own "key property cannot be modified" error would otherwise hide ours on
+    /// entities whose alternate key contains company_id. Compares the snapshot of every tracked tenant row.
+    /// </summary>
+    private void RejectCompanyChanges()
+    {
+        var autoDetect = ChangeTracker.AutoDetectChangesEnabled;
+        ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            foreach (var entry in ChangeTracker.Entries<ITenantEntity>().Where(entry => entry.State is not (EntityState.Added or EntityState.Detached)))
+            {
+                if (entry.OriginalValues.GetValue<Guid>(nameof(ITenantEntity.CompanyId)) != entry.Entity.CompanyId)
+                {
+                    throw new TenantViolationException($"The company of a {entry.Metadata.ClrType.Name} row cannot be changed.");
+                }
+            }
+        }
+        finally
+        {
+            ChangeTracker.AutoDetectChangesEnabled = autoDetect;
         }
     }
 }

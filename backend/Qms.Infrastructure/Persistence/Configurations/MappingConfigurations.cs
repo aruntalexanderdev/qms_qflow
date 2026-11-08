@@ -41,7 +41,10 @@ internal sealed class CounterServicePriorityConfiguration() : EntityConfiguratio
 {
     protected override void Map(EntityTypeBuilder<CounterServicePriority> builder)
     {
-        // The counter must be in the same branch as the mapping row...
+        // The branch belongs to the row's company (else the row would be visible to the wrong tenant)...
+        builder.HasOne<Branch>().WithMany().HasForeignKey(m => new { m.CompanyId, m.BranchId })
+            .HasPrincipalKey(b => new { b.CompanyId, b.Id });
+        // ...the counter must be in the same branch as the mapping row...
         builder.HasOne(m => m.Counter).WithMany().HasForeignKey(m => new { m.BranchId, m.CounterId })
             .HasPrincipalKey(c => new { c.BranchId, c.Id });
         // ...and the pair must be in that branch's mapping, Available or not.
