@@ -38,7 +38,7 @@ docker-compose.yml
 ## Commands
 Fill these in during milestone M1 and keep them correct.
 - Backend build / test: `dotnet build backend/Qms.slnx` · `dotnet test backend/Qms.slnx`
-- Migrations: `dotnet ef migrations add <Name> -p backend/Qms.Infrastructure -s backend/Qms.Api`
+- Migrations (from the repository root): `dotnet tool restore` (once), then `dotnet ef migrations add <Name> -p backend/Qms.Infrastructure -s backend/Qms.Api`
 - Web: `cd frontend && npm ci && npm run build && npm test -- --watch=false`
 - Android: `cd android && ./gradlew assembleDebug testDebugUnitTest`
 - Full stack: `cp .env.example .env` (once), then `docker compose up --build` (API at http://localhost:8080/health/live)

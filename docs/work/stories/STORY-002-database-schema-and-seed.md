@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-002 |
-| Status | Backend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 4 (4.1–4.4), 9, 11 (time, audit), 13 |
@@ -160,3 +160,24 @@ Open questions (for the architect; I did not change the spec):
 - Spec section 9 should list the additions in decisions 1, 3 and 4 (company_id on branch-level tables, `branch_id` on `counter_service_priority` and `dispenser_zone_service`, `device.registration_code_expires_at`, nullable `device.zone_id`, user columns). ADR request: please confirm or amend; nothing blocks Stage 3.
 - Branch 1 working hours remain sample data (story open question unchanged). ADR-003 and ADR-004 were treated as accepted.
 
+### Stage 3 — Backend — backend-developer — 2026-11-08
+Result: Done
+Changed:
+- Infrastructure: `backend/Qms.Infrastructure/DependencyInjection.cs` (`AddDbContext<QmsDbContext>` with `UseQmsPostgres` + `AuditableEntityInterceptor(TimeProvider)`, `DevSeeder` scoped, `GetRequiredConnectionString`, `MigrateAndSeedAsync`).
+- Api: `backend/Qms.Api/Program.cs` (fail-fast connection string check; Development-only migrate + seed), `backend/Qms.Api/Common/ApplicationBuilderExtensions.cs` (ready check, `ICurrentTenant`), new `Common/DatabaseHealthCheck.cs`, new `Common/NoCompanyCurrentTenant.cs`.
+- Tests: new `backend/Qms.Tests/Api/DatabaseHostingTests.cs`, `Infrastructure/InfrastructureRegistrationTests.cs`, `Support/QmsApiFactory.cs` (optional `connectionString`).
+- Docs: `CLAUDE.md` (dotnet tool restore), `backend/README.md`, TASK-003 (Done). `docker-compose.yml` unchanged (already passes `ConnectionStrings__Qms` from `.env` values).
+Notes for next stage: No endpoint or event changes except `/health/ready`, which now includes the `postgresql` check (503 when the database is down). Stages 4 and 5 are N/A. For STORY-003: replace `NoCompanyCurrentTenant` with a claims-based `ICurrentTenant` (registered scoped in `AddQmsHealthChecks` today; move it to the auth setup). Retry-on-failure is off on purpose (explicit transactions in the queue engine). `QmsApiFactory(connectionString: ...)` gives tests a real database; without it the host skips migrate/seed and the DB ready check. Verification: `dotnet build backend/Qms.slnx -c Release` 0 warnings, 0 errors; `dotnet test` Passed 110, Failed 0, Skipped 0 (twice).
+Open questions: none
+
+### Stage 4 — Frontend — frontend-developer — 2026-11-08
+Result: N/A — No UI (stage plan)
+Changed: none
+Notes for next stage: none
+Open questions: none
+
+### Stage 5 — Android — android-developer — 2026-11-08
+Result: N/A — No dispenser change (stage plan)
+Changed: none
+Notes for next stage: Ready for code review (stage 6).
+Open questions: none

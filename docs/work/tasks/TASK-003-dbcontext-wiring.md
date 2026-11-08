@@ -6,7 +6,7 @@
 | Story | STORY-002 |
 | Stage | 3 Backend |
 | Agent | backend-developer |
-| Status | To do |
+| Status | Done |
 | Estimate | S |
 | Created | 2026-11-07 |
 
@@ -29,14 +29,21 @@ Wire `QmsDbContext` into the API: configuration, Development-only migrate + seed
 - Provides to: TASK-004.
 
 ## 5. Done checklist
-- [ ] Code follows common project rules
-- [ ] Tests added and passing (list them below)
-- [ ] Bilingual text added (en + ar) if user-facing — N/A
-- [ ] No business logic outside `Qms.Application`
-- [ ] Spec / ADR updated if behaviour changed
-- [ ] Handoff written in the story's Stage log
+- [x] Code follows common project rules
+- [x] Tests added and passing (list them below)
+- [x] Bilingual text added (en + ar) if user-facing — N/A
+- [x] No business logic outside `Qms.Application`
+- [x] Spec / ADR updated if behaviour changed
+- [x] Handoff written in the story's Stage log
 
 ## 6. Tests
-- …
+- `Qms.Tests/Api/DatabaseHostingTests.cs` (Testcontainers): ready 200 with DB up; 503 with an unreachable DB (live stays 200); 200 then 503 after the container is stopped; Development startup migrates a blank DB and seeds it; second startup creates no duplicates; Production startup creates no tables; missing connection string fails startup with a clear message; scoped `ICurrentTenant` (Company 1, then Company 2) limits the request-scoped context (AC-7); default scope has no company and sees nothing.
+- `Qms.Tests/Infrastructure/InfrastructureRegistrationTests.cs`: context and seeder resolve; missing/blank connection string message.
+- Suite: Passed 110, Failed 0, Skipped 0 (Release, run twice).
 
 ## 7. Notes / result
+- Readiness check is a small custom `DatabaseHealthCheck` in Qms.Api (`CanConnectAsync`, 5 s timeout), no extra package.
+- Retry-on-failure is off: it conflicts with explicit transactions (queue engine, `FOR UPDATE SKIP LOCKED`) unless each is wrapped in an execution strategy.
+- Migrate + seed run in Development only, and can be switched off with `Database:MigrateOnStartup=false`. `QmsApiFactory` without a connection string uses that switch and drops the database ready check, so the STORY-001 tests need no Docker.
+- `docker-compose.yml` already passed `ConnectionStrings__Qms` from `.env` values; verified with `docker compose --env-file .env.example config`. `CLAUDE.md` and `backend/README.md` updated.
+- Manually verified against `postgres:18`: `/health/ready` 200, then 503 after stopping it; `/health/live` 200 throughout.

@@ -102,10 +102,25 @@ Keep secrets out of `appsettings*.json`. For local work use user-secrets:
 dotnet user-secrets --project backend/Qms.Api set "ConnectionStrings:Qms" "Host=localhost;Database=qms;Username=qms;Password=<local>"
 ```
 
-In containers, pass configuration as environment variables (for example `ConnectionStrings__Qms`, `Jwt__SigningKey`).
+In containers, pass configuration as environment variables (for example `ConnectionStrings__Qms`, `Jwt__SigningKey`). `docker-compose.yml` builds `ConnectionStrings__Qms` for the `api` service from the `POSTGRES_*` values in `.env`.
+
+The API fails at startup with a clear message when `ConnectionStrings:Qms` is missing.
+
+## Database at runtime
+
+- `QmsDbContext` is registered by `AddInfrastructure` (Npgsql, snake_case, `AuditableEntityInterceptor`) together with `DevSeeder`. Npgsql retry-on-failure is off on purpose: it forbids user-started transactions unless each is wrapped in an execution strategy, and the queue engine uses explicit transactions with `FOR UPDATE SKIP LOCKED`.
+- **Development only**, the API runs `MigrateAsync()` and then `DevSeeder.SeedAsync()` at startup (Company 1 / Branch 1 from spec section 4). Set `Database:MigrateOnStartup=false` to skip it. Other environments never migrate or seed; Azure applies migrations with a bundle (ADR-006).
+- `ICurrentTenant` is `NoCompanyCurrentTenant` until STORY-003 adds claims: no company, so tenant queries return nothing (fail closed). Seeder, system jobs and `[CrossTenant]` handlers use `IgnoreQueryFilters()`.
+- `GET /health/live` has no dependencies. `GET /health/ready` runs the `postgresql` check (a connection test through the context, 5 s timeout) and returns 503 when the database is down.
+- Run the API locally against a throwaway database:
+
+```bash
+docker run -d --name qms-pg -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=qms -p 127.0.0.1:5432:5432 postgres:18
+ConnectionStrings__Qms="Host=localhost;Database=qms;Username=postgres;Password=dev" ASPNETCORE_ENVIRONMENT=Development dotnet run --project backend/Qms.Api
+```
 
 ## Testing notes
 
 - xUnit v2 is used on purpose: xunit v3 on .NET SDK 10 needs the Microsoft.Testing.Platform runner opt-in in a `global.json` at the directory where `dotnet test` runs, which does not work for `dotnet test backend/Qms.slnx` from the repository root (and CI). Revisit when the repo can opt in.
 - Shouldly is the assertion library (FluentAssertions v8+ needs a commercial licence).
-- Test-only endpoints, handlers and validators live in `Qms.Tests/Support` and are added only to the test host (`QmsApiFactory`).
+- Test-only endpoints, handlers and validators live in `Qms.Tests/Support` and are added only to the test host (`QmsApiFactory`). `QmsApiFactory` without a connection string skips the Development migrate-and-seed and the database readiness check, so those tests do not need Docker; pass `connectionString:` (Testcontainers) for tests that do.
