@@ -6,7 +6,7 @@
 | Story | STORY-051 |
 | Stage | 4 Frontend |
 | Agent | frontend-developer |
-| Status | To do |
+| Status | Done |
 | Estimate | M |
 | Created | 2026-11-08 |
 
@@ -31,24 +31,27 @@ Source: STORY-051 section 7 "Web (stage 4)", ADR-007 Amendment 1, ADR-010 §7.2,
 - Provides to: QA (stage 7): the ar-enabled stack procedure for AC-33, AC-35 (set `language.ar.is_available` true and enable `ar` for Company 1 by test SQL or test host; never in the shipped seed).
 
 ## 5. Done checklist
-- [ ] Code follows common project rules
-- [ ] Tests added and passing (list them below)
-- [ ] User-facing text localised (translation keys / translated fields; English required, ADR-010)
-- [ ] No business logic outside `Qms.Application`
-- [ ] Spec / ADR updated if behaviour changed
-- [ ] Handoff written in the story's Stage log
+- [x] Code follows common project rules
+- [x] Tests added and passing (list below)
+- [x] User-facing text localised (translation keys; English required, ADR-010)
+- [x] No business logic outside `Qms.Application` (the web only shows the list and direction the API returns)
+- [x] Spec / ADR updated if behaviour changed (none; ADR-007 Amendment 1 and ADR-010 followed)
+- [x] Handoff written in the story's Stage log
 
 ## 6. Tests
-Component and service tests (Vitest/Jasmine as the project uses); `npm run lint`, `npm test -- --watch=false` and `npm run build` green.
-- AC-32: list with only `en` → no switch element; one anonymous `GET /languages`; `<html lang="en" dir="ltr">`.
-- AC-33: fake list with `ar` rtl → switch lists "English" and "العربية"; choosing `ar` sets `lang`, `dir="rtl"`, `qms.lang`, no request from the switch; fake rtl `xx` gives rtl; ltr gives ltr.
-- AC-34: precedence matrix for offered `[en]` and `[en, ar]` with stored/user combinations, including a stored language that is not offered, and a pre-sign-in stored `ar` with offered `[en]`.
-- AC-35: list re-read after sign-in, restore, user switch, adopted session; Company 1 vs Company 2 vs Super Admin lists; active `ar` replaced when the new list lacks it.
-- AC-36: `Accept-Language` only on same-origin `/api/`.
-- AC-37: parity check with only `en` available, and with a fake available `ar` missing a key (fails).
-- AC-38: existing STORY-004 specs adapted only where they used the removed constants; AC-3 and AC-17 specs run with a fake two-language list.
-- AC-39: list request error → English, no switch, login works, list updated after sign-in.
-- Optional e2e on the ar-enabled stack for AC-33 and AC-35 (QA repeats manually).
+`npm run lint` clean; `npm test -- --watch=false`: 13 files, 115 tests green; `npm run build` green (454.96 kB initial raw).
+- `language.service.spec.ts` (AC-32 to AC-35, AC-39): phase 1 reads the list once, English ltr, no switch, nothing stored; two languages, choose `ar` sets `lang`, `dir=rtl`, `qms.lang`, shares the active code, no request; fake rtl `xx` gives rtl and ltr gives ltr (from `direction`, not the code); a code that is not offered is ignored; precedence matrix (7 cases: offered `[en]` and `[en, ar]` x stored, user language, a stored `fr` not offered); stored `ar` with offered `[en]` before sign-in shows English; list re-read after sign-in, sign-out and another user; active `ar` replaced and `qms.lang` rewritten when the new list lacks it; restore makes one request per identity; list failure falls back to English with no switch and a later success updates it.
+- `auth.interceptor.spec.ts` (AC-36): `Accept-Language` on same-origin `/api/` (also the auth calls), not on another origin or on `/i18n/en.json`, default `en`.
+- `translations.spec.ts` (AC-37): `en.json` has every key used; with only `en` available `ar.json` is not checked; with `ar` available the shipped `ar.json` is complete and a missing key fails the check.
+- `language-switch.component.spec.ts`, `login.component.spec.ts`, `shell.component.spec.ts` (AC-32, AC-33, AC-38): switch labelled by `nativeName`, no element at all with one language (login and top bar), focus ring not clipped; the STORY-004 specs were adapted only where they used the removed constants (a fake two-language list for the switch tests).
+- e2e (Playwright, real API + postgres:18 + `ng serve`): all 14 checks passed. Phase 1: one anonymous `GET /languages` without a token, no switch, `lang=en dir=ltr`; after sign-in a second call with the token, English, no switch, `Accept-Language: en`. Ar-enabled (`UPDATE language SET is_available=true WHERE code='ar'`, `UPDATE company SET enabled_languages='{en,ar}' WHERE code='C1'`): the switch lists English and العربية, Arabic sets `lang=ar dir=rtl`, sidebar on the right, the switch makes no request, later calls send `Accept-Language: ar`, reload stays Arabic; then `{en}` again: stored `ar` is replaced by `en`, `qms.lang` rewritten, no switch. `/languages` answering 500: English, no switch, no error, login works.
 
 ## 7. Notes / result
-<Filled by the agent when done.>
+- New: `LanguagesApi` (`GET /api/v1/languages`), `OfferedLanguage` / `LanguagesResponse` models, `LanguageState` (the active code as a plain signal, so the interceptor can read it without a circular injection with `LanguageService` -> HttpClient). `LanguageService` now holds `offered`, `defaultLanguage`, `current`, `direction` (from the list), `canSwitch` (more than one offered).
+- The list is read anonymously at start-up (`init()`), then for every identity change (sign-in, restore, sign-out, user switch, session adopted from another tab) by an effect on the user id; one request per identity, and an older answer is dropped when a newer identity started a load.
+- Precedence (ADR-007 A1): stored if offered, else `user.language` if offered, else the default; written to `qms.lang` only when signed in. Before sign-in a stored language that is not offered is simply not used (not rewritten).
+- Removed: `Language = 'en' | 'ar'`, `SUPPORTED_LANGUAGES`, `isLanguage`, all `=== 'ar'` checks. `DEFAULT_LANGUAGE = 'en'` remains only as the fallback when the list cannot be loaded.
+- The switch and its header/landmark are not rendered when one language is offered (login page and top bar).
+- `Accept-Language` is added in the auth interceptor to same-origin `/api/` calls only (including login/refresh/logout); the bearer rules are unchanged.
+- `ar.json` is kept and complete but not offered; `tsconfig.app.json` now excludes `src/testing/**` (test helpers use `vi`).
+- Not added (as the task says): `/auth/me` re-read after a switch (STORY-048), `PUT /auth/me/language`, conditional font loading. The IBM Plex Sans Arabic font is still bundled.

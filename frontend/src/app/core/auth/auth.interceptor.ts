@@ -7,6 +7,7 @@ import {
 } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Observable, catchError, from, switchMap, throwError } from 'rxjs';
+import { LanguageState } from '../i18n/language-state';
 import { SessionCoordinator } from './session-coordinator';
 import { CLOCK } from './session-environment';
 import { SessionStore } from './session-store';
@@ -49,7 +50,12 @@ export const authInterceptor: HttpInterceptorFn = (
   request: HttpRequest<unknown>,
   next: HttpHandlerFn,
 ): Observable<HttpEvent<unknown>> => {
-  if (!isApiCall(request.url) || isAuthEndpoint(request.url)) {
+  if (!isApiCall(request.url)) {
+    return next(request);
+  }
+  // The active UI language goes to the API only (same origin, under /api/), also on the auth calls. Never elsewhere.
+  request = request.clone({ setHeaders: { 'Accept-Language': inject(LanguageState).code() } });
+  if (isAuthEndpoint(request.url)) {
     return next(request);
   }
 

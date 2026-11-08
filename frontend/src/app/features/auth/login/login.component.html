@@ -1,7 +1,9 @@
 <div class="login">
-  <header class="login__language">
-    <qms-language-switch />
-  </header>
+  @if (language.canSwitch()) {
+    <header class="login__language">
+      <qms-language-switch />
+    </header>
+  }
 
   <main class="login__card qms-card">
     <div class="login__brand">

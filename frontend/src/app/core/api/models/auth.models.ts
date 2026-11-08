@@ -2,8 +2,6 @@
 
 export type UserRole = 'SuperAdmin' | 'CompanyAdmin' | 'BranchManager' | 'CounterStaff';
 
-export type Language = 'en' | 'ar';
-
 export interface CurrentUser {
   id: string;
   userName: string;
@@ -12,7 +10,8 @@ export interface CurrentUser {
   role: UserRole;
   /** Null for the Super Admin. */
   companyId: string | null;
-  language: Language;
+  /** Preferred language code of the user; applied only when the offered list contains it (ADR-007 amendment 1). */
+  language: string;
   branchIds: string[];
   counterIds: string[];
 }

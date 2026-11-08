@@ -13,7 +13,9 @@
 </button>
 
 <div class="actions">
-  <qms-language-switch />
+  @if (language.canSwitch()) {
+    <qms-language-switch />
+  }
   @if (user(); as current) {
     <div class="user">
       <span class="user__avatar" aria-hidden="true">{{ initials() }}</span>

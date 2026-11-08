@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { FakeLockManager, makeAuthResponse, makeUser } from '../../../testing/auth-fakes';
+import { LanguageState } from '../i18n/language-state';
 import { authInterceptor, isAuthEndpoint } from './auth.interceptor';
 import { AUTH_CHANNEL, CLOCK, LOCK_MANAGER } from './session-environment';
 import { SessionStore } from './session-store';
@@ -153,5 +154,40 @@ describe('authInterceptor', () => {
     backend.expectNone('/api/v1/things');
     expect(status).toBe(401);
     expect(store.isAuthenticated()).toBe(false);
+  });
+
+  describe('Accept-Language (AC-36)', () => {
+    it('is sent on same-origin /api/ calls, including the auth calls', async () => {
+      TestBed.inject(LanguageState).code.set('ar');
+      http.get('/api/v1/things').subscribe();
+      http.post('/api/v1/auth/login', {}).subscribe({ error: () => undefined });
+      await tick();
+      const things = backend.expectOne('/api/v1/things');
+      expect(things.request.headers.get('Accept-Language')).toBe('ar');
+      things.flush({});
+      const login = backend.expectOne('/api/v1/auth/login');
+      expect(login.request.headers.get('Accept-Language')).toBe('ar');
+      login.flush({});
+    });
+
+    it('is not sent to another origin or on a non-API same-origin request', async () => {
+      http.get('https://evil.example/api/v1/things').subscribe();
+      http.get('/i18n/en.json').subscribe();
+      await tick();
+      const other = backend.expectOne('https://evil.example/api/v1/things');
+      const asset = backend.expectOne('/i18n/en.json');
+      expect(other.request.headers.has('Accept-Language')).toBe(false);
+      expect(asset.request.headers.has('Accept-Language')).toBe(false);
+      other.flush({});
+      asset.flush({});
+    });
+
+    it('defaults to en', async () => {
+      http.get('/api/v1/things').subscribe();
+      await tick();
+      const request = backend.expectOne('/api/v1/things');
+      expect(request.request.headers.get('Accept-Language')).toBe('en');
+      request.flush({});
+    });
   });
 });

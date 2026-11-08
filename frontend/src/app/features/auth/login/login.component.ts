@@ -6,6 +6,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { HOME_ROUTE } from '../../../core/auth/auth.guards';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ApiError, mapHttpError } from '../../../core/errors/api-error';
+import { LanguageService } from '../../../core/i18n/language.service';
 import { LanguageSwitchComponent } from '../../../shared/language-switch.component';
 
 const MAX_LENGTH = 256;
@@ -21,6 +22,7 @@ const MAX_LENGTH = 256;
 export class LoginComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  protected readonly language = inject(LanguageService);
 
   protected readonly form = new FormGroup({
     userName: new FormControl('', {

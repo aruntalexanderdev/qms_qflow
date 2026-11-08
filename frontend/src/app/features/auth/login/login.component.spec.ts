@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
+import { ARABIC, ENGLISH, fakeLanguageService } from '../../../../testing/language-fakes';
 import { provideTestTranslations } from '../../../../testing/translations';
 import { AuthService } from '../../../core/auth/auth.service';
 import { LanguageService } from '../../../core/i18n/language.service';
@@ -20,7 +21,7 @@ describe('LoginComponent', () => {
     clearEndedReason: vi.fn(() => endedReason.set(null)),
   };
   const router = { navigateByUrl: vi.fn().mockResolvedValue(true) };
-  const language = { current: signal('en'), choose: vi.fn() };
+  let language = fakeLanguageService([ENGLISH, ARABIC]);
 
   const el = () => fixture.nativeElement as HTMLElement;
   const input = (id: string) => el().querySelector<HTMLInputElement>(`#${id}`)!;
@@ -32,7 +33,7 @@ describe('LoginComponent', () => {
         provideTestTranslations(),
         { provide: AuthService, useValue: auth },
         { provide: Router, useValue: router },
-        { provide: LanguageService, useValue: language },
+        { provide: LanguageService, useFactory: () => language },
       ],
     }).compileComponents();
     await firstValueFrom(TestBed.inject(TranslateService).use('en'));
@@ -52,6 +53,7 @@ describe('LoginComponent', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    language = fakeLanguageService([ENGLISH, ARABIC]);
     endedReason.set(null);
     isAuthenticated.set(false);
   });
@@ -136,9 +138,16 @@ describe('LoginComponent', () => {
     expect(el().querySelector('.qms-alert')).toBeNull();
   });
 
-  it('has the language switch with English and العربية', async () => {
+  it('lists the offered languages by native name when there are two', async () => {
     await setup();
     const labels = Array.from(el().querySelectorAll('qms-language-switch button')).map((b) => b.textContent?.trim());
     expect(labels).toEqual(['English', 'العربية']);
+  });
+
+  it('renders no switch element at all when only English is offered (phase 1)', async () => {
+    language = fakeLanguageService([ENGLISH]);
+    await setup();
+    expect(el().querySelector('qms-language-switch')).toBeNull();
+    expect(el().querySelector('.login__language')).toBeNull();
   });
 });

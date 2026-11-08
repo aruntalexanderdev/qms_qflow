@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-051 |
-| Status | Frontend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 2 (Web i18n, Display voice), 7 (dispenser languages), 8 (`/login` language choice, `/admin/languages`), 9 (translated text pattern, `language`, `company`, all former `*_en` / `*_ar` columns, user `language`, `dispenser_setting.languages`), 10 (`/languages`, `/company-languages`), 11 (Languages), 12 (M2), 13 (localisation resolved) |
@@ -458,3 +458,20 @@ Notes for next stage:
 - Test helpers for stage 4 e2e: none new for the browser; backend tests make Arabic available with `UPDATE language SET is_available = true WHERE code = 'ar'` and `UPDATE company SET enabled_languages = '{en,ar}'`.
 Open questions: none. Deviations to confirm (non-blocking): `IRequestLanguage` is `GetCurrentAsync(ct)` instead of a sync `Current`; a 200 `PUT /company-languages` that carries an ignored `defaultLanguage` is audited like any other 200.
 
+### Stage 4 — Frontend — frontend-developer — 2026-11-08
+Result: Done
+Changed: frontend/src/app/core/{api/languages.api.ts, api/models/language.models.ts, api/models/auth.models.ts, i18n/language.service.ts, i18n/language-state.ts, auth/auth.interceptor.ts}, shared/language-switch.component.ts, layout/topbar, features/auth/login (the switch is not rendered with one language), specs (new `language-switch`, `language.service`, `translations`, interceptor additions; login, shell adapted), frontend/src/testing/language-fakes.ts, frontend/tsconfig.app.json. Task: [TASK-013](../tasks/TASK-013-localisation-frontend.md) Done.
+Notes for next stage:
+- Lint clean; `npm test -- --watch=false` 13 files / 115 tests green; `npm run build` green. E2E on the real stack (API + postgres:18 + ng serve): phase 1 login makes one anonymous `GET /languages`, shows no switch, `lang=en dir=ltr`; after sign-in still English, no switch; with `ar` made available and enabled for C1 by SQL the switch shows English and العربية, Arabic flips to RTL (sidebar right), `Accept-Language: ar` is sent, reload keeps it; disabling `ar` for the company again replaces the stored `ar` with `en`; `/languages` 500 gives English with no switch and login works.
+- QA ar-enabled procedure: `UPDATE language SET is_available=true WHERE code='ar'; UPDATE company SET enabled_languages='{en,ar}' WHERE code='C1';` (company code `C1` in the dev seed). Revert with `enabled_languages='{en}'` (and `is_available=false`).
+- AC-3 and AC-17 of STORY-004 are covered by the two-language fake-list tests and the ar-enabled e2e; in phase 1 the Arabic switch is not shown (ADR-010).
+- The web does not re-read `/auth/me` after a switch and does not call `PUT /auth/me/language` (STORY-048 and M4).
+- Stage 5 (Android) is N/A.
+Open questions: none
+
+
+### Stage 5 — Android — android-developer — 2026-11-08
+Result: N/A — No Android code exists yet (stage plan)
+Changed: none
+Notes for next stage: Ready for code review (stage 6).
+Open questions: none
