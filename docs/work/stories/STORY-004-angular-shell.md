@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | Code Review |
+| Status | Frontend |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -365,4 +365,61 @@ Open questions: none
 Result: N/A — No dispenser change (stage plan)
 Changed: none
 Notes for next stage: Ready for code review (stage 6).
+Open questions: none
+
+### Stage 6 — Code review — code-reviewer — 2026-11-08
+Result: Changes requested
+Builds/tests: backend N/A (not touched) · web ✅ (`npm ci`; `npm run lint` clean; `npm test -- --watch=false` 12 files / 78 tests green, 3 repeated runs stable; `npm run build` green, 442.67 kB initial / 112 kB transfer, no warnings) · android N/A
+Also checked by the reviewer:
+- Stylelint rejects `#ff0000`, `red`, `rgb()` and `px` in `font`/`font-size` in a component SCSS.
+- `_tokens.scss` matches `tokens.json` exactly (131 of 131 variables, scripted diff).
+- en/ar key sets are identical, with the same `{{params}}`.
+- The production `dist/` has no external URLs (only XML namespace strings and one angular.dev doc link inside Angular's error text). Fonts are emitted to `media/`, and `index.html` has no inline script.
+- TypeScript 6 `strict` and Angular 22 `strictTemplates` are on by default.
+- Playwright + axe-core 4 (wcag2a, wcag2aa, best-practice) on login, shell and drawer, en and ar, with refresh mocked: no critical or serious violations, colour contrast passes, only moderate `region` (N1). Start-up sent exactly one refresh. `dir` is `rtl` in ar.
+ACs checked: AC-1 ✅, AC-2 ✅, AC-3 ✅, AC-4 ✅, AC-5 ✅, AC-6 ✅, AC-7 ✅ (code and config; the Docker image build was not verifiable in the sandbox, QA runs `docker compose up --build`), AC-8 ❌ (see M1), AC-9 ✅ (`.github/workflows/ci.yml` frontend job runs npm ci / lint / test / build), AC-10 ✅, AC-11 ✅, AC-12 ✅, AC-13 ✅, AC-14 ✅, AC-15 ✅, AC-16 ✅, AC-17 ✅, AC-18 ✅ (`roleGuard` tested; no route uses it yet)
+
+Security summary:
+- The access token is held only in memory (a `SessionStore` signal). No web-storage writes apart from `qms.lang`, and no JWT decoding. The cookie is never touched by JS, and there is no `withCredentials` (fetch `same-origin`).
+- Interceptor exclusions for `/auth/login|refresh|logout` are tested. The retry happens once and a second 401 reaches the caller.
+- Nginx proxies only `/api/` and `/hubs/`, with no path or cookie rewrite, and sets the `X-Forwarded-*` headers. `/swagger` and `/openapi` return 404.
+- CSP: `script-src 'self'`, no `unsafe-eval`, `frame-ancestors 'none'`. `style-src 'unsafe-inline'` is justified: Angular emulated encapsulation injects `<style>` at runtime, and Material binds `style` attributes, which a nonce cannot cover. `inlineCritical` is off.
+- Compose `web` is bound to `127.0.0.1`. The image is unprivileged nginx on 8080. `.dockerignore` excludes `node_modules`, `dist` and `.angular`.
+
+ADR-007 assessment for the architect: none of stage 4's refinements weakens ADR-004. Decision 3 (reuse revokes the family) is untouched, and every refresh, login and logout is still serialised by the Web Lock.
+- The `validUntil` "newer" check, the 150 ms grace wait and the authGuard renewal only decide whether a request is needed, or when it is sent.
+- Login under the lock strengthens the design.
+- They are sound enough to record in ADR-007. The ADR text is now out of date in four places, listed in S6.
+
+Must fix
+- M1 [stage 4] frontend/src/app/shared/language-switch.component.scss:6 — The focus ring on the English / العربية buttons is clipped. `.switch { overflow: hidden }` cuts off the global `:focus-visible` ring (`src/styles/_base.scss:15-19`: 2px outline with a 2px offset, plus a 4px shadow, all drawn outside the button). A keyboard user sees only a 2px line on one side; the reviewer confirmed this with a Playwright screenshot of Tab focus on the login page. This fails AC-8 ("focus rings are visible") and DESIGN_SYSTEM.md section 7, on the control AC-3 and AC-17 depend on. → Remove `overflow: hidden` and round the outer corners of the first and last button instead (logical `border-start-start-radius` etc.), or give `.switch__button:focus-visible` an inset ring (`outline-offset: -2px` / inset shadow). Add a component test or snapshot that the switch container does not clip, or note it for QA.
+
+Should fix
+- S1 [stage 4] frontend/src/app/layout/shell/shell.component.ts:42-52, shell.component.html:8 — Opening the drawer (below 1024px) does not move focus. Focus stays on the menu button, which the drawer and backdrop now cover. The next Tab goes to the language switch behind the backdrop, and the nav is reachable only with Shift+Tab, because the sidebar comes earlier in the DOM. Verified with Playwright in en and ar. → When the drawer opens, move focus to the first nav link and trap focus while open (`cdkTrapFocus`). Return focus to the menu button on close and on Escape. Make the background `inert` while the drawer is open.
+- S2 [stage 4] frontend/src/app/core/auth/session-coordinator.ts:113-121 — The 150 ms grace wait polls with `setTimeout(0)` while the tab holds the cross-tab lock. Browsers throttle timers in hidden tabs to at least 1 s. A background tab that refreshes (later: a SignalR `accessTokenFactory` or a dashboard poll) therefore holds `qms-auth-session` for about 1 s or more. That blocks the visible tab's refresh, login and sign-out. The 3 ms "waited" threshold is also a timing heuristic: a busy main thread at start-up adds 150 ms to an uncontended refresh. → Wait on an event instead: resolve when `onMessage` delivers a newer session, or when a single timeout fires, whichever comes first. Add a fake-timer test for "broadcast arrives after the lock is released".
+- S3 [stage 4] frontend/src/app/core/auth/auth.interceptor.ts:118-122 and session-coordinator.ts:147-158 — User switch in another tab. If tab A (user X) refreshes before the `session(Y)` broadcast arrives, the following happens:
+  - `adoptAndBroadcast` silently swaps the tab to user Y on the current page, with no navigation;
+  - the interceptor then retries X's original request with Y's token.
+  This is harmless today (no data endpoints). Once write endpoints exist, it would replay a write under another identity. → In `adoptAndBroadcast`, apply the same `user.id` mismatch rule as `onMessage` (clear and navigate). In the interceptor, do not retry when the session's `user.id` differs from the one the request was sent with; return the 401 instead. Add a test for each.
+- S4 [stage 4] frontend/src/app/core/auth/auth.interceptor.ts:65-75 — `isApiCall` checks only the path (`new URL(url, 'http://localhost').pathname`). An absolute URL to another origin whose path starts with `/api/` would get the bearer token. CSP `connect-src 'self'` blocks this today, but the interceptor should not rely on it. → Treat only relative URLs or `location.origin` URLs as API calls, and add a test.
+- S5 [stage 4] frontend/src/app/shared/language-switch.component.scss:10 — The language buttons are 36px high (`control-height-sm`). DESIGN_SYSTEM.md section 7 requires touch targets of at least 44×44px on the web. → Use `--qms-size-control-height`, or get a design-system exception approved.
+- S6 [stage 0] docs/adr/ADR-007-web-session-handling.md — Record the stage 4 refinements:
+  - A.2: "newer" means a later `validUntil` (local epoch ms), not a later `expiresAt`;
+  - A.4: the `session` message carries `validUntil`;
+  - the grace wait after a contended lock, and login under the lock;
+  - `authGuard` renews within 30 s on every navigation (`runGuardsAndResolvers: 'always'`); this is not a background timer;
+  - a `user.id` mismatch in practice ends on `/login`, because `authGuard` does not restore a cleared tab. A later refresh broadcast, or the login page's adoption effect, then picks up the new user. The ADR says "navigates to `/`".
+
+  Also extend the accepted "response lost" consequence to cover a reload or tab close during a refresh, which can abort the response after the server rotated the token.
+
+Nice to have
+- N1 [stage 4] topbar.component.html / shell.component.html / login.component.html — axe `region` (moderate): wrap the top bar in `<header>`, the sidebar in `<aside>`, and the login language switch in a landmark.
+- N2 [stage 4] .stylelintrc.json — Inline `styles:` in components and `style=""` in templates are not linted (`postcss-html` is installed but unused). There are none today. Add an `overrides` entry with `customSyntax: postcss-html` for `src/**/*.html`, or forbid inline `styles` with an ESLint rule.
+- N3 [stage 4] _forms.scss:56 (`padding: 28px`), login.component.scss:30-31 and sidebar.component.scss:19-20 (`36px`) — Use `--qms-size-control-height-sm` for the 36px tiles. For the card padding, add a token in `docs/design/` first if wanted.
+- N4 [stage 4] public/i18n/*.json — `app.title` and `shell.accountOf` are unused. `<title>` stays "QFlow" in Arabic; either set it through `Title` with `app.title`, or drop the keys.
+- N5 [stage 4] nginx.conf / Dockerfile — Pin the `nginx-unprivileged` and `node:24-alpine` tags (or digests). Consider `resolver 127.0.0.11` with a variable `proxy_pass`, so a recreated `api` container with a new IP does not leave nginx pointing at a stale address. HSTS and the real `X-Forwarded-Proto` behind TLS belong to the hosting story.
+- N6 [stage 4] session-coordinator.spec.ts — Add a test for sign-out in tab A while tab B's refresh is queued on the lock. Today B sends one refresh that gets a 401, which is harmless; the test should pin that B ends on `/login` with no message.
+- N7 [stage 4] Sidebar toggle above 1024px hides the sidebar instead of collapsing it to the 72px icon rail (DESIGN_SYSTEM.md section 5). Stage 4 documented this as a deviation because there are no icons yet; it is acceptable until icons exist.
+
+Notes for next stage: Back to stage 4 for M1. S1–S5 should be fixed in the same loop if cheap; otherwise they become follow-up tasks. S6 goes to the architect. Then return to stage 6.
 Open questions: none
