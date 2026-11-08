@@ -16,6 +16,8 @@ export const KNOWN_ERROR_CODES = [
   'server.unexpected_error',
 ] as const;
 
+const GATEWAY_STATUSES: readonly number[] = [502, 503, 504];
+
 /** An API or network error ready to show: a translation key plus parameters, never a raw code. */
 export interface ApiError {
   /** The problem-details `code`, or `network` for status 0, or `unknown`. */
@@ -50,6 +52,11 @@ export function mapHttpError(error: unknown): ApiError {
     return build('network', 0);
   }
   const problem = isProblemDetails(error.error) ? error.error : null;
+  if (GATEWAY_STATUSES.includes(error.status) && !problem?.code) {
+    // A proxy (ng serve, Nginx) answers 502/503/504 with a plain or HTML body when the API is down: that is "cannot
+    // reach the server", not an API error. A 5xx that carries a problem-details code keeps its code.
+    return build('network', error.status);
+  }
   const code = problem?.code ?? 'unknown';
   const result = build(code, error.status);
   // The reference helps support find a server fault; other errors are the user's to fix.
@@ -61,6 +68,12 @@ export function mapHttpError(error: unknown): ApiError {
       result.messageKey = 'errors.request.rate_limited_generic';
     } else {
       result.params = { minutes };
+      // Singular / dual / plural texts: "1 minute", "2 minutes", "N minutes".
+      if (minutes === 1) {
+        result.messageKey = 'errors.request.rate_limited_one';
+      } else if (minutes === 2) {
+        result.messageKey = 'errors.request.rate_limited_two';
+      }
     }
   }
   return result;

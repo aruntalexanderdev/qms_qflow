@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | Frontend |
+| Status | Code Review |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -526,3 +526,13 @@ Bugs: BUG-001 (Minor, stage 4): with the API stopped, the dev proxy and Nginx an
 Checks run: `npm run lint`, `npm test -- --watch=false` (88 green), `npm run build`, backend `Auth` filter (94 green); Playwright on real API + postgres:18 via `ng serve` proxy and via the production build behind Nginx (en + ar); axe clean on login, shell, narrow shell and drawer; keyboard walkthrough; preview.html comparison (only trivial deviations).
 Manual device checks pending: none (web only). Not verifiable here: `docker compose up --build` image build (sandbox npm proxy); GitHub Actions run of AC-9.
 Next: stage 4 fixes BUG-001, then stage 6 re-review, then QA retests AC-16 (dev proxy and Nginx, en + ar) and signs off. Known follow-ups S7, N2, N4, N5, N7, N8, N9 stay open and are not blockers.
+
+### Stage 4 — Frontend (BUG-001 fix) — frontend-developer — 2026-11-08
+Result: Done
+Changed: frontend/src/app/core/errors/api-error.ts (+ spec), frontend/public/i18n/{en,ar}.json, frontend/src/app/core/i18n/translations.spec.ts, docs/work/bugs/BUG-001-network-error-502-shows-generic-message.md
+Notes for next stage:
+- BUG-001: status 0, and 502/503/504 without a problem-details `code`, now map to `errors.network`; a 5xx with a `code` keeps it (500 shows `server.unexpected_error` with the correlation reference). The English 429 text is now singular/dual/plural ("Try again in 1 minute." / "2 minutes" / "N minutes"; Arabic equivalents, wording still needs native review).
+- Verified: `npm run lint` clean; `npm test -- --watch=false` 13 files / 94 tests green; `npm run build` green (453.54 kB initial). AC-16 reproduced live with the API stopped, behind `ng serve` and behind Nginx (built dist), en and ar: "Cannot reach the server" / "تعذّر الاتصال بالخادم", session kept, next navigation after restart refreshes once (200). Containers and processes cleaned up.
+- Reloading the page with the API down starts signed out (the start-up restore cannot reach the server); this is by design, not part of AC-16.
+Open questions: none
+

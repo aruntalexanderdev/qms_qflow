@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | BUG-001 |
-| Status | New |
+| Status | Code Review |
 | Severity | Minor |
 | Priority | P3 |
 | Found in | STORY-004 (AC-16), frontend as reviewed in round 2 (HEAD 08be692) |
@@ -47,12 +47,14 @@ AC-16 of STORY-004: "the user is not signed out and stays on the current page, t
 - `curl -i -X POST http://localhost:4200/api/v1/auth/refresh` with the API stopped: `HTTP/1.1 502 Bad Gateway`, `Content-Type: text/plain`.
 
 ## 7. Root cause (filled by owning dev stage)
-…
+`mapHttpError` treated only `status === 0` as a network error. When the API is down, `ng serve` and Nginx answer 502 with a plain-text or HTML body, which has no problem-details `code`, so it fell through to `errors.unknown`.
 
 ## 8. Fix (filled by owning dev stage)
-- Changed files:
-- Tests added (must reproduce the bug before the fix):
-- Suggested: treat status 0, 502, 503 and 504 without a problem-details `code` as `network`; add a spec case for each.
+- Changed files: `frontend/src/app/core/errors/api-error.ts` (502, 503 and 504 without a problem-details `code` map to `network`; a gateway status that carries a `code` keeps it; 429 picks `rate_limited_one` / `_two` / plural by minutes), `frontend/public/i18n/en.json` and `ar.json` (new keys `errors.request.rate_limited_one`, `rate_limited_two`; plural text now says "minutes" / "دقائق"), specs `api-error.spec.ts`, `translations.spec.ts`.
+- Also fixed (QA wording note): the English 429 text "Try again in 1 minutes." is now "Try again in 1 minute." (singular, dual and plural keys in en and ar).
+- Tests added (must reproduce the bug before the fix): `api-error.spec.ts` cases for 502 plain text, 503 HTML, 504 empty body and 502 JSON without a code (all `errors.network`; they fail on the old code), 502 and 500 with problem-details keep their code and correlation id, 500 without a code is the generic text, 429 singular/dual/plural keys. `npm test -- --watch=false`: 13 files, 94 tests green; lint and build green.
+- Live check (real API + postgres:18, Playwright): API stopped, access token forced to expire, navigate. Behind `ng serve` and behind Nginx with the built `dist/` the refresh returned 502; the toast read "Cannot reach the server" (en) and "تعذّر الاتصال بالخادم" (ar); the user stayed signed in on `/home`; after the API restarted the next navigation sent one refresh (200) and stayed signed in. Screenshots in the scratchpad: `bug1-devproxy-en.png`, `bug1-devproxy-ar.png`, `bug1-nginx-en.png`, `bug1-nginx-ar.png`.
+- Suggested (done): treat status 0, 502, 503 and 504 without a problem-details `code` as `network`; add a spec case for each.
 
 ## 9. Retest (filled by QA)
 | Date | Build | Result | Notes |

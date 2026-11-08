@@ -67,6 +67,8 @@
     },
     "request": {
       "rate_limited": "Too many attempts. Try again in {{minutes}} minutes.",
+      "rate_limited_one": "Too many attempts. Try again in 1 minute.",
+      "rate_limited_two": "Too many attempts. Try again in 2 minutes.",
       "rate_limited_generic": "Too many attempts. Try again later.",
       "invalid": "The request is not valid",
       "conflict": "The data was changed by someone else. Reload and try again."

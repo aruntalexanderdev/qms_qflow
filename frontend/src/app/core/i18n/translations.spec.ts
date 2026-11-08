@@ -25,6 +25,8 @@ describe('translations', () => {
       'errors.network',
       'errors.unknown',
       'errors.request.rate_limited_generic',
+      'errors.request.rate_limited_one',
+      'errors.request.rate_limited_two',
       ...['SuperAdmin', 'CompanyAdmin', 'BranchManager', 'CounterStaff'].map((role) => `roles.${role}`),
       ...NAVIGATION.flatMap((section) => [section.labelKey, ...section.items.map((item) => item.labelKey)]),
     ];
