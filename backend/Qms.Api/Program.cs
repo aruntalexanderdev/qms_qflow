@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Qms.Api.Auth;
 using Qms.Api.Common;
@@ -17,7 +18,10 @@ builder.Services.AddSerilog((services, configuration) => configuration
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
+builder.Services.AddControllers()
+    // Enums travel as strings ("Waiting"), in requests and responses (ADR-008 section 3).
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
+    .ConfigureApiBehaviorOptions(options =>
 {
     var defaultFactory = options.InvalidModelStateResponseFactory;
     options.InvalidModelStateResponseFactory = context =>

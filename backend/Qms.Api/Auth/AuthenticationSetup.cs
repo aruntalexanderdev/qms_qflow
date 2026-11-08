@@ -43,6 +43,8 @@ public static class AuthenticationSetup
             }
         });
 
+        // Permission-based authorization for the setup API: [RequirePermission] + one handler (later stories only add constants).
+        services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, UnmatchedRouteAuthorizationResultHandler>();
 
         services.AddRateLimiter();

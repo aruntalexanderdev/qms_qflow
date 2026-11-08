@@ -21,6 +21,19 @@ public static class ResultExtensions
         return result.IsSuccess ? controller.Ok(result.Value) : ToProblem(result.Error!, controller);
     }
 
+    /// <summary>201 Created with a <c>Location</c> header and the value as body.</summary>
+    public static IActionResult ToCreatedResult<T>(this Result<T> result, ControllerBase controller, Func<T, string> location)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(controller);
+        ArgumentNullException.ThrowIfNull(location);
+        return result.IsSuccess ? controller.Created(location(result.Value), result.Value) : ToProblem(result.Error!, controller);
+    }
+
+    /// <summary>204 No Content for a command whose value is not returned (delete).</summary>
+    public static IActionResult ToNoContentResult<T>(this Result<T> result, ControllerBase controller) =>
+        ((Result)result).ToActionResult(controller);
+
     public static ObjectResult ToProblem(this Error error, ControllerBase controller)
     {
         ArgumentNullException.ThrowIfNull(error);
@@ -56,7 +69,7 @@ public static class ResultExtensions
         };
     }
 
-    private static int StatusFor(ErrorType type) => type switch
+    public static int StatusFor(ErrorType type) => type switch
     {
         ErrorType.Validation => StatusCodes.Status400BadRequest,
         ErrorType.Unauthorized => StatusCodes.Status401Unauthorized,

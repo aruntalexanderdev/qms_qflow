@@ -1,10 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Qms.Application.Auth;
 using Qms.Application.Common;
+using Qms.Infrastructure.Authorization;
 using Qms.Infrastructure.Identity;
+using Qms.Infrastructure.Notifications;
+using Qms.Infrastructure.Scope;
 using Qms.Infrastructure.Persistence;
 using Qms.Infrastructure.Persistence.Identity;
 using Qms.Infrastructure.Persistence.Seed;
@@ -43,6 +47,12 @@ public static class DependencyInjection
             options.UseQmsPostgres(connectionString)
                 .AddInterceptors(new AuditableEntityInterceptor(serviceProvider.GetRequiredService<TimeProvider>()));
         });
+        // The port the use cases see (ADR-008 section 1): the same scoped context instance.
+        services.AddScoped<IQmsDbContext>(provider => provider.GetRequiredService<QmsDbContext>());
+        services.AddScoped<IBranchScope, BranchScope>();
+        services.AddSingleton<IPermissionResolver, StaticRolePermissionResolver>();
+        // No-op until STORY-021 (SignalR DeviceConfigChanged); a host or test may register its own before or after.
+        services.TryAddSingleton<IDeviceConfigNotifier, NoOpDeviceConfigNotifier>();
         services.AddScoped<DevSeeder>();
         services.AddQmsIdentity();
         return services;

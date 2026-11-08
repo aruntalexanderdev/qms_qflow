@@ -4,7 +4,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Qms.Api.Common;
+using Microsoft.EntityFrameworkCore;
 using Qms.Application.Common;
+using Qms.Infrastructure.Persistence;
 using Serilog.Core;
 
 namespace Qms.Tests.Support;
@@ -76,6 +78,11 @@ public sealed class QmsApiFactory : WebApplicationFactory<Program>
         {
             services.AddSingleton<ILogEventSink>(LogSink);
             services.AddSingleton<HandlerSpy>();
+            // Setup API tests (STORY-005): a notifier that records its calls and a log of the SQL the host sends.
+            services.AddSingleton<RecordingDeviceConfigNotifier>();
+            services.AddSingleton<IDeviceConfigNotifier>(provider => provider.GetRequiredService<RecordingDeviceConfigNotifier>());
+            services.AddSingleton<SqlCommandLog>();
+            services.ConfigureDbContext<QmsDbContext>((provider, options) => options.AddInterceptors(provider.GetRequiredService<SqlCommandLog>()));
             services.AddControllers().AddApplicationPart(typeof(QmsApiFactory).Assembly);
             // Only the Support namespace: handlers declared inside other test classes are unit-test fakes.
             services.AddHandlersAndValidators(typeof(QmsApiFactory).Assembly, type => type.Namespace == typeof(QmsApiFactory).Namespace);
