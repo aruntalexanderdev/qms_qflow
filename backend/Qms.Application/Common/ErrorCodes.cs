@@ -14,6 +14,8 @@ public static class ErrorCodes
     public const string ResourceInUse = "resource.in_use";
     public const string ResourceDuplicate = "resource.duplicate";
     public const string AuthForbidden = "auth.forbidden";
+    public const string TranslationLanguageNotEnabled = "translation.language_not_enabled";
+    public const string TranslationDefaultLanguageKey = "translation.default_language_key";
 }
 
 /// <summary>Shared errors.</summary>

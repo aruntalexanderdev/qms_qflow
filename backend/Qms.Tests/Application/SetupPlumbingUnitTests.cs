@@ -87,8 +87,8 @@ public sealed class SetupPlumbingUnitTests
         ServiceFields(nameEn: null).ShouldBe(["Name"]);
         ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = "ب" }).ShouldBeEmpty();
         ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = null }).ShouldBeEmpty();
-        ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = new string('ع', 201) }).ShouldBe(["Translations"]);
-        ServiceFields(translations: new Dictionary<string, string?> { ["fr"] = "x" }).ShouldBe(["Translations"]);
+        ServiceFields(translations: new Dictionary<string, string?> { ["ar"] = new string('ع', 201) }).ShouldBe(["Translations.ar"]);
+        ServiceFields(translations: new Dictionary<string, string?> { ["fr"] = "x" }).ShouldBe(["Translations.fr"]);
         foreach (var prefix in new[] { "h", "HB", "1", "", "  ", null, "É", "-" })
         {
             ServiceFields(prefix: prefix).ShouldBe(["Prefix"], prefix ?? "null");
@@ -219,6 +219,6 @@ public sealed class LocalizedTextTests
 
         var result = await validator.ValidateAsync(new CreateServiceTypeCommand("x", new Dictionary<string, string?> { ["fr"] = "x" }, "H", null, 0, true));
 
-        result.Errors.Single().ErrorCode.ShouldBe("translations.unsupported_language");
+        result.Errors.Single().ErrorCode.ShouldBe("translation.language_not_enabled");
     }
 }

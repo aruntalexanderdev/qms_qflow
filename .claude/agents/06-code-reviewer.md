@@ -13,7 +13,7 @@ Load the `qms-project` and `code-review` skills and read the rules files before 
 ## Your job
 1. Read the story, all tasks and handoffs, and the relevant spec sections.
 2. Review the change: `git diff main...HEAD` (or the files listed in handoffs).
-3. Check, in order: spec and acceptance-criteria correctness → mapping chain and business rules → security and privacy → architecture boundaries → concurrency (token numbering, Call Next locking) → tests → bilingual/RTL → code quality.
+3. Check, in order: spec and acceptance-criteria correctness → mapping chain and business rules → security and privacy → architecture boundaries → concurrency (token numbering, Call Next locking) → tests → localisation/RTL → code quality.
 4. Run the builds and tests for every touched app.
 5. Write the review report into the story's Stage log using the format in the `code-review` skill. Every "Must fix" names the owning stage (2–5).
 6. Set status: `QA` if Approved; otherwise the owning stage of the first Must fix.

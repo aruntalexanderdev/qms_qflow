@@ -137,7 +137,7 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
             ("name", new { name = "", translations = new { ar = "ع" }, prefix = "H" }),
             ("name", new { name = "   ", translations = new { ar = "ع" }, prefix = "H" }),
             ("name", new { name = new string('x', 201), translations = new { ar = "ع" }, prefix = "H" }),
-            ("translations", new { name = "x", translations = new { ar = new string('ع', 201) }, prefix = "H" }),
+            ("translations.ar", new { name = "x", translations = new { ar = new string('ع', 201) }, prefix = "H" }),
             ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "h" }),
             ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "HB" }),
             ("prefix", new { name = "x", translations = new { ar = "ع" }, prefix = "1" }),
@@ -193,12 +193,12 @@ public sealed class ServiceTypesApiTests(PostgresFixture postgres)
         none.Body.ShouldNotContain("nameEn");
         none.Body.ShouldNotContain("nameAr");
         empty.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
-        foreach (var refused in new[] { french, english })
-        {
-            refused.Status.ShouldBe(400);
-            refused.Code.ShouldBe("translations.unsupported_language");
-            refused.Json.GetProperty("errors").TryGetProperty("translations", out _).ShouldBeTrue(refused.Body);
-        }
+        french.Status.ShouldBe(400);
+        french.Code.ShouldBe("translation.language_not_enabled");
+        french.Json.GetProperty("errors").TryGetProperty("translations.fr", out _).ShouldBeTrue(french.Body);
+        english.Status.ShouldBe(400);
+        english.Code.ShouldBe("translation.default_language_key");
+        english.Json.GetProperty("errors").TryGetProperty("translations.en", out _).ShouldBeTrue(english.Body);
 
         withArabic.Json.GetProperty("translations").GetProperty("ar").GetString().ShouldBe("البطاقات");
         (await setup.GetAsync(SetupUser.CompanyAdminC1, Url)).Json.GetArrayLength().ShouldBe(9);

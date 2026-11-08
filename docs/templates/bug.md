@@ -20,7 +20,7 @@ Severity guide: **Critical** = tokens cannot be issued or called, data loss, sec
 ## 2. Environment
 - Build / commit:
 - Device / browser / OS:
-- Language: English / Arabic
+- Language: <language code, e.g. en>
 - Test data: company, branch, zone, counter, dispenser used
 
 ## 3. Steps to reproduce

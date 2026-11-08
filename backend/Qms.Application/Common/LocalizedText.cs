@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 
 namespace Qms.Application.Common;
 
@@ -13,7 +14,9 @@ namespace Qms.Application.Common;
 public static class LocalizedText
 {
     public const int MaxLength = 200;
-    public const string UnsupportedLanguageCode = "translations.unsupported_language";
+    public const string LanguageNotEnabledCode = ErrorCodes.TranslationLanguageNotEnabled;
+    public const string DefaultLanguageKeyCode = ErrorCodes.TranslationDefaultLanguageKey;
+    private const string DefaultLanguage = "en";
     private const string Arabic = "ar";
 
     /// <summary>Default name: required, 1 to 200 characters after trimming.</summary>
@@ -22,16 +25,37 @@ public static class LocalizedText
             .WithMessage("'{PropertyName}' is required and must be 1 to 200 characters.");
 
     /// <summary>
-    /// Translations: optional; a language the storage cannot hold gives the error code
-    /// <see cref="UnsupportedLanguageCode"/>; each non-empty value is at most 200 characters after trimming.
+    /// Translations: optional. Each bad key is its own error keyed <c>translations.&lt;code&gt;</c>: the <c>en</c> key gets
+    /// <see cref="DefaultLanguageKeyCode"/> (English lives in <c>name</c>), a language that is not enabled gets
+    /// <see cref="LanguageNotEnabledCode"/>; each non-empty value is at most 200 characters after trimming.
     /// </summary>
-    public static IRuleBuilderOptions<T, IReadOnlyDictionary<string, string?>?> LocalizedTranslations<T>(
+    public static IRuleBuilderInitial<T, IReadOnlyDictionary<string, string?>?> LocalizedTranslations<T>(
         this IRuleBuilder<T, IReadOnlyDictionary<string, string?>?> rule) =>
-        rule.Must(value => value is null || UnsupportedLanguages(value).Count == 0)
-            .WithErrorCode(UnsupportedLanguageCode)
-            .WithMessage("'{PropertyName}' contains a language that is not supported yet.")
-            .Must(value => value is null || value.Values.All(text => text is null || text.Trim().Length <= MaxLength))
-            .WithMessage("Each translation must be at most 200 characters.");
+        rule.Custom((translations, context) =>
+        {
+            if (translations is null)
+            {
+                return;
+            }
+
+            foreach (var (key, text) in translations)
+            {
+                var code = key?.Trim().ToLowerInvariant() ?? string.Empty;
+                var field = context.PropertyPath + "." + code;
+                if (code == DefaultLanguage)
+                {
+                    context.AddFailure(new ValidationFailure(field, "English is the default language: send it as 'name'.") { ErrorCode = DefaultLanguageKeyCode });
+                }
+                else if (code != Arabic)
+                {
+                    context.AddFailure(new ValidationFailure(field, "This language is not enabled.") { ErrorCode = LanguageNotEnabledCode });
+                }
+                else if (text is not null && text.Trim().Length > MaxLength)
+                {
+                    context.AddFailure(field, "A translation must be at most 200 characters.");
+                }
+            }
+        });
 
     public static IReadOnlyList<string> UnsupportedLanguages(IReadOnlyDictionary<string, string?> translations) =>
         [.. translations.Keys.Where(key => !string.Equals(key?.Trim(), Arabic, StringComparison.OrdinalIgnoreCase))];

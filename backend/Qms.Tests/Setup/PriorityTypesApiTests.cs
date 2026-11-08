@@ -188,7 +188,8 @@ public sealed class PriorityTypesApiTests(PostgresFixture postgres)
         var none = await setup.PostAsync(SetupUser.CompanyAdminC1, Url, new { name = "Senior", prefix = "S", priorityLevel = 1, isPaid = false });
 
         french.Status.ShouldBe(400);
-        french.Code.ShouldBe("translations.unsupported_language");
+        french.Code.ShouldBe("translation.language_not_enabled");
+        french.Json.GetProperty("errors").TryGetProperty("translations.fr", out _).ShouldBeTrue(french.Body);
         none.Status.ShouldBe(201);
         none.Json.GetProperty("translations").EnumerateObject().ShouldBeEmpty();
         none.Body.ShouldNotContain("nameEn");

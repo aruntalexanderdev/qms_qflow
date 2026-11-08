@@ -1,6 +1,6 @@
 ---
 name: android-kotlin
-description: Senior Android method for the QMS token dispenser — Kotlin, Jetpack Compose, MVVM, device registration and config, one-screen token UI, Sunmi printing, heartbeat, kiosk mode, English/Arabic. Use in stage 5.
+description: Senior Android method for the QMS token dispenser — Kotlin, Jetpack Compose, MVVM, device registration and config, one-screen token UI, Sunmi printing, heartbeat, kiosk mode, localisation (English default). Use in stage 5.
 ---
 
 # Android (Kotlin) skill
@@ -23,7 +23,7 @@ android/app/src/main/java/.../qms/
 
 ## Design system (rules section 11)
 - Read `docs/design/DESIGN_SYSTEM.md`; mirror `docs/design/tokens.json` in `ui/theme/Color.kt`, `Type.kt`, `Shape.kt` and `Theme.kt` (Material 3 `lightColorScheme` with `primary = 0xFF0D7E8F` and so on, plus `QmsColors` for state and priority).
-- Fonts: Instrument Sans and IBM Plex Sans Arabic `.ttf` in `res/font/`. Token numbers use tabular figures.
+- Fonts: Instrument Sans `.ttf` in `res/font/`; IBM Plex Sans Arabic only when an Arabic-script language is enabled (ADR-001/ADR-010). Token numbers use tabular figures.
 - Composables use `MaterialTheme.colorScheme` / `QmsColors` / `MaterialTheme.typography` only. No `Color(0x…)` or `sp` literals outside `ui/theme/`.
 - Kiosk sizing: touch targets of at least 72dp; service buttons are outlined in `primary` and filled when selected; Print Token is full-width `primary`.
 
@@ -39,7 +39,7 @@ android/app/src/main/java/.../qms/
 - Config refresh: on `DeviceConfigChanged` (SignalR Java client or polling fallback) and every 5 minutes.
 - Heartbeat every 60 s via WorkManager / coroutine loop with printer status.
 - Kiosk: lock task mode, hide system bars, hidden admin exit with PIN.
-- Locale: English / Arabic toggle on Home; Compose layout handles RTL; token numbers Latin digits.
+- Locale: English default; language toggle on Home only when the device has more than one enabled language (from config); Compose layout handles RTL; token numbers Latin digits.
 - Never log phone numbers or the device key.
 
 ## Tests

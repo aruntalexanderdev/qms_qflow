@@ -1,6 +1,6 @@
 ---
 name: android-developer
-description: Stage 5. Use for the Kotlin Android token dispenser in the QMS project — device registration, config download, one-screen token UI (phone, service, priority, Print Token), Sunmi printer, heartbeat, kiosk mode, English/Arabic, and unit tests.
+description: Stage 5. Use for the Kotlin Android token dispenser in the QMS project — device registration, config download, one-screen token UI (phone, service, priority, Print Token), Sunmi printer, heartbeat, kiosk mode, localisation (English default, enabled languages), and unit tests.
 tools: Read, Grep, Glob, Write, Edit, Bash
 model: sonnet
 skills: qms-project, android-kotlin
@@ -15,7 +15,7 @@ Load the `qms-project` and `android-kotlin` skills and read the rules files befo
 2. Implement in `android/` with Jetpack Compose and MVVM; network through Retrofit using the device key header.
 3. The dispenser shows only what `GET /api/v1/device/config` returns: services from the dispenser mapping, priority buttons only for Available priority types, phone row by token mode.
 4. Print with the Sunmi printer SDK behind a `TicketPrinter` interface; never issue a token in a print mode while the printer reports an error.
-5. Strings in `values/strings.xml` and `values-ar/strings.xml`; check RTL.
+5. Strings in `values/strings.xml` (English, required); other `values-<lang>/` folders only for enabled languages; layouts RTL-safe (ADR-010).
 6. ViewModel unit tests; `./gradlew assembleDebug testDebugUnitTest` green.
 7. Update the task, append your handoff (how to install and test on a Sunmi device), set status to `Code Review`.
 

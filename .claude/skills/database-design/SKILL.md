@@ -9,7 +9,7 @@ description: Senior PostgreSQL + EF Core method for the QMS — naming, keys, ma
 - PostgreSQL 16+, EF Core with Npgsql; `UseSnakeCaseNamingConvention()`.
 - `id uuid` primary key (generated in app, `Guid.CreateVersion7()`), `created_at timestamptz`, `updated_at timestamptz`.
 - Tenant tables carry `company_id` with a global query filter in the DbContext.
-- Bilingual text: `name_en`, `name_ar` (both required for user-facing names).
+- Localised text (ADR-010): `<field>` (required, English default) + `<field>_translations jsonb` (optional, keys = enabled language codes, default `{}`).
 - Enums stored as text (`HasConversion<string>()`), not integers.
 - One `IEntityTypeConfiguration<T>` per entity in `Persistence/Configurations/`.
 
