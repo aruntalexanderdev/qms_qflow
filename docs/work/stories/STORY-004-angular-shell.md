@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-004 |
-| Status | Analysis |
+| Status | Frontend |
 | Priority | Must |
 | Milestone | M1 (part of M4's shell, delivered early as the walking skeleton) |
 | Spec sections | 2, 8 (Login, roles), 11 (Languages, no CDN); docs/design/DESIGN_SYSTEM.md |
@@ -22,48 +22,56 @@ Depends on STORY-003 (auth endpoints). The look is fixed by the design system (A
 **In scope**
 - `frontend/` Angular 22 workspace (standalone, signals, zoneless if stable in 22, strict TypeScript), Angular Material 22 (M3), ESLint, Stylelint (`color-no-hex`, `color-named: never`; token files excluded), test runner per the Angular 22 default.
 - Theme: `src/styles/_tokens.scss` mirroring `docs/design/tokens.json`, `_material-theme.scss`, `_typography.scss` with `@fontsource` packages (no CDN).
-- i18n: ngx-translate with `public/i18n/en.json` and `ar.json`; language switch sets `<html lang dir>`; the choice is kept per user (`/auth/me` `lang`) and in local storage before sign-in.
-- Layout: sidebar (navigation sections from spec 8 by role, only Dashboard live for now), top bar (menu toggle, avatar, name, role, Sign out), page header component, responsive drawer below 1024px, full RTL mirroring.
-- `/login` page: username, password, language choice; problem-details errors shown by `code`.
-- Auth: in-memory access token, HTTP interceptor (bearer + refresh on 401, single in-flight refresh), `authGuard` and `roleGuard`, logout.
-- `/dashboard` placeholder page ("Welcome, <name>").
-- `frontend/Dockerfile`: multi-stage (Node 24 build → Nginx unprivileged), Nginx config serving the SPA and proxying `/api` and `/hubs` to `api:8080`; added to `docker-compose.yml` as `web` on port 4200 → 8080.
-- Dev server proxy (`proxy.conf.json`) for `/api` and `/hubs`.
+- i18n: ngx-translate with `public/i18n/en.json` and `ar.json`; language switch sets `<html lang dir>`. Language rule (ADR-007 B): `localStorage['qms.lang']` wins when set; otherwise the app applies `user.language` (from the login or refresh response, not the `lang` claim) and stores it; before sign-in the default is `en`. The in-app switch is not saved to the user record (no endpoint; follow-up in section 10).
+- Layout: sidebar (navigation sections from spec 8 by role; only the welcome entry is live), top bar (menu toggle, avatar, name, translated role label `roles.<role>`, Sign out), page header component, responsive drawer below 1024px, full RTL mirroring.
+- `/login` page: username (`userName`), password, language choice; problem-details errors shown by `code` (`auth.invalid_credentials`, `auth.locked_out`, `request.rate_limited` with `Retry-After`, `validation.failed`, `errors.network`).
+- Auth (ADR-007): in-memory access token and `user` from `AuthResponse`; HTTP interceptor (bearer; refresh when the token expires within 30 s and once after a 401 on API calls, original request retried once; never for `/auth/login`, `/auth/refresh`, `/auth/logout`); `SessionCoordinator` (Web Lock `qms-auth-session`, `BroadcastChannel('qms-auth')`, single flight per tab); session restore by refresh at start-up; cross-tab sign-out; `authGuard` and `roleGuard`; logout.
+- `/home` welcome placeholder ("Welcome, <name>") open to every signed-in role. `/dashboard` is not built here: it is the spec 8 Supervisor dashboard (role-restricted) and belongs to the dashboard story.
+- `frontend/Dockerfile`: multi-stage (Node 24 build → Nginx unprivileged), Nginx config serving the SPA and proxying `/api/` and `/hubs/` to `api:8080` (same origin, no path or cookie rewrite), self-only Content-Security-Policy; added to `docker-compose.yml` as `web` on `127.0.0.1:${WEB_PORT:-4200}` → 8080; `WEB_PORT=4200` in `.env.example`; compose header comment updated.
+- Dev server proxy (`proxy.conf.json`) for `/api` and `/hubs` (`ws: true`), no `pathRewrite`.
+- `frontend/README.md` corrected (shell is M1 / STORY-004, not M4).
 
 **Out of scope**
-- Admin screens (M4), counter console (M5), displays (M6), SignalR client (M5/M6).
+- Admin screens (M4), counter console (M5), displays (M6), SignalR client (M5/M6), the Supervisor dashboard (`/dashboard`, spec 8).
+- Any backend change, including an endpoint to save the user's own language and forwarded headers for the rate limiter.
+- LAN and https access to the local stack; Safari on plain-http localhost.
 
 ## 4. Business rules
 1. Every user-facing text exists in English and Arabic (rules section 7).
 2. Only design tokens are used for styling (rules section 11).
 3. No external CDN calls (spec 11).
+4. Menu and route access follow the spec 8 role table: Super Admin = companies only; Company Admin = setup and reports; Branch Manager / Supervisor = branch setup and dashboard; Counter Staff = Counter console only (Spec 8). The welcome page carries no data, so it is open to every signed-in role.
+5. Language: `qms.lang` in local storage wins, else `user.language`, else `en` (ADR-007 B; interprets spec 8 "language choice" and spec 2/13 "language per user").
+6. The access token lives in memory only; the refresh token is the HttpOnly cookie; the app never decodes the token for UI data (ADR-004, ADR-007 B.5; spec 11).
+7. Only one refresh runs at a time across all tabs of the browser; a refresh 401 ends the session in all tabs; a network error or 5xx does not (ADR-007 A; ADR-004 decision 3 unchanged).
+8. The shell needs no company: Super Admin has `companyId` null, no branches, and the API has no company name, so none is shown.
 
 ## 5. Acceptance criteria
 
 **AC-1: Sign in and see the shell**
-- Given the stack runs with `docker compose up --build`
-- When the seeded Company Admin opens `http://localhost:4200`, is redirected to `/login`, and signs in
-- Then `/dashboard` shows the sidebar, the top bar with the user's initials, name and role, and "Welcome, <name>".
+- Given `.env` (copied from `.env.example`) has `ASPNETCORE_ENVIRONMENT=Development`, `JWT_SIGNING_KEY` set, and `SEED_COMPANYADMIN_USERNAME` / `SEED_COMPANYADMIN_PASSWORD` set, and the stack runs with `docker compose up --build`
+- When the seeded Company Admin of Company 1 opens `http://localhost:4200` in Chrome or Edge, is redirected to `/login`, and signs in
+- Then the app opens `/home` and shows the sidebar, the top bar with the user's initials, name (`user.name`) and the translated role label "Company Admin", and "Welcome, <name>"; the login request body was `{ "userName", "password" }` and no access token is in local or session storage.
 
 **AC-2: Wrong credentials**
 - Given the login page
-- When a wrong password is submitted
-- Then a translated error is shown under the form ("Incorrect username or password" / its Arabic text), and the password field is cleared.
+- When a wrong password is submitted for the seeded Company Admin (API answers 401 `auth.invalid_credentials`)
+- Then the text for `errors.auth.invalid_credentials` ("Incorrect username or password" / its Arabic text) is shown under the form, and the password field is cleared. The same text is shown for an unknown user name.
 
 **AC-3: Arabic and RTL**
 - Given the login page
 - When the user switches to العربية
-- Then `<html dir="rtl" lang="ar">` is set, all texts are Arabic, the font is IBM Plex Sans Arabic, and after sign-in the sidebar is on the right.
+- Then `<html dir="rtl" lang="ar">` is set, all texts are Arabic (including the role label), the font is IBM Plex Sans Arabic, `localStorage['qms.lang']` = `ar`, and after sign-in the sidebar is on the right.
 
 **AC-4: Session refresh**
-- Given a signed-in user whose access token has expired
-- When the user navigates to another page
-- Then the app refreshes the token once through the cookie and the navigation succeeds without a new sign-in.
+- Given a signed-in Company Admin whose access token has expired (or whose page was reloaded)
+- When the user navigates to another page (or the app loads)
+- Then exactly one `POST /api/v1/auth/refresh` request is sent (cookie only, no body), the original request is retried once, the navigation succeeds without a new sign-in, and the top bar still shows the same user.
 
 **AC-5: Guard and sign out**
-- Given a signed-out user
-- When `/dashboard` is opened directly
-- Then the app redirects to `/login`; and after Sign out, the back button does not show protected pages.
+- Given a signed-out user (no valid refresh cookie)
+- When `/home` is opened directly
+- Then the app redirects to `/login` with no error message (refresh 401 `auth.refresh_invalid` at start-up is the normal signed-out case); and after Sign out, the back button does not show protected pages and `POST /api/v1/auth/logout` was sent once.
 
 **AC-6: Design system enforced**
 - Given a component SCSS file containing `color: #ff0000`
@@ -73,7 +81,7 @@ Depends on STORY-003 (auth endpoints). The look is fixed by the design system (A
 **AC-7: No CDN**
 - Given the production build served by the `web` container
 - When the login page loads with network logging on
-- Then all requests go to the same origin (fonts included).
+- Then all requests go to the same origin `http://localhost:4200` (fonts included), the response carries a self-only Content-Security-Policy, and `/swagger` is not served by the web container. LAN and https access are out of scope.
 
 **AC-8: Accessibility basics**
 - Given the login page and the shell
@@ -85,10 +93,59 @@ Depends on STORY-003 (auth endpoints). The look is fixed by the design system (A
 - When CI runs
 - Then `npm ci`, lint, tests and the production build pass.
 
+**AC-10: Account locked and rate limited**
+- Given the seeded Company Admin of Company 1
+- When a wrong password is submitted 5 times in a row and the account is then locked
+- Then the sixth attempt (API 401 `auth.locked_out`) shows the translated `errors.auth.locked_out` text (en and ar) and not the invalid-credentials text.
+- And Given more than 10 login requests in 60 s from the same address, When another sign-in is submitted, Then the API answers 429 `request.rate_limited` and the form shows the translated text with the minutes from the `Retry-After` header (rounded up; a generic "try again later" text when the header is missing). Note: the local stack shares one client address through Nginx, so QA may reach this limit while testing in bulk (known, section 7).
+
+**AC-11: Multi-tab refresh (N2)**
+- Given the seeded Company Admin is signed in on `http://localhost:4200` in two tabs of the same Chrome or Edge profile, and both access tokens have expired (token lifetime 900 s, or the browser was restarted with both tabs restored, so both tabs start by refreshing)
+- When the user navigates to another page in both tabs at the same moment (or reloads both tabs at once)
+- Then both tabs stay signed in on the same user, the network log shows exactly one `POST /api/v1/auth/refresh` reaching the server for that moment, the other tab uses the session broadcast on `BroadcastChannel('qms-auth')` (or, if it heard no broadcast yet, runs its own refresh only after the first one finished, with the rotated cookie), and the API never returns `auth.refresh_reused`.
+
+**AC-12: Cross-tab sign-out**
+- Given the seeded Company Admin is signed in in two tabs
+- When the user clicks Sign out in tab 1
+- Then tab 1 shows `/login`, tab 2 also navigates to `/login` without any action and without an error message, and a later `POST /api/v1/auth/refresh` from either tab is not needed to know it (no access token remains in either tab's memory).
+
+**AC-13: Session restore after reload**
+- Given the seeded Company Admin is signed in at `/home` and the refresh cookie `qms_refresh` is present
+- When the user reloads the page (F5)
+- Then before the first route resolves the app sends one `POST /api/v1/auth/refresh`, stays on `/home` with the same name and role label, and shows no login page flash.
+
+**AC-14: Super Admin shell**
+- Given `.env` has `SEED_SUPERADMIN_USERNAME` and `SEED_SUPERADMIN_PASSWORD` set (`companyId` of this user is null, no branches)
+- When the seeded Super Admin signs in at `http://localhost:4200`
+- Then `/home` shows the shell with "Welcome, <name>", the role label "Super Admin", no company name or branch selector, and only the Super Admin navigation (Companies, as per spec 8; entries not yet built stay hidden); no Company Admin, Branch Manager or Counter console entries are shown.
+
+**AC-15: Refresh rejected ends the session everywhere**
+- Given the seeded Company Admin is signed in in two tabs and the refresh token has been revoked or expired (API answers 401 `auth.refresh_invalid`, or `auth.refresh_reused`)
+- When tab 1 needs a refresh (token expired, or the page is reloaded)
+- Then tab 1 clears its memory and goes to `/login`, tab 2 receives `signed-out` and goes to `/login`; for `auth.refresh_reused` the login page shows the translated `errors.auth.refresh_reused` message, for `auth.refresh_invalid` it shows no message.
+
+**AC-16: Network error or server error during refresh keeps the session**
+- Given the seeded Company Admin is signed in and the access token has expired
+- When the user navigates to another page while the refresh fails with a network error (status 0, for example the `api` container is stopped) or a 5xx
+- Then the user is not signed out and stays on the current page, the translated `errors.network` (or `errors.server.unexpected_error` with the `correlationId` on a 500) is shown for the failed action, and after the API is back the next navigation refreshes once and succeeds without a new sign-in.
+
+**AC-17: Language precedence**
+- Given the seeded Company Admin has `language` = `en` in the database and `localStorage['qms.lang']` is not set
+- When the user signs in, switches the shell to العربية, reloads the page, and signs out and in again
+- Then after the first sign-in the UI is English and `qms.lang` = `en`; after the switch `qms.lang` = `ar` and the UI stays Arabic after the reload and the next sign-in (local storage wins); the switch sends no request to the server; with `qms.lang` cleared, the next sign-in applies `user.language` again.
+
+**AC-18: Role-based routes**
+- Given a signed-in user whose role is not allowed by a route's `roleGuard` (spec 8 role table)
+- When the user opens that route
+- Then the app redirects to `/home` and the menu shows no entry for it; any signed-in role can open `/home`, and `/dashboard` is not a route of this story.
+
 ## 6. UI / UX
 - Follow `docs/design/DESIGN_SYSTEM.md` sections 1, 5 and 6, and `docs/design/preview.html` (shell and form).
 - Login: centred white card (max 420px) on `neutral.bg`, logo + "QFlow", fields, primary "Sign in" button full width, language switch at the top end.
-- Translation keys: `auth.*`, `shell.*`, `nav.*`, `errors.<code>`.
+- Translation keys: `auth.*`, `shell.*`, `nav.*`, `roles.<role>` (`SuperAdmin`, `CompanyAdmin`, `BranchManager` = "Branch Manager / Supervisor", `CounterStaff`), `errors.<code>`.
+- Error texts (en + ar, never raw codes): `auth.invalid_credentials`, `auth.locked_out` (account locked, try again later), `request.rate_limited` ("Too many attempts. Try again in {minutes} minutes."), `validation.failed` (field errors under the matching field, keyed `userName` / `password`), `auth.refresh_reused` (session ended, sign in again), `auth.unauthorized`, `auth.forbidden`, `request.invalid`, `server.unexpected_error` (shows `correlationId`), `errors.network` ("Cannot reach the server"), generic fallback for unknown codes. Exact English wording is the frontend developer's; Arabic wording needs review.
+- Top bar: initials from `user.name`, name, role label `roles.<role>`; no company name (not provided by the API).
+- Welcome page route is `/home`; the login page switch is at the top end; the language buttons read "English" and "العربية".
 
 ## 7. Data and API impact
 Original (2026-11-07): uses `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `GET /auth/me` (STORY-003); no schema change.
@@ -213,10 +270,10 @@ Original (2026-11-07): uses `POST /auth/login`, `/auth/refresh`, `/auth/logout`,
 | Stage | Applies? | Task | Notes |
 |---|---|---|---|
 | 0 Architect | Yes | — | ADR-001, ADR-004 (token in memory, cookie; cross-reference to ADR-007 added), ADR-006 (one origin via Nginx), **ADR-007** (multi-tab refresh, language precedence; amendment 2026-11-08) |
-| 1 BA | Yes | — | Amendment: apply the corrections in section 7 to sections 3, 5 and 6, and update TASK-005 (contract, ADR-007, home route, compose `web`, tests) |
+| 1 BA | Yes | — (TASK-005 updated) | Amendment (done 2026-11-08): apply the corrections in section 7 to sections 3, 5 and 6, and update TASK-005 (contract, ADR-007, home route, compose `web`, tests) |
 | 2 Database | N/A | — | No schema change |
 | 3 Backend | N/A | — | The STORY-003 endpoints cover everything this story consumes (checked against the code on main). Saving the user's own language needs a new endpoint; that is a follow-up, not in scope (ADR-007 B.4). Forwarded headers for the rate limiter belong to review S1 / the hosting story |
-| 4 Frontend | Yes | TASK-005 | Also owns `frontend/**`, `docker-compose.yml` (`web` service) and `.env.example` (`WEB_PORT`) for this story |
+| 4 Frontend | Yes | [TASK-005](../tasks/TASK-005-angular-shell.md) (AC-1 to AC-18) | Also owns `frontend/**`, `docker-compose.yml` (`web` service) and `.env.example` (`WEB_PORT`) for this story |
 | 5 Android | N/A | — | No dispenser change |
 | 6 Code review | Yes | — | Design system and accessibility; auth: no token in storage, interceptor exclusions, `SessionCoordinator` lock and broadcast per ADR-007, Nginx same-origin (no cookie or path rewrite), CSP |
 | 7 QA | Yes | — | EN + AR, RTL; multi-tab refresh and cross-tab sign-out; Super Admin shell; invalid-credentials, locked-out and 429 messages; Chrome or Edge on `http://localhost:4200` |
@@ -227,6 +284,12 @@ Original (2026-11-07): uses `POST /auth/login`, `/auth/refresh`, `/auth/logout`,
 
 ## 10. Open questions
 - [ ] Logo: "QFlow" wordmark with a "Q" tile (as in `preview.html`) until the bank supplies its logo.
+- [ ] Arabic wording of the new error texts and role labels needs a native review (non-blocking).
+
+Follow-ups (not in this story, no backend scope added):
+- Endpoint for a user to save their own language (for example `PUT /api/v1/auth/me/language` or a profile endpoint), so the shell switch can persist per user (ADR-007 B.4). Target: STORY-011 (users) or a later "my profile" story; add to `docs/work/BACKLOG.md`.
+- Forwarded headers for the rate limiter (review S1, hosting story), so the local stack no longer shares one login limit.
+- Supervisor dashboard at `/dashboard` (spec 8) belongs to the dashboard story (M8).
 
 ## 11. Stage log
 
@@ -262,3 +325,27 @@ Notes for next stage:
 Open questions:
 - Follow-up, not blocking: an endpoint for a user to save their own language (STORY-011 or later). Add it to the backlog.
 - The local rate limit is shared through the proxy (review S1, hosting story). Known, not blocking.
+
+### Stage 1 — Analysis (scope amendment) — business-analyst — 2026-11-08
+Result: Done
+Changed: this story (status, sections 3, 4, 5, 6, 10, this log), docs/work/tasks/TASK-005-angular-shell.md
+Notes for next stage:
+- Stages 2 and 3 are N/A per the stage plan; the orchestrator logs their N/A handoffs. Next is stage 4 (TASK-005), which now covers AC-1 to AC-18.
+- Welcome route is `/home` (open to every signed-in role); `/dashboard` is left to the dashboard story (spec 8). AC-1 and AC-5 changed accordingly.
+- AC-1 to AC-9 keep their IDs. Changed: AC-1, AC-2, AC-3, AC-4, AC-5, AC-7. Unchanged: AC-6, AC-8, AC-9. New: AC-10 (locked out, 429), AC-11 (multi-tab refresh), AC-12 (cross-tab sign-out), AC-13 (restore after reload), AC-14 (Super Admin shell), AC-15 (refresh 401 ends session everywhere), AC-16 (network/5xx keeps session), AC-17 (language precedence), AC-18 (role-based routes).
+- AC-14 needs `SEED_SUPERADMIN_*` in `.env`; AC-1 needs `SEED_COMPANYADMIN_*`, `ASPNETCORE_ENVIRONMENT=Development` and `JWT_SIGNING_KEY`. Test on Chrome or Edge at `http://localhost:4200`.
+- The language-save endpoint is a follow-up in section 10 (STORY-011 or later); no backend scope added.
+Open questions: none blocking (Arabic wording review, logo)
+
+### Stage 2 — Database — database-architect — 2026-11-08
+Result: N/A — No schema change (stage plan)
+Changed: none
+Notes for next stage: none
+Open questions: none
+
+### Stage 3 — Backend — backend-developer — 2026-11-08
+Result: N/A — STORY-003 already provides every endpoint the shell consumes (stage plan)
+Changed: none
+Notes for next stage: Start stage 4 with TASK-005. Language-save endpoint added to BACKLOG (STORY-011).
+Open questions: none
+

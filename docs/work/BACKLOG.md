@@ -35,7 +35,7 @@ Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an
 | STORY-008 | Branch service mapping grid API (4.2) |
 | STORY-009 | Zones, counters and counter service mapping (4.3), validation chain |
 | STORY-010 | Service flows (Auto / Ask / None) |
-| STORY-011 | Users, roles, branch and counter assignment |
+| STORY-011 | Users, roles, branch and counter assignment (+ STORY-003 follow-ups: password policy, user-table company scope, assignment 23503 mapping; STORY-004 follow-up: endpoint to save a user's language) |
 | STORY-012 | Devices: create, registration code, dispenser settings (Show VIP default yes), zone + service mapping (4.4) |
 | STORY-013 | Ticket templates (incl. fee line) |
 
