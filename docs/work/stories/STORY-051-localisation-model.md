@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-051 |
-| Status | QA |
+| Status | Done |
 | Priority | Must |
 | Milestone | M2 |
 | Spec sections | 2 (Web i18n, Display voice), 7 (dispenser languages), 8 (`/login` language choice, `/admin/languages`), 9 (translated text pattern, `language`, `company`, all former `*_en` / `*_ar` columns, user `language`, `dispenser_setting.languages`), 10 (`/languages`, `/company-languages`), 11 (Languages), 12 (M2), 13 (localisation resolved) |
@@ -516,3 +516,11 @@ Notes for next stage (QA):
 - STORY-004 AC-3 and AC-17 are re-based by AC-38 (Arabic only when offered).
 - `/languages` answers an invalid or expired token as anonymous (200). This was accepted in review.
 Open questions: none (the two stage 3 deviations are accepted: `IRequestLanguage.GetCurrentAsync(ct)` is async, and a 200 PUT with an ignored `defaultLanguage` is audited, as ADR-008 Amendment 3 says).
+
+### Stage 7 — QA — qa-tester — 2026-11-08
+Result: Done
+AC results: AC-1 Pass, AC-2 Pass, AC-3 Pass, AC-4 Pass, AC-5 Pass, AC-6 Pass, AC-7 Pass, AC-8 Pass, AC-9 Pass, AC-10 Pass, AC-11 Pass, AC-12 Pass, AC-13 Pass, AC-14 Pass, AC-15 Pass, AC-16 Pass, AC-17 Pass, AC-18 Pass, AC-19 Pass (see observation 1), AC-20 Pass, AC-21 Pass, AC-22 Pass, AC-23 Pass, AC-24 Pass, AC-25 Pass, AC-26 Pass, AC-27 Pass, AC-28 Pass, AC-29 Pass, AC-30 Pass, AC-31 Pass, AC-32 Pass, AC-33 Pass, AC-34 Pass, AC-35 Pass, AC-36 Pass, AC-37 Pass, AC-38 Pass, AC-39 Pass, AC-40 Pass
+Bugs: none
+Evidence: [STORY-051-tests.md](STORY-051-tests.md) (40 test cases, live and test evidence per AC). Automated: backend 489 passed / 0 failed / 0 skipped; web lint clean, 115 tests passed, build green. Live: migration on a previous-schema database with Down and Up (AC-3, AC-4, AC-6, AC-7, AC-10), seed and constraints by psql, API by curl including the permission matrix and cross-company checks, web by Playwright on the phase 1 stack and the ar-enabled stack (switch, RTL, `Accept-Language`, precedence, re-read after sign-in, fallback on disable, `/languages` failure) with the STORY-004 smoke (sign-in, wrong credentials, reload restore, two tabs one refresh, cross-tab sign-out).
+Observations (not defects): AC-19 wording says "no audit row in any case" but the ignored-`defaultLanguage` body is a valid no-op 200, which AC-21/AC-40 audit (review accepted this stage 3 deviation); the anonymous `/languages` call is retried once on failure; the device notifier (AC-17) is verified by test only (no-op in M2). Review follow-ups S1 to S4 and N1 to N6 remain follow-up tasks.
+Manual device checks pending: none (no Android or display work).
