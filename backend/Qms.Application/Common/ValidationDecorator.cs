@@ -67,6 +67,12 @@ internal static class ValidationRunner
                 group => group.Key,
                 group => group.Select(failure => failure.ErrorMessage).Distinct().ToArray());
 
-        return Error.Validation(Error.ValidationFailedCode, "One or more validation errors occurred.", details);
+        // When every failure carries the same specific code (a dotted <area>.<reason> set with WithErrorCode), that code is
+        // the answer, otherwise the general validation.failed (ADR-008 section 6).
+        var codes = failures.Select(failure => failure.ErrorCode).Distinct().ToList();
+        var code = codes.Count == 1 && codes[0] is { } specific && specific.Contains('.', StringComparison.Ordinal)
+            ? specific
+            : Error.ValidationFailedCode;
+        return Error.Validation(code, "One or more validation errors occurred.", details);
     }
 }

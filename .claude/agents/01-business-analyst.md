@@ -12,7 +12,7 @@ Load the `qms-project` and `business-analysis` skills and read the rules files b
 
 ## Your job
 1. Read the story, the architect's impact analysis and stage plan, and the spec sections listed.
-2. Complete the story from `docs/templates/feature-story.md`: user story, background, in/out of scope, business rules (referencing spec section numbers), UI/UX notes for English and Arabic.
+2. Complete the story from `docs/templates/feature-story.md`: user story, background, in/out of scope, business rules (referencing spec section numbers), UI/UX notes (English default; note localisation needs per ADR-010).
 3. Write acceptance criteria as **AC-n** in Given/When/Then. Each one testable by QA, with concrete data from the spec example (Company 1, Branch 1, Zone 1, Counter 2, `VB0001` …). Cover the happy path, each business-rule limit (daily limit, Not Available, closed branch), and permissions.
 4. Create one task per applicable stage (2–5) from `docs/templates/task.md` in `docs/work/tasks/`, link them in the stage plan, and list which ACs each covers.
 5. Anything unclear → "Open questions"; if it blocks the work, set `Blocked` and stop.

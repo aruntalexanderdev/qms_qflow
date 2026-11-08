@@ -3,6 +3,7 @@ using Npgsql;
 using Qms.Application.Common;
 using Qms.Infrastructure.Persistence;
 using Qms.Infrastructure.Persistence.Seed;
+using Qms.Tests.Support;
 using Testcontainers.PostgreSql;
 
 namespace Qms.Tests.Persistence;
@@ -68,6 +69,40 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         var name = "t_" + Guid.NewGuid().ToString("N");
         await Execute("postgres", $"CREATE DATABASE {name} TEMPLATE {(seeded ? SeededTemplate : EmptyTemplate)}");
+        return ConnectionStringFor(name);
+    }
+
+    private readonly SemaphoreSlim _setupTemplateLock = new(1, 1);
+    private string? _setupTemplate;
+
+    /// <summary>
+    /// A new database cloned from a template that holds the seed, the roles, the configured admin users and the
+    /// <see cref="SetupTestData"/> users and rows (built once per run, so no test pays for password hashing or setup inserts).
+    /// </summary>
+    public async Task<string> NewSetupDatabaseAsync()
+    {
+        await _setupTemplateLock.WaitAsync();
+        try
+        {
+            if (_setupTemplate is null)
+            {
+                var source = await NewDatabaseAsync(seeded: true);
+                using (var host = AuthHost.StartOn(source))
+                {
+                    await SetupTestData.EnsureAsync(host);
+                }
+
+                NpgsqlConnection.ClearAllPools();
+                _setupTemplate = new NpgsqlConnectionStringBuilder(source).Database!;
+            }
+        }
+        finally
+        {
+            _setupTemplateLock.Release();
+        }
+
+        var name = "t_" + Guid.NewGuid().ToString("N");
+        await Execute("postgres", $"CREATE DATABASE {name} TEMPLATE {_setupTemplate}");
         return ConnectionStringFor(name);
     }
 

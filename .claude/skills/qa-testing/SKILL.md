@@ -24,7 +24,7 @@ Result: Pass / Fail (BUG-###) / Blocked (<reason>)
 - **Counter actions:** Recall limit, Skip → NoShow/Hold per setting, Transfer keeps number and priority, flow Auto/Ask.
 - **Permissions:** each role can/can't; other branch's data returns 403.
 - **Real-time:** console, display, dashboard update within 1 s; reconnect restores state.
-- **Bilingual:** every touched screen in Arabic (RTL) and English; ticket text; no missing translation keys.
+- **Localisation:** every touched screen in English (default); in each other enabled language incl. RTL when one is enabled; ticket text per language; no missing keys in `en.json`; untranslated data falls back to English.
 - **Privacy:** phone masked; not in logs.
 - **Resilience:** dispenser out of service when offline or printer error; no token lost.
 

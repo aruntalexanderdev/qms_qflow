@@ -1,0 +1,412 @@
+# STORY-005 — Service types and priority types CRUD (incl. paid flag and fee) and the shared setup-API plumbing
+
+| Field | Value |
+|---|---|
+| ID | STORY-005 |
+| Status | Done |
+| Priority | Must |
+| Milestone | M2 |
+| Spec sections | 4 (entities), 4.1 (priority types table), 5.1 step 2, 6 (Paid priority), 8 (Company Admin; `/admin/service-types`, `/admin/priority-types`), 9 (`service_type`, `priority_type`, `audit_log`), 10 (`/service-types`, `/priority-types`), 11 (Audit, Security), 12 (M2) |
+| Requested by | Alexa (product owner) |
+| Created | 2026-11-08 |
+
+## 1. User story
+As a **Company Admin**, I want **to create, edit, deactivate and delete my company's service types and priority types (including whether a priority is paid and its fee)**, so that **the mapping levels and the dispenser can offer them**.
+
+## 2. Background
+First story of M2 (spec §12: "CRUD and mapping endpoints … validation chain from section 4"). Spec §5.1 step 2 is "Service types and priority types (paid, fee)". The tables, check constraints and unique prefixes exist since STORY-002; no endpoint writes them yet.
+
+This story also builds the plumbing every M2 story uses, decided in **ADR-008** (setup API conventions): `IQmsDbContext` port, row-version concurrency (`version`), `[Audited]` decorator with transaction, PostgreSQL error catalog (23001/23503/23505/23514), enums as strings, role policies, `IBranchScope` (first implementation of ADR-003 decision 4), `IDeviceConfigNotifier` no-op, and the integration-test data set (Company 2, Branch 2, role users). The plumbing comes first so STORY-006 to STORY-013 can run without re-deciding it.
+
+## 3. Scope
+**In scope**
+- Company Admin API for service types and priority types: list, get, create, update (including deactivate / reactivate), delete (spec 8, 10; ADR-008 §2).
+- Priority type paid flag and fee (spec 4.1, 6 "Paid priority"); the company currency is returned read-only (`company.currency_code`).
+- Validation, optimistic concurrency (`version`), in-use protection, audit entry for every write.
+- Role matrix and company isolation for these endpoints (spec 8, 11).
+- Shared M2 plumbing from ADR-008, proven by tests (AC-28 to AC-37): `IQmsDbContext`, `[Audited]` decorator, `IBranchScope`, Postgres error catalog, enums as strings, `IDeviceConfigNotifier` (no-op), `xmin` row version, shared integration-test data.
+
+**Out of scope**
+- Admin screens `/admin/service-types`, `/admin/priority-types` (STORY-023, M4); Arabic/English labels of error codes (M4).
+- Company service mapping (STORY-006), branch fee overrides `branch_priority_fee` (STORY-007), who uses a type in queues (M3).
+- A real `IBranchScope` consumer (STORY-007 onwards); SignalR `DeviceConfigChanged` (STORY-021); companies API (see section 10).
+- Phase 2 items (SMS, WhatsApp, PhoneOnly, feedback).
+- No new tables, columns or seed rows.
+
+## 4. Business rules
+| # | Rule | Source |
+|---|---|---|
+| BR-1 (amended 2026-11-08) | A service type has a `name` (English, required), optional `translations`, a one-letter prefix unique per company, optional target minutes, sort order, active flag. | Spec 9 `service_type`; 8 screens; ADR-010 |
+| BR-2 (amended 2026-11-08) | A priority type has a `name` (English, required), optional `translations`, a one-letter prefix unique per company, priority level (1 = highest), paid flag, fee, active flag. | Spec 4.1, 9 `priority_type`; ADR-010 |
+| BR-3 | Prefix is exactly one letter A to Z after trimming; no silent upper-casing (`h` is rejected). Token number format is `[Priority prefix][Service prefix][4-digit sequence]`. | Spec 8, 9; rules 2; ADR-008 §8 |
+| BR-4 (amended 2026-11-08) | `name` (English, the default language) is required, trimmed, 1 to 200 characters. `translations` is optional: an object keyed by language code. A null, empty or whitespace value means "no translation" and is dropped (not an error); a non-empty value is trimmed and at most 200 characters. Phase 1 ships English only; as a temporary storage mapping until STORY-051 the key `ar` is accepted (`name` is stored in `name_en`, `translations.ar` in `name_ar`). Any other key (for example `fr`) is 400 `translation.language_not_enabled`; the key `en` is 400 `translation.default_language_key`. Errors are keyed `translations.<code>`. The Arabic name is no longer required. | ADR-010 §5, §7; ADR-008 §8 (amended); rules 7 |
+| BR-5 | Target minutes, when given, is greater than 0 (`ck_service_type_target_minutes`). Sort order is 0 or more. | Spec 9; ADR-008 §8 |
+| BR-6 | Priority level is 1 or more. Two priority types may share a level (the spec does not forbid it). | Spec 4.1, 9 |
+| BR-7 | A paid priority type needs a fee of 0 to 9 999 999 999.99 with at most 2 decimals. An unpaid priority type has no fee (the request is rejected if it sends one). | Spec 9 (`fee_amount` required when `is_paid`); 6 Paid priority; ADR-008 §8 |
+| BR-8 | Currency comes from `company.currency_code` (AED for Company 1); it is returned, never written, by these endpoints. | Spec 6; qms-project VIP fee |
+| BR-9 | Deactivate through `PUT isActive=false`. Delete only while nothing references the row (company mapping, flows, dispenser mapping, tokens for service types; company mapping, branch fees, tokens for priority types). Otherwise 409 with `<entity>.in_use`. | ADR-008 §7 |
+| BR-10 | Inactive types stay valid in existing mapping rows; new mapping rows cannot use them (enforced in STORY-006/008). | ADR-008 §7 |
+| BR-11 | `PUT` carries the `version` that was read; a mismatch is 409 `request.conflict`. | ADR-008 §5 |
+| BR-12 (amended 2026-11-08) | Endpoints are protected by permissions `service-types.view|create|edit|delete` and `priority-types.view|create|edit|delete` (GET = view, POST = create, PUT = edit, DELETE = delete). Until STORY-048 they are resolved from a static map that reproduces the role matrix: Company Admin has all; Branch Manager has `view` only; Counter Staff and Super Admin have none. A caller without the permission gets 403 `auth.forbidden`. A row of another company is 404 (same answer as unknown id). | Spec 8; ADR-009; ADR-008 Amendment 1; ADR-003 |
+| BR-13 | Every create, update and delete writes one `audit_log` row in the same transaction; failed commands write none. | Spec 11; ADR-008 §11 |
+| BR-14 | `companyId` is never taken from a request body; it comes from the token. | ADR-008 §3 |
+| BR-15 | Branch scope: Company Admin passes every branch of its company; a Branch Manager passes only assigned branches (403 otherwise); unknown or other-company branch is 404. | ADR-003 decision 4; ADR-008 §10 |
+
+## 5. Acceptance criteria
+Test users (`SetupTestData`, ADR-008 §15): CA-C1 (Company Admin, Company 1), CA-C2 (Company Admin, Company 2), BM-B1 (Branch Manager, Branch 1), BM-B2 (Branch Manager, Branch 2 of Company 1), CS (Counter Staff, Counter 1), SA (Super Admin). Seed: Company 1 Services 1 to 6 with prefixes A, B, C, D, F, G; Normal N level 2 free; VIP V level 1 paid 50.00 AED. Company 2 has its own service type prefix A ("Service X") and priority type N.
+
+### Service types
+**AC-1: List service types**
+- Given the seeded data, When CA-C1 calls `GET /api/v1/service-types`, Then the response is 200 with six items with prefixes A, B, C, D, F, G sorted by `sortOrder` then `name`; each item has `id`, `name`, `translations` (an object), `prefix`, `targetMinutes`, `sortOrder`, `isActive`, `version` (non-empty string); and no Company 2 row appears. (amended 2026-11-08)
+
+**AC-2: Filter by active flag**
+- Given Service 6 (G) is deactivated, When CA-C1 calls `GET /api/v1/service-types?isActive=false`, Then only Service 6 is returned; with `?isActive=true` the other five are returned; with no filter all six are returned.
+
+**AC-3: Get one service type**
+- Given Service 2 (prefix B), When CA-C1 calls `GET /api/v1/service-types/{Service 2 id}`, Then 200 with its DTO, `prefix` is `B`, `name` is the stored English text and `translations.ar` is the stored Arabic text unchanged. (amended 2026-11-08)
+
+**AC-4: Create a service type**
+- Given Company 1 has no prefix H, When CA-C1 calls `POST /api/v1/service-types` with `name` "Cards", `translations` `{ "ar": "البطاقات" }`, `prefix` "H", `targetMinutes` 10, `sortOrder` 7, `isActive` true (and a stray `companyId` of Company 2 in the body), Then the response is 201 with a `Location` header to `/api/v1/service-types/{id}` and the DTO (`translations` `{ "ar": "البطاقات" }`); the row belongs to Company 1; and `GET` of that id returns the same data. A body with `name` "Cards" and no `translations` (or `translations` `{}`, or `{ "ar": "" }`) is also 201 and returns `translations` `{}`. The `ar` key is accepted as a temporary mapping until STORY-051. (amended 2026-11-08)
+
+**AC-5: Service type validation**
+- Given CA-C1, When `POST /api/v1/service-types` is sent with each of these bodies: (a) `name` empty, (b) `name` missing, (c) `name` of 201 characters, (d) `prefix` "h", (e) `prefix` "HB", (f) `prefix` "1", (g) `prefix` empty or spaces, (h) `targetMinutes` 0, (i) `targetMinutes` -5, (j) `sortOrder` -1, (k) `translations` `{ "fr": "Cartes" }`, (l) `translations` `{ "en": "Cards" }`, (m) `translations` `{ "ar": <201 characters> }`, Then each response is 400 with `errors` naming the failing field (`name`, `prefix`, `targetMinutes`, `sortOrder`, `translations.ar`) and no row and no audit row are created. Cases (a) to (j) and (m) return `validation.failed`; (k) returns `translation.language_not_enabled` with the error keyed `translations.fr`; (l) returns `translation.default_language_key` with the error keyed `translations.en`. `targetMinutes` null is accepted. A prefix " H " is accepted and stored as `H`. A missing Arabic translation is not an error. (amended 2026-11-08)
+
+**AC-6: Service type prefix unique per company**
+- Given Company 1 has Service 1 with prefix A, When CA-C1 creates a service type with prefix A, Then 409 `service_type.prefix_taken`; the same happens on `PUT` of Service 2 changing its prefix to A. When CA-C2 creates a service type with prefix B in Company 2 (Company 2's "Service X" uses A; B is free there), Then 201: prefixes are independent per company, and CA-C2 creating prefix A is 409. When two concurrent creates of prefix H race, Then exactly one gets 201 and the other 409 `service_type.prefix_taken` (database unique index as backstop).
+
+**AC-7: Update a service type**
+- Given Service 3 (prefix C) read with `version` V1, When CA-C1 calls `PUT /api/v1/service-types/{id}` with all editable fields (`name` "Loans", `translations` `{ "ar": "القروض" }`, `prefix` C, `targetMinutes` 20, `sortOrder` 3, `isActive` true) and `version` V1, Then 200 with the new DTO and a `version` different from V1; a following `GET` shows the change. `PUT` replaces all fields (no partial update); a `PUT` with `translations` `{}` removes the Arabic text (`translations` `{}` afterwards). The same invalid-translation bodies as AC-5 (k) and (l) give the same 400 codes on `PUT`. (amended 2026-11-08)
+
+**AC-8: Stale or missing version**
+- Given two admin sessions both read Service 3 with version V1, When the first `PUT` succeeds and the second `PUT` sends V1, Then the second response is 409 `request.conflict` and the row keeps the first change. When `version` is missing or empty, Then 400 `validation.failed` with an error on `version`.
+
+**AC-9: Deactivate and reactivate a service type**
+- Given Service 6 (G) is active, When CA-C1 sends `PUT` with `isActive` false and its version, Then 200 and the DTO has `isActive` false; the row still appears in the list; a later `PUT` with `isActive` true makes it active again. Deactivation is allowed even while the type is in the company mapping.
+
+**AC-10: Delete an unused service type**
+- Given the service type "Cards" (H) from AC-4 is referenced nowhere, When CA-C1 calls `DELETE /api/v1/service-types/{id}`, Then 204, the row is gone (`GET` returns 404 `service_type.not_found`) and an audit row `service_type` / `delete` exists. (Amended 2026-11-08: the "Cards" row is the one created with `name` / `translations` in AC-4.)
+
+**AC-11: Delete a service type in use**
+- Given Service 1 (A) is in the company service mapping (and has tokens, flows or a dispenser mapping in other cases), When CA-C1 calls `DELETE` on it, Then 409 `service_type.in_use`, the row remains, and no audit row is written. The same 409 is returned when the reference is only a dispenser mapping row, only a flow row, or only a token (one test per reference kind). If the pre-check is bypassed, the database foreign key error is mapped to 409 with a code (default `resource.in_use`).
+
+**AC-12: Not found and cross-company (service types)**
+- Given a Company 1 service type id, When CA-C2 calls `GET`, `PUT` or `DELETE` on it, Then each response is 404 `service_type.not_found` (identical to a random unknown GUID), nothing changes, and CA-C2's list contains only Company 2 rows. The 404 comes before any body validation outcome that would reveal the row (a `PUT` with a valid body, `name` and `translations` as in AC-7, is used). (amended 2026-11-08)
+
+### Priority types
+**AC-13: List priority types**
+- Given the seeded data, When CA-C1 calls `GET /api/v1/priority-types`, Then 200 with VIP first (`prefix` V, `priorityLevel` 1, `isPaid` true, `feeAmount` 50.00) and Normal second (`prefix` N, `priorityLevel` 2, `isPaid` false, `feeAmount` null), each with `currencyCode` "AED", `isActive`, `version`; sorted by `priorityLevel` then `prefix`; `?isActive=` filters as in AC-2; no Company 2 rows.
+
+**AC-14: Get one priority type**
+- Given VIP, When CA-C1 calls `GET /api/v1/priority-types/{VIP id}`, Then 200 with the DTO of AC-13; `feeAmount` is the JSON number 50.00 (not a string).
+
+**AC-15: Create an unpaid priority type**
+- Given Company 1 has no prefix S, When CA-C1 calls `POST /api/v1/priority-types` with `name` "Senior", `translations` `{ "ar": "كبار السن" }`, `prefix` "S", `priorityLevel` 1, `isPaid` false, no `feeAmount`, `isActive` true, Then 201 with `Location`, `translations` `{ "ar": "كبار السن" }`, `feeAmount` null, `currencyCode` "AED". A body without `translations` is also 201 with `translations` `{}`. A body with `isPaid` false and `feeAmount` 0 is rejected (AC-17). (amended 2026-11-08)
+
+**AC-16: Create a paid priority type**
+- Given Company 1 has no prefix P, When CA-C1 posts `name` "Premium" with `translations` `{ "ar": "مميز" }`, prefix "P", `priorityLevel` 1, `isPaid` true, `feeAmount` 75.50, Then 201 and the DTO shows `isPaid` true and `feeAmount` 75.50. `feeAmount` 0 with `isPaid` true is accepted (free-of-charge paid type, `fee_amount >= 0`).
+
+**AC-17: Priority type validation**
+- Given CA-C1, When `POST /api/v1/priority-types` is sent with: (a) `name` empty, (b) `name` missing, (c) `prefix` "p", "PV", "7" or empty, (d) `priorityLevel` 0, (e) `priorityLevel` -1, (f) `isPaid` true and no `feeAmount`, (g) `isPaid` true and `feeAmount` 12.345, (h) `isPaid` true and `feeAmount` -1, (i) `isPaid` false and `feeAmount` 10, (j) `isPaid` true and `feeAmount` 10000000000, (k) `translations` `{ "fr": "Senior" }`, (l) `translations` `{ "en": "Senior" }`, Then each response is 400 with `errors` on the failing field (`name`, `prefix`, `priorityLevel`, `feeAmount`, `translations.<code>`) and nothing is saved. Cases (a) to (j) return `validation.failed`; (k) returns `translation.language_not_enabled` (error keyed `translations.fr`); (l) returns `translation.default_language_key` (error keyed `translations.en`). A missing Arabic translation is not an error. (amended 2026-11-08) The validator rejects (f) to (i) before the database check constraints are reached.
+
+**AC-18: Priority type prefix unique per company**
+- Given Company 1 has Normal with prefix N and VIP with prefix V, When CA-C1 creates a priority type with prefix V, or `PUT`s Normal to prefix V, Then 409 `priority_type.prefix_taken`. A priority type and a service type may share a letter (prefix V on a priority type and a service type V are independent). CA-C2 may create prefix V in Company 2.
+
+**AC-19: Update a priority type and its fee**
+- Given VIP with version V1, When CA-C1 `PUT`s VIP with `isPaid` true, `feeAmount` 60.00 and `version` V1 (other fields unchanged), Then 200, the DTO shows 60.00 and a new `version`, and `GET` returns 60.00. Tokens already issued keep the fee they were issued with (no change to token rows in this story).
+
+**AC-20: Change a priority type from paid to unpaid**
+- Given VIP is paid at 50.00, When CA-C1 `PUT`s `isPaid` false with `feeAmount` null, Then 200 with `feeAmount` null. When `isPaid` false is sent with `feeAmount` 50.00, Then 400 (AC-17 i). Existing `branch_priority_fee` rows for VIP are not deleted (interpretation, section 10). When `isPaid` is changed back to true with a fee, Then 200.
+
+**AC-21: Stale or missing version (priority types)**
+- Given two sessions read Normal with version V1, When the first `PUT` succeeds and the second sends V1, Then 409 `request.conflict`. A missing `version` is 400 `validation.failed`.
+
+**AC-22: Deactivate a priority type**
+- Given Normal is active, When CA-C1 sends `PUT` with `isActive` false, Then 200 with `isActive` false, the row stays in the list and `?isActive=false` returns it.
+
+**AC-23: Delete a priority type**
+- Given the "Senior" type from AC-15 is unused, When CA-C1 calls `DELETE`, Then 204 and an audit row `priority_type` / `delete`. Given VIP is in the company mapping (Services 2 and 3), When CA-C1 calls `DELETE` on VIP, Then 409 `priority_type.in_use`, the row stays and no audit row is written. One test per reference kind (company mapping, branch fee, token).
+
+**AC-24: Not found and cross-company (priority types)**
+- Given a Company 1 priority type id, When CA-C2 calls `GET`, `PUT` or `DELETE`, Then each is 404 `priority_type.not_found`; the Company 1 row is unchanged; CA-C2's list shows only Company 2 rows.
+
+### Roles and access
+**AC-25: Permission matrix (amended 2026-11-08)**
+- Given the static permission map (ADR-009; resolved from the role until STORY-048): Company Admin holds `service-types.view|create|edit|delete` and `priority-types.view|create|edit|delete`; Branch Manager holds `service-types.view` and `priority-types.view` only; Counter Staff and Super Admin hold none. When CA-C1 calls any of the ten endpoints, Then it is allowed (GET list/item = view 200, POST = create 201, PUT = edit 200, DELETE = delete 204 or 409 in use). When BM-B1 calls `GET` list and `GET` item (view) on both resources, Then 200. When BM-B1 calls `POST` (create), `PUT` (edit) or `DELETE` (delete), Then 403 `auth.forbidden` and nothing changes. When CS or SA calls any of the ten endpoints (including `GET`), Then 403 `auth.forbidden`. When no token is sent, Then 401 `auth.unauthorized`. BM-B2 (another branch of Company 1) has the same view access as BM-B1, because these resources are company-wide. A unit test asserts the map entries for the eight permission names (`Permissions.All` lists them). The outcomes for each user are unchanged from the earlier role matrix.
+
+### Audit
+**AC-26: Audit entry for every write**
+- Given CA-C1, When it creates "Cards" (H), updates VIP to 60.00, and deletes "Cards", Then `audit_log` gains three rows in order, each with `company_id` Company 1, `user_id` CA-C1, `device_id` null, `entity` `service_type` / `priority_type`, `action` `create` / `update` / `delete`, `entity_id` the affected row id, `at` from `TimeProvider` (UTC), and `data` holding the command JSON (for the update: `feeAmount` 60.00 and the `version` sent). Reads (`GET`) write no audit row.
+
+**AC-27: Failed write writes nothing**
+- Given a `POST` with a taken prefix (409), a `PUT` with a stale version (409) and a `POST` failing validation (400), When each completes, Then no row changed and `audit_log` has no new row for any of them; when the handler succeeds but the audit insert fails (test double), the data change is rolled back too.
+
+### Shared plumbing
+**AC-28: Enums as strings**
+- Given a test-host endpoint that returns and accepts an enum (for example `TokenStatus.Waiting`), When it is called, Then the JSON contains `"Waiting"`, not a number, and a request body with the string value is accepted; the existing `role` claim response and the auth contract are unchanged (STORY-003 tests stay green).
+
+**AC-29: Postgres error catalog**
+- Given test-host endpoints that raise each database error, When they run, Then: SQLSTATE 23505 on the unique index `(company_id, prefix)` of each table (the real index names from the migration, `ix_service_type_company_id_prefix` style) returns 409 with the catalog code `service_type.prefix_taken` / `priority_type.prefix_taken`, an unknown unique constraint returns 409 `resource.duplicate`; 23503 / 23001 returns 409 with the catalog code or default `resource.in_use`; 23514 on a check returns 400 `request.invalid`; the four user-assignment constraints `fk_user_branch_user_company`, `fk_user_counter_user_company` return 404 `user.not_found` and `fk_user_branch_branch_company_id_branch_id`, `fk_user_counter_counter_company_id_counter_id` return 404 `resource.not_found`; the response never contains the SQL message or constraint text; `DbUpdateConcurrencyException` still returns 409 `request.conflict`. A test asserts that every constraint name in the catalog exists in the EF model or migration.
+
+**AC-30: Branch scope**
+- Given Company 1 has Branch 1 and Branch 2 and Company 2 has its own branch, and a test-host endpoint that calls `IBranchScope`, When CA-C1 asks for Branch 1 and Branch 2, Then both pass and `AccessibleBranchIdsAsync` is `null` (all branches). When BM-B1 asks for Branch 1, Then it passes, and `AccessibleBranchIdsAsync` returns only Branch 1. When BM-B1 asks for Branch 2, Then 403 `auth.forbidden`. When BM-B1 or CA-C1 asks for a Company 2 branch id or a random GUID, Then 404 `resource.not_found` (the handler loads the branch through the tenant-filtered set first, so the answer is the same for both). The assignments are read once per request (a test counts one `user_branch` query for several calls).
+
+**AC-31: Audit decorator mechanics**
+- Given a test command marked `[Audited("test_entity", "create")]` with a property marked `[NotAudited]`, When it runs through the pipeline, Then the order is validation, cross-tenant, audit, handler; the audit row holds `entity_id` from the result DTO `Id` (or the command `Id` when the result has none) and `data` without the `[NotAudited]` property; a command without `[Audited]` or with `[NotAudited]` on the type writes no row; a failing validator stops before any transaction opens; a handler error rolls back and writes no row.
+
+**AC-32: Version helpers**
+- Given an entity row with `xmin` 1234, When it is mapped to a DTO, Then `version` is an opaque non-empty string that converts back to 1234; an unparsable string is a 400 validation error on `version`, not a 500. The set version for a grid is the same for the same (row id, `xmin`) pairs in any order and differs when any `xmin` or row id differs. (Used by STORY-006 and later.)
+
+**AC-33: Device configuration notifier**
+- Given `IDeviceConfigNotifier` is replaced by a recording test double, When CA-C1 changes a service type name, prefix or `isActive`, or a priority type name, prefix, `isActive`, `isPaid` or fee, Then `ConfigChangedAsync` is called once after the commit. When only `sortOrder`, `targetMinutes` or `priorityLevel` changes, or the request fails, Then it is not called. The production registration is a no-op that never throws.
+
+**AC-34: Application layer uses the database through the port**
+- Given the solution, When the architecture tests run, Then `Qms.Application` references `Microsoft.EntityFrameworkCore` but not `Qms.Infrastructure`; handlers use `IQmsDbContext` (not `QmsDbContext`); `QmsDbContext` implements `IQmsDbContext`; Domain still has no dependencies; controllers contain no business logic.
+
+**AC-35: Shared integration-test data set**
+- Given a seeded test database, When `SetupTestData` runs, Then it adds Company 2 (own service type with prefix A, priority type N, branch, zone, counter, dispenser) and Branch 2 in Company 1 (zone, counter, dispenser), and users CA-C1, CA-C2, BM-B1 (Branch 1), BM-B2 (Branch 2), CS (Counter 1) and SA; running it twice changes nothing (idempotent); a helper returns a valid bearer token for each user; Company 1 seed data is unchanged (AC-2 of STORY-002 still passes).
+
+**AC-36: Row version in the model, no DDL**
+- Given the model, When the schema tests run, Then every entity derived from `EntityConfiguration<T>` has `xmin` mapped as a row version (`uint`, `IsRowVersion()`) with no column created; the new migration's `Up` and `Down` contain no DDL; `HasPendingModelChanges` is false; the database schema after migration is identical to before (no new column in `information_schema`); and every `ITenantEntity` has `CompanyId` as a concurrency token with `AfterSaveBehavior = Throw` (STORY-002 review N9).
+
+**AC-37: Validation error format and codes**
+- Given any of the failing requests above, When the response is read, Then it is `application/problem+json` (RFC 7807) with `code` (one of the codes in section 4 of ADR-008 §13 or this story), `status`, and for 400 an `errors` map keyed by camelCase field; no stack trace, SQL or internal id appears; and `Location`, DTO field names and enum values follow ADR-008 §3.
+
+## 6. UI / UX
+No screen in this story; the screens `/admin/service-types` and `/admin/priority-types` are STORY-023 (M4). This section fixes the content for that story and for API consumers.
+- **Labels (English / Arabic, translated in M4; amended 2026-11-08):** Name (default language, English) / الاسم (اللغة الافتراضية: الإنجليزية); Translations, one optional field per enabled language, phase 1 shows Arabic only (temporary until STORY-051) / الترجمات (اختياري)); Prefix / الرمز; Target minutes / الدقائق المستهدفة; Sort order / الترتيب; Active / نشط; Priority level (1 = highest) / مستوى الأولوية (1 = الأعلى); Paid / مدفوعة; Fee amount / مبلغ الرسوم; Currency (read only) / العملة. Final Arabic wording is for the M4 translator to confirm.
+- **Error codes the web app will translate (en + ar) in M4:** `service_type.prefix_taken`, `priority_type.prefix_taken`, `service_type.in_use`, `priority_type.in_use`, `service_type.not_found`, `priority_type.not_found`, `request.conflict`, `validation.failed`, `auth.forbidden`, `translation.language_not_enabled`, `translation.default_language_key`.
+- API text rules: names are stored and returned exactly as typed (trimmed), the default `name` and each translation; Arabic text is not script-checked; API returns no display strings, only codes. A paid VIP type shows a ★ and a badge with a text label in later UI (rules 11).
+- RTL: no layout in this story; the M4 form uses logical CSS properties.
+
+## 7. Data and API impact
+**Spec:** sections 4, 4.1, 6, 8, 9, 10, 11. No business rule changes. ADR-008 decides the conventions (interpretations listed there).
+
+**Database**
+- Tables used: `service_type` (company_id, name_en, name_ar, prefix, target_minutes, sort_order, is_active), `priority_type` (company_id, name_en, name_ar, prefix, priority_level, is_paid, fee_amount, is_active), `audit_log` (write). All columns exist; checks exist: `ck_service_type_prefix`, `ck_service_type_target_minutes`, `ck_priority_type_prefix`, `ck_priority_type_priority_level`, `ck_priority_type_fee_required_when_paid`, `ck_priority_type_fee_not_negative`; unique `(company_id, prefix)` on both.
+- **Schema change: model only, one migration.** ADR-008 §5: map the PostgreSQL system column `xmin` as a row version (`uint`, `IsRowVersion()`) for every entity in `EntityConfiguration<T>`. Npgsql creates no column, but the model snapshot changes, so `SchemaTests` (`HasPendingModelChanges`) needs a migration (e.g. `RowVersion`) whose `Up`/`Down` contain no DDL. Stage 2 also adds the model test from STORY-002 review N9 (every `ITenantEntity` has `CompanyId` as a concurrency token with `AfterSaveBehavior = Throw`), because this change touches the same configuration base.
+- Seed: unchanged.
+
+**Backend — shared plumbing (ADR-008)**
+- `Qms.Application/Common`: `IQmsDbContext` (§1; adds the `Microsoft.EntityFrameworkCore` package to Application), `AuditedAttribute`, `NotAuditedAttribute`, `AuditDecorator` (§11; chain validation → cross-tenant → audit → handler), `IBranchScope` (§10), `IDeviceConfigNotifier` (§12, no-op implementation), shared error codes (§13), `Version` helpers (row `xmin` ↔ string; set-hash for grids, §5).
+- `Qms.Infrastructure`: `QmsDbContext : IQmsDbContext`, `BranchScope` (reads `user_branch` once per request with `IgnoreQueryFilters()` by user id), `PostgresErrorCatalog` (§7, incl. the four STORY-003 user-assignment constraint names).
+- `Qms.Api`: `JsonStringEnumConverter` globally (§3); role policies `SetupRead` (CompanyAdmin, BranchManager), `CompanyAdmin`, `BranchSetup` (CompanyAdmin, BranchManager) (§9); `GlobalExceptionHandler` maps `DbUpdateException`/`PostgresException` by SQLSTATE and catalog (§7).
+- Tests support: `SetupTestData` (§15) with Company 2, Branch 2 in Company 1, users CA-C1, CA-C2, BM-B1, BM-B2, Counter Staff, Super Admin, and a token helper.
+
+**Backend — endpoints (spec §10 + ADR-008 §2 item routes)**
+(Amended 2026-11-08: the access column is now the permission, resolved from the role by the static map until STORY-048.)
+
+| Method | Route | Permission (roles) | Notes |
+|---|---|---|---|
+| GET | `/api/v1/service-types` | `service-types.view` (CA, BM) | sorted `sortOrder`, `name`; `?isActive=` |
+| GET | `/api/v1/service-types/{id}` | `service-types.view` | 404 `service_type.not_found` (also other company) |
+| POST | `/api/v1/service-types` | `service-types.create` (CA) | 201; 409 `service_type.prefix_taken` |
+| PUT | `/api/v1/service-types/{id}` | `service-types.edit` (CA) | `version` required; 409 `request.conflict`; deactivate via `isActive` |
+| DELETE | `/api/v1/service-types/{id}` | `service-types.delete` (CA) | 409 `service_type.in_use` (company mapping, flows, dispenser mapping, tokens) |
+| GET | `/api/v1/priority-types` | `priority-types.view` (CA, BM) | sorted `priorityLevel`, `prefix`; includes `isPaid`, `feeAmount`, company `currencyCode` |
+| GET | `/api/v1/priority-types/{id}` | `priority-types.view` | 404 `priority_type.not_found` |
+| POST | `/api/v1/priority-types` | `priority-types.create` (CA) | `feeAmount` required when `isPaid`, must be empty when not paid; 409 `priority_type.prefix_taken` |
+| PUT | `/api/v1/priority-types/{id}` | `priority-types.edit` (CA) | same rules + `version` |
+| DELETE | `/api/v1/priority-types/{id}` | `priority-types.delete` (CA) | 409 `priority_type.in_use` (company mapping, branch fees, tokens) |
+- DTOs (amended 2026-11-08): `ServiceTypeDto { id, name, translations, prefix, targetMinutes?, sortOrder, isActive, version }`, `PriorityTypeDto { id, name, translations, prefix, priorityLevel, isPaid, feeAmount?, currencyCode, isActive, version }`. Requests send `name` and optional `translations`. Temporary storage mapping until STORY-051: `name` to `name_en`, `translations.ar` to `name_ar`.
+- Audit: every create/update/delete writes `audit_log` (`service_type` / `priority_type`, `create` / `update` / `delete`).
+- `IDeviceConfigNotifier` call after commit when a name, prefix, `isActive`, `isPaid` or fee changes (no-op in M2).
+- SignalR: none (M3). Background jobs: none.
+
+**Web / Android / displays:** none in this story (admin screens are M4 STORY-023; dispenser M7).
+
+**Cross-cutting:** security (role policy; Super Admin and Counter Staff 403; cross-company 404); audit in the same transaction; bilingual names; concurrency via `version`; performance not critical (small lists).
+
+## 8. Stage plan (filled by architect, stage 0)
+| Stage | Applies? | Task | Notes |
+|---|---|---|---|
+| 0 Architect | Yes | — | ADR-008 (Proposed) |
+| 1 BA | Yes | — | Done. One backend task (TASK-010), with the plumbing as its first part and the two CRUD features as its second part |
+| 2 Database | Yes | [TASK-009](../tasks/TASK-009-xmin-row-version-model.md) — AC-36 (and the model side of AC-32) | `xmin` row version in `EntityConfiguration<T>` + model-only migration; STORY-002 review N9 model test |
+| 3 Backend | Yes | [TASK-010](../tasks/TASK-010-setup-plumbing-and-type-crud.md) — AC-1 to AC-35, AC-37 (AC-32 helpers) | Plumbing (ADR-008) + service/priority type endpoints + tests |
+| 4 Frontend | N/A | — | Admin screens are M4 (STORY-023) |
+| 5 Android | N/A | — | No device API change |
+| 6 Code review | Yes | — | |
+| 7 QA | Yes | — | |
+
+## 9. Non-functional notes
+- **Security:** role policies on controllers (rules 6); Super Admin and Counter Staff 403; cross-company and unknown ids give the same 404; no tenant id from the body; no SQL or constraint text in errors; no secrets or phone numbers involved (none in these commands, so `[NotAudited]` is not needed on them).
+- **Audit:** same transaction as the change (spec 11).
+- **Performance:** lists are small (tens of rows), no paging; no performance target beyond normal response times in tests.
+- **Concurrency:** `xmin` row version; two admins editing one row get 409, never a silent overwrite.
+- **Data:** money is `numeric(12,2)` and serialised as a JSON number with at most 2 decimals; timestamps UTC.
+- **Compatibility:** no change to existing auth contracts; enum string serialisation affects no current contract. No migration data change.
+- **Privacy / localisation (amended 2026-11-08):** English `name` is always stored; translations are optional and, in phase 1, only `ar` is accepted (ADR-010, rules 7).
+
+## 10. Open questions
+Decided with the architect's defaults (proposals accepted for this story unless the product owner objects; none blocks stages 2 and 3):
+- Default 1 (prefix change after tokens exist): prefixes are editable at any time; a collision of token numbers is mapped to 409 in M3 (STORY-014). Not covered by an AC here.
+- Default 2 (paid to not paid): allowed; `branch_priority_fee` overrides are kept and ignored while the type is unpaid (AC-20).
+- Default 3 (priority level): two priority types may share a level; the spec has no uniqueness rule (BR-6).
+- Default 4 (deactivation): deactivating a type that is in use is allowed (AC-9, AC-22); the effect on issuing is decided in M3.
+- Default 5 (fee 0): a paid type may have fee 0.00 (the check constraint is `>= 0`) (AC-16).
+- Default 6 (Branch Manager reads): Branch Manager can read both lists, company-wide, because the branch mapping screens need them (ADR-008 §9).
+- Default 7 (Company 2 data): `SetupTestData` creates Company 2 with a service type with prefix A, so AC-6 can show per-company uniqueness.
+- [ ] **Product owner — companies are not in any M2 story.** Spec §10 lists `CRUD /companies` and §8 gives Super Admin "Companies, licences, global settings", and M4 has `/admin/companies`, but the backlog has no story for the companies API or for creating a new company's first Company Admin. Today only the seed creates Company 1 and its admin. Proposal: add a story to M2 (next free id STORY-047, "Companies and Company Admin provisioning", Super Admin, `[CrossTenant]`). Not blocking this story.
+- [ ] Product owner — prefix change after tokens exist. The token keeps its prefixes (`token.priority_prefix`, `service_prefix`), but if prefix `A` is moved to another service type on the same business date, the new type's sequence restarts at 0001 and its first token collides with an issued `NA0001` (unique `token (branch_id, business_date, number)`). Proposal for M2: prefixes are editable; M3 (STORY-014) maps that collision to 409. Alternative: lock the prefix once any token exists. Not blocking.
+- [ ] Product owner — a priority type changed from paid to not paid keeps its branch fee overrides (`branch_priority_fee`). Proposal: allowed; overrides are ignored while not paid and apply again if it becomes paid. Not blocking.
+- Decided 2026-11-08 (product owner): localisation (ADR-010: `name` + `translations`, Arabic no longer required) and permissions (ADR-009: `service-types.*`, `priority-types.*` from a static map). AC-1, 3, 4, 5, 7, 10, 12, 15, 16, 17, 25 are amended; BR-1, 2, 4, 12 restated.
+- [ ] **Backend (stage 3) / code review — error-code mismatch.** The built code and its tests use `translations.unsupported_language` (`LocalizedText.UnsupportedLanguageCode`) for every non-`ar` key and do not distinguish the key `en`. The decided contract (ADR-010 §5, ADR-008 §8) is `translation.language_not_enabled` (unsupported key) and `translation.default_language_key` (`en` key), errors keyed `translations.<code>`. AC-5 (k, l) and AC-17 (k, l) test the decided contract and will fail until the code is corrected; STORY-051 notes the same rename. Needs a fix by the backend stage via code review.
+- [ ] Note: ADR-008 is Proposed; the product owner accepts it (and the §10 route additions) before the stage 3 merge.
+
+## 11. Stage log
+
+### Stage 0 — Architecture review — project-architect — 2026-11-08
+Result: Done
+Changed: docs/adr/ADR-008-setup-api-conventions.md (new), this story (new: header, sections 1, 2, 7, 8, 10), docs/work/BACKLOG.md (M2 links)
+Notes for next stage:
+- Read ADR-008 first; all M2 stories follow it. This story carries the plumbing; STORY-006 to STORY-013 depend on it.
+- Stage 2 is model-only (`xmin` row version + empty migration + N9 test). No column, table or seed change.
+- Stage 3 notes: `GlobalExceptionHandler` already maps `DbUpdateConcurrencyException` → 409 `request.conflict`; extend it for `PostgresException` 23001/23503/23505/23514 via the catalog. The CrossTenant decorators show how to add the audit decorator to `DependencyInjection.RegisterDecorated`. `IBranchScope` has no consumer in this story; give it unit and integration tests (CA passes all Company 1 branches, BM-B1 passes Branch 1 and fails Branch 2 with 403, unknown/other-company branch 404).
+- Fee: `numeric(12,2)`; validators enforce ≤ 2 decimals and the paid/fee pairing before the check constraint.
+- Integration tests follow ADR-008 §15 for every endpoint.
+Open questions: companies not in M2 (product owner), prefix change after tokens, paid→not paid overrides; none blocks analysis.
+
+### Stage 1 — Analysis — business-analyst — 2026-11-08
+Result: Done
+Changed: this story (sections 3, 4, 5, 6, 8 task links, 9, 10; status Database), docs/work/tasks/TASK-009-xmin-row-version-model.md (new), docs/work/tasks/TASK-010-setup-plumbing-and-type-crud.md (new)
+Notes for next stage:
+- 37 acceptance criteria: AC-1 to AC-12 service types, AC-13 to AC-24 priority types, AC-25 role matrix, AC-26/27 audit, AC-28 to AC-37 shared plumbing and model. Stage 2 covers AC-36 only (TASK-009); everything else is stage 3 (TASK-010).
+- Stage 2 is model-only: `xmin` row version, migration with no DDL, N9 model test. No column, table, index or seed change.
+- Rules not in the DB but required by the validators: unpaid priority type must have no fee; fee max 2 decimals and 0 to 9 999 999 999.99; prefix is not upper-cased silently.
+- Defaults 1 to 7 in section 10 follow the architect's proposals; no rule was invented beyond ADR-008.
+Open questions: none blocking; product owner items in section 10 (companies story, prefix change after tokens, paid to unpaid overrides, ADR-008 acceptance before stage 3 merge).
+
+### Stage 2 — Database — database-architect — 2026-11-08
+Result: Done
+Changed: backend/Qms.Domain/Entities/Common/Entity.cs, backend/Qms.Infrastructure/Persistence/Configurations/EntityConfiguration.cs, backend/Qms.Infrastructure/Persistence/Migrations/20261108072029_RowVersion.cs (+ .Designer.cs, QmsDbContextModelSnapshot.cs), backend/Qms.Tests/Persistence/RowVersionTests.cs (new), backend/Qms.Tests/Persistence/TenantIntegrityTests.cs (one test adjusted), docs/work/tasks/TASK-009-xmin-row-version-model.md
+Notes for next stage:
+- Row version = `public uint RowVersion { get; set; }` on the Domain base class `Entity` (plain CLR property, no package dependency), mapped in `EntityConfiguration<T>` to column `xmin`, type `xid`, `IsRowVersion()` (ValueGenerated OnAddOrUpdate). Applies to all 27 entity tables (tenant and non-tenant, including refresh_token and audit_log); AppUser/AppRole keep `ConcurrencyStamp`.
+- Read: `version` string from `entity.RowVersion` (it is a uint; the DTO string is yours to encode, e.g. decimal). After `SaveChanges` EF reads the new `xmin` back into `RowVersion` (tested).
+- Write / check a client version: load the tracked entity, then `db.Entry(entity).Property(e => e.RowVersion).OriginalValue = clientVersion;` before `SaveChangesAsync`. A mismatch gives `DbUpdateConcurrencyException` (tested). Do not assign `RowVersion` itself; it is database generated.
+- UPDATE and DELETE now filter on `id`, `company_id` and `xmin` (tested through the logged SQL). `CompanyId` keeps `IsConcurrencyToken` + `AfterSaveBehavior = Throw` (N9 model test added).
+- DELETE (ADR-008: "DELETE takes no version"): load the row (tracked or AsNoTracking) before `Remove`; a hand-built stub with `RowVersion = 0` now matches 0 rows and throws `DbUpdateConcurrencyException`. I changed the existing test `A_detached_row_of_the_current_company_can_still_be_updated_and_removed` accordingly (it now reads the row first). Never delete via a stub entity.
+- Migration `RowVersion` has empty Up/Down. EF generated `AddColumn xmin` for each table (the property is new to its model); PostgreSQL rejects a column named like a system column, so I removed those operations by hand before anything was applied. The snapshot and designer carry the model; `HasPendingModelChanges` is false. Do not regenerate it. A test asserts the migration has no operations and no table has a real `xmin` column.
+- Set hash for whole-set resources: read `RowVersion` of each tracked row (sorted by id) after `SELECT ... FOR UPDATE` on the parent.
+Open questions: none. Spec section 9 unchanged (no ADR request needed).
+
+### Stage 3 — Backend — backend-developer — 2026-11-08
+Result: Done
+Changed: backend/Qms.Application (Common plumbing, Auth/Permissions, ServiceTypes, PriorityTypes), backend/Qms.Infrastructure (Scope, Errors, Notifications, Authorization, DependencyInjection, QmsDbContext: interface only), backend/Qms.Api (Auth/RequirePermission, two controllers, ProblemDetailsSetup, ResultExtensions, Program), backend/Qms.Tests (new Setup/, Application/, support; 377 tests green, build 0 warnings). Task: TASK-010 (Done).
+Notes for next stage:
+- Endpoints (`/api/v1`): `GET/POST /service-types`, `GET/PUT/DELETE /service-types/{id}`, same for `/priority-types`; `GET ?isActive=true|false`. Service type DTO `{ id, name, translations, prefix, targetMinutes, sortOrder, isActive, version }`; priority type DTO `{ id, name, translations, prefix, priorityLevel, isPaid, feeAmount, currencyCode, isActive, version }`. `translations` is an object (`{}` or `{ "ar": "..." }`); requests send `name` (required) and optional `translations`; `PUT` sends all fields plus `version`; `companyId` is ignored. 201 + `Location`; 204 on delete.
+- Errors (problem+json `code`): `validation.failed` (errors keyed camelCase), `translation.language_not_enabled`, `translation.default_language_key` (errors keyed `translations.<code>`), `service_type|priority_type.prefix_taken | in_use | not_found`, `request.conflict`, `auth.forbidden`, `auth.unauthorized`.
+- Permissions: `<module>.<action>` kebab-case in `Permissions` (`service-types.view|create|edit|delete`, `priority-types.*`); `Permissions.All` is the single list. Static map: Company Admin all, Branch Manager view only, Counter Staff and Super Admin none. Later stories add constants + map entries + `[RequirePermission]`; STORY-048 swaps `StaticRolePermissionResolver` for database roles.
+- Plumbing for later M2 stories: handlers inject `IQmsDbContext`; mark commands `[Audited("entity","action")]` (+ `[NotAudited]` on secrets); load -> check version (`CommonRules.DecodeVersion`, `RowVersionCodec`, set `Entry(row).Property(r => r.RowVersion).OriginalValue`) -> change -> save; call `IBranchScope.EnsureAccessAsync` after loading the target; announce device changes with `IPostCommitActions.Enqueue(ct => notifier.ConfigChangedAsync(...))`; add constraint names to `PostgresErrorCatalog` (a test checks they exist); tests use `SetupHost.StartAsync(postgres)` (`SetupTestData`, `CallAsync(SetupUser, ...)`, `AuditRowsAsync`).
+- Product owner: master records get `is_active` on all tables (service/priority types already have it); localisation storage migration (`name`/`name_translations`) will change only `LocalizedText`.
+Open questions: none. Stages 4 and 5 are N/A (orchestrator logs them). ADR-008 and the spec section 10 item routes were not edited by this stage.
+
+### Stage 1 — Analysis (amendment: localisation + permissions) — business-analyst — 2026-11-08
+Result: Done
+Changed: this story only (BR-1, BR-2, BR-4, BR-12; AC-1, 3, 4, 5, 7, 10, 12, 15, 16, 17, 25 marked "amended 2026-11-08"; sections 6, 7, 9, 10). Status unchanged (Frontend). TASK-009 and TASK-010 not edited.
+Notes for next stage:
+- Contract for QA: names are `name` + `translations`; `translations: { "ar": "…" }` accepted (temporary until STORY-051), `{ "fr": "…" }` is 400 `translation.language_not_enabled`, `{ "en": "…" }` is 400 `translation.default_language_key`, errors keyed `translations.<code>`; Arabic is optional and empty values are dropped. Endpoints are guarded by `service-types.*` / `priority-types.*` permissions from a static map; outcomes per user are unchanged.
+- MISMATCH: the shipped code returns `translations.unsupported_language` and treats `en` like any unsupported key. The ACs follow ADR-010; expect AC-5 (k, l) and AC-17 (k, l) to fail until the backend renames the code and adds `translation.default_language_key` (see section 10).
+- TASK-010 still describes `translations.unsupported_language` and the old role wording; it was not edited by instruction.
+Open questions: backend error-code mismatch (section 10).
+- Follow-up (ADR-010): error code `translations.unsupported_language` renamed to `translation.language_not_enabled`; the `en` key gives `translation.default_language_key`; field errors are keyed `translations.<code>`.
+
+### Stage 4 — Frontend — frontend-developer — 2026-11-08
+Result: N/A — Admin screens are M4 (stage plan)
+Changed: none
+Notes for next stage: none
+Open questions: none
+
+### Stage 5 — Android — android-developer — 2026-11-08
+Result: N/A — No dispenser change (stage plan)
+Changed: none
+Notes for next stage: Ready for code review (stage 6).
+Open questions: none
+
+### Stage 6 — Code review — code-reviewer — 2026-11-08
+Result: Changes requested
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release --no-incremental`: 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release`: 377 passed, 0 failed, 0 skipped, 4 m 12 s) · web N/A · android N/A
+ACs checked: AC-1 ✅, AC-2 ✅, AC-3 ✅, AC-4 ✅ (`{}` / `{ "ar": "" }` covered only by inspection and a `"  "` test; see M1), AC-5 ✅, AC-6 ✅, AC-7 ⚠️ (code correct; the translation clauses have no test, see M1), AC-8 ✅, AC-9 ✅, AC-10 ✅, AC-11 ✅, AC-12 ✅, AC-13 ✅, AC-14 ✅, AC-15 ✅, AC-16 ✅, AC-17 ⚠️ (code correct; (b) and (l) have no test, see M1), AC-18 ✅, AC-19 ✅, AC-20 ✅, AC-21 ✅, AC-22 ✅, AC-23 ✅, AC-24 ✅, AC-25 ✅, AC-26 ✅, AC-27 ✅, AC-28 ✅, AC-29 ✅, AC-30 ✅, AC-31 ✅, AC-32 ✅, AC-33 ✅, AC-34 ✅, AC-35 ✅, AC-36 ✅, AC-37 ✅
+
+Plumbing verified (the pattern for M2):
+- Authorization: all 10 actions have `[RequirePermission]` (`DenyAnonymous` + `PermissionRequirement`). The fallback policy still requires authentication. `PermissionAuthorizationHandler` passes `RequestAborted`. `StaticRolePermissionResolver` grants nothing without an authenticated user and a company, so Super Admin gets none. The map matches ADR-009 §4: Company Admin has all; Branch Manager has view only, so every action implies view. No handler authorizes by role except the documented `IsInRole(CompanyAdmin)` in `BranchScope`.
+- Tenant and branch scope: handlers read only through tenant-filtered sets. The only `IgnoreQueryFilters()` in production code is `BranchScope`'s `user_branch` read, and it is also filtered on `UserId` and `CompanyId`. `EnsureAccessAsync`: unknown or other-company branch gives 404, unassigned branch gives 403, no company gives 403. Assignments are read once per request (tested by SQL count).
+- Audit: the chain is validation → cross-tenant → audit → handler. The change and its audit row are written in one transaction. A failed result or an exception rolls back. If the audit insert fails, the change rolls back (tested with a real database). Post-commit actions run only after the commit, a failing action is logged and swallowed, and failed commands discard them. `data` holds no secrets.
+- Concurrency: `PUT` compares the client version with the loaded row (409 even when values are unchanged) and also sets `OriginalValue`. `DELETE` loads the row first. The `RowVersion` migration has empty `Up`/`Down`, is documented in the class comment, and is tested (no operations, no real `xmin` column, no pending model changes). The set hash (SHA-256 of sorted (id, xmin) pairs, used under a parent `FOR UPDATE`) is sound.
+- Error catalog: names are checked against the migrated schema, and a test proves every FK into `service_type`/`priority_type` is in the catalog. The 23505, 23503, 23001 and 23514 mappings, and `DbUpdateConcurrencyException` (matched first), are correct. Logs and responses contain only the SQLSTATE and constraint name. A delete race hits the FK and is mapped to the same `*.in_use` code, so it never returns 500.
+- Localisation: `name` + `translations` contract. The temporary storage mapping is isolated in `LocalizedText`. The `translation.language_not_enabled` / `translation.default_language_key` codes are keyed `translations.<code>`, and mixed failures fall back to `validation.failed`. The section 10 "error-code mismatch" question is resolved in the code and can be ticked.
+- Architecture: Application references EF Core and no Infrastructure (architecture tests). Controllers only bind and map. No business logic sits outside Application.
+
+Must fix
+- M1 [stage 3] `backend/Qms.Tests/Setup/PriorityTypesApiTests.cs:183`, `backend/Qms.Tests/Setup/ServiceTypesApiTests.cs:259`, `backend/Qms.Tests/Application/SetupPlumbingUnitTests.cs:105`: some amended translation ACs have no test, including the cases this story's section 10 asked code review to verify. Specifically: AC-17 (l) (`{ "en": … }` on priority types gives 400 `translation.default_language_key`, keyed `translations.en`), AC-17 (b) (`name` missing), AC-7 (`PUT` with `translations` `{}` removes the Arabic text and returns `translations` `{}`), AC-7 (`PUT` with `{ "fr": … }` / `{ "en": … }` returns the AC-5 (k)/(l) codes), and AC-4 (`translations` `{}` and `{ "ar": "" }` return 201 with `{}`). The code behaves correctly by inspection. These are the regression tests STORY-051 needs when it swaps the storage. → Add the integration cases to the two API test classes (the unit helper `PriorityFields` should also accept `translations`).
+
+Should fix
+- S1 [stage 3] `backend/Qms.Api/Controllers/ServiceTypesController.cs:15-16`, `backend/Qms.Api/Controllers/PriorityTypesController.cs:15-16`: `PUT` bodies bind non-nullable `bool IsActive`, `bool IsPaid` and `int SortOrder`. An omitted field silently becomes `false`/`0`, so a client that drops `isActive` deactivates the type, and one that drops `isPaid` + `feeAmount` makes VIP free. This is not a spec breach (PUT is full replacement), but every M2 `PUT` will copy it. → Make them nullable in the request/command with `NotNull()` (400 `validation.failed`), or mark them `[JsonRequired]`. Decide this once for the pattern (architect note in ADR-008 §5/§8).
+- S2 [stage 3] `backend/Qms.Application/Common/AuditDecorator.cs:98`, `backend/Qms.Application/Common/PostCommitActions.cs:38`: post-commit actions get the request token, and `OperationCanceledException` is rethrown. A client disconnecting after the commit therefore skips the remaining notifications for a committed change and turns the request into an error. This matters once STORY-021 sends SignalR. → Run them with `CancellationToken.None` (or the application-stopping token) and log every failure, including cancellation.
+- S3 [stage 3] `backend/Qms.Application/Common/PostCommitActions.cs:20`: actions are run only by `AuditDecorator`. A handler whose command is not `[Audited]`, or is `[NotAudited]` on the type, enqueues actions that are silently dropped. → Throw (or debug-assert) in `Enqueue` when no audit transaction is active, or run the queue in a small decorator of its own. Document the rule in the `IPostCommitActions` remarks.
+- S4 [stage 3, for STORY-047] `backend/Qms.Application/Common/AuditDecorator.cs:72`: an `[Audited]` `[CrossTenant]` command (Super Admin companies API) has no current company, so it throws after the handler and returns 500. ADR-009 §9 requires `audit_log.company_id` = target company. → Before STORY-047, add a way for cross-tenant commands to name the audited company (for example an `IAuditCompany` interface on the command or the result).
+- S5 [stage 3] `backend/Qms.Tests/Architecture/ArchitectureTests.cs:110-121`: the "every action declares a permission" test lists two controllers by hand, so a new M2 controller without `[RequirePermission]` would pass. Also, no test enforces ADR-009 §3 "any action implies view" on `RolePermissionMap`. → Reflect over every controller in `Qms.Api.Controllers` (explicit allow-list for auth/health/`[AllowAnonymous]`). Add an invariant test: for each role, a held `<module>.<action>` implies `<module>.view`.
+- S6 [stage 3] `backend/Qms.Tests/Support/SetupHost.cs:30-34`: every setup test builds a new database, a new `WebApplicationFactory` and `SetupTestData` (6 users with password hashing). That cost is most of the 4 m 12 s, and ADR-008 §15 asks for a database per test class. M2 adds about 50 more endpoints in the same style. → Build the seeded and setup-data database once as a PostgreSQL template (`CREATE DATABASE … TEMPLATE`) and clone it per test. Share one host per class (`IClassFixture`) for read-only tests and tests that tolerate shared state.
+- S7 [stage 3] `backend/Qms.Api/Common/ProblemDetailsSetup.cs:74`: only a `PostgresException` wrapped in a `DbUpdateException` is mapped. Raw SQL (`ExecuteSqlRaw`, Dapper-style calls planned for the M3 queue engine and the token-number collision in STORY-014) throws `PostgresException` directly and would return 500. → Also match a bare `PostgresException` through the same catalog.
+
+Nice to have
+- N1 `backend/Qms.Application/Common/LocalizedText.cs:60`: `UnsupportedLanguages` is used only by a test (dead code). Remove it or use it.
+- N2 `backend/Qms.Application/Common/LocalizedText.cs:41`: `{ "ar": "x", "AR": "y" }` passes validation and `ToStorage` keeps whichever key comes first. Reject duplicate keys that differ only by case (STORY-051 helper).
+- N3 `backend/Qms.Api/Program.cs:23`: enums as strings are configured for MVC only. When SignalR (M3) or minimal APIs arrive, register the converter in `AddJsonProtocol` / `ConfigureHttpJsonOptions` too.
+- N4 An architecture test that `IgnoreQueryFilters()` appears only in `[CrossTenant]` handlers and the Infrastructure scope/identity classes would keep ADR-003's greppable escape hatch enforced.
+- N5 A `PUT` whose values equal the stored row (matching version) writes an audit row and sends no UPDATE. This is acceptable; say so in ADR-008 §11.
+- N6 [stage 1] TASK-010 §3 and story §7 still describe role policies (`SetupRead`, `BranchSetup`) and `nameEn`/`nameAr` DTOs. Mark them superseded by ADR-009/ADR-010 so STORY-006+ readers are not misled.
+
+### Stage 3 — Backend (review loop 1) — backend-developer — 2026-11-08
+Result: Done
+Changed: backend/Qms.Application (Common: PostCommitActions, AuditDecorator, IAuditCompanyTarget, LocalizedText, CommonRules; ServiceTypes/PriorityTypes update commands), backend/Qms.Api (nullable PUT request fields, ProblemDetailsSetup bare PostgresException), backend/Qms.Tests (new tests, setup template database, architecture reflection tests). Task: TASK-010 section 7.
+Notes for next stage:
+- M1 tests added; S1 to S7, N1, N2 done (details in TASK-010 section 7). 392 tests green, suite 4m29s -> 2m40s.
+- ADR-008 additions for the architect: (1) PUT is full replacement and never defaults a missing field (nullable request fields + `Sent()` validator, 400 validation.failed); (2) post-commit actions only from audited commands, run with their own token and 30 s timeout; (3) cross-tenant audited commands implement `IAuditCompanyTarget`; (4) test fixture: `SetupHost.StartAsync(postgres)` clones a prebuilt template database.
+Open questions: none
+
+### Stage 6 — Code review (round 2) — code-reviewer — 2026-11-08
+Result: Approved
+Builds/tests: backend ✅ (`dotnet build backend/Qms.slnx -c Release --no-incremental`: 0 warnings, 0 errors; `dotnet test backend/Qms.slnx -c Release`: 392 passed, 0 failed, 0 skipped, 2 m 50 s) · web N/A · android N/A
+Reviewed: `git diff 1697366 HEAD -- backend` (commit 2223c57) against the round 1 findings.
+ACs checked: AC-1 to AC-37 ✅. AC-4, AC-5 (b), AC-7 (translation clauses) and AC-17 (b, l) now have integration and unit tests.
+
+Round 1 items:
+- M1 ✅ New tests: AC-17 (l) `en` key on priority types; AC-17 (b) and AC-5 (b) missing `name`; AC-7 `PUT` with `{}` clears Arabic (checked again by a later `GET`) and `PUT` with `fr`/`en` returns the AC-5 codes, for both resources; AC-4 `{}` and `{ "ar": "" }` return 201 with `{}`. The unit helper now accepts `translations`.
+- S1 ✅ `PUT` request and command fields `isActive`, `sortOrder`, `priorityLevel` and `isPaid` are nullable with `Sent()` (NotNull), so a missing field is 400 `validation.failed` keyed by field, and no row or audit row is written (tested, including "a dropped isPaid cannot make VIP free"). JSON shape is unchanged: same camelCase names and types, and responses are untouched. Create semantics: service type create still defaults `sortOrder` 0 and `isActive` true. Priority type create now *requires* `isPaid` and `priorityLevel`. Before, a missing `priorityLevel` was already 400 and a missing `isPaid` meant unpaid. Every AC body sends both, so no AC changes. This is sound because paid/fee is an explicit choice. The architect should record it in ADR-008 (see S-R2).
+- S2 ✅ Post-commit actions run with their own token and a 30 s timeout, not the request token. Every exception is logged and swallowed. Tested with a cancelled request token.
+- S3 ✅ `Enqueue` throws when no audited command is running, so actions can no longer be silently dropped. Tested for plain and `[NotAudited]` commands. On whether this will bite later: it fails loudly, and the first test of any such handler shows it, so it is acceptable for M2. M3 will have non-audited commands that must publish SignalR events after commit (for example display state or counter status). Those need a runner that does not depend on auditing (see S-R1).
+- S4 ✅ `IAuditCompanyTarget` (on the command or the result) is read only when `ICurrentTenant.CompanyId` is null: `CompanyId ?? target ?? throw`. It cannot be abused while a tenant is set, because the tenant always wins. With no tenant and no cross-tenant section, the audit insert itself is refused by the tenant guard (`NoTenant`). Only `[CrossTenant]` handlers, which check the Super Admin role, open that section. Tested for the target case and the loud failure without a target.
+- S5 ✅ Every public controller in `Qms.Api` is now reflected over. Each action needs `[RequirePermission]` or `[AllowAnonymous]`; only `AuthController` (own-session endpoints) is exempt. New tests check that any granted action implies its module's `view`, and that every granted permission is in `Permissions.All`.
+- S6 ✅ `PostgresFixture.NewSetupDatabaseAsync` builds the seed and `SetupTestData` template once, under a `SemaphoreSlim`. After building it disposes the host and clears pools, so the template has no open connections. Each test then gets its own `CREATE DATABASE … TEMPLATE` clone and its own host, so no state is shared across tests. If the build fails, the template stays null and the next test retries. All database tests run in one xUnit collection (serial). CI runs in parallel each get their own Testcontainers PostgreSQL, so they are isolated. Runtime dropped from 4 m 12 s to 2 m 50 s here.
+- S7 ✅ A bare `PostgresException` (raw SQL) now goes through the same catalog, tested with a real `ExecuteSqlInterpolated` duplicate. The response never contains SQL.
+- N1 ✅ `UnsupportedLanguages` removed. N2 ✅ Keys that differ only by case are rejected (400 on `translations.ar`, tested).
+
+Must fix
+- none
+
+Should fix (follow-ups, do not block QA)
+- S-R1 [stage 0 → stage 3, before M3] `backend/Qms.Application/Common/PostCommitActions.cs`: a non-audited handler that saves first and then calls `Enqueue` commits its change and then gets a 500 from the throw. Before the first M3 command that publishes SignalR events without an audit row, add a post-commit/transaction decorator that does not depend on auditing (for example `[Transactional]`), or decide that those commands are audited. Nested audited commands also reset the "runner active" flag, but EF already forbids a nested transaction, so that case is moot for now. Record the rule in ADR-008 §11/§12.
+- S-R2 [stage 0] ADR-008: write in the four conventions stage 3 listed. (1) `PUT` is full replacement and never defaults a missing field (nullable plus `Sent()`). Also state the create-side rule: defaults allowed for `sortOrder`/`isActive`, explicit choice required for `isPaid`. Note that nullable-meaning fields (`targetMinutes`, `feeAmount`) treat omitted as null. (2) Post-commit actions use their own token and a timeout. (3) `IAuditCompanyTarget` for cross-tenant audits. (4) The `SetupHost` template-database fixture. Tick the section 10 "error-code mismatch" question (resolved).
+
+Nice to have
+- N-R1 `backend/Qms.Tests/Application/AuditDecoratorTests.cs`: add a test where a tenant user's command implements `IAuditCompanyTarget` with another company id, and assert the audit row still uses the tenant's company. This pins the S4 anti-abuse behaviour.
+- N-R2 `backend/Qms.Tests/Architecture/ArchitectureTests.cs`: `AuthController` is exempt as a whole. Exempting by action (`Me`, `Logout`, …) would catch a future non-self action added there.
+- Open from round 1 (unchanged, not blocking): N3 enum converter for SignalR/minimal APIs, N4 `IgnoreQueryFilters()` architecture test, N5 audit row on a no-op `PUT`, N6 [stage 1] TASK-010 / story §7 wording.
+
+Notes for next stage (QA): the contract is as in the stage 3 handoff, plus: `PUT` bodies must send every field (`isActive`, `sortOrder` / `priorityLevel`, `isPaid`), or 400 `validation.failed` names the missing field. `POST /priority-types` must send `isPaid` and `priorityLevel`. Duplicate translation keys that differ only by case are 400.
+
+### Stage 7 — QA — qa-tester — 2026-11-08
+Result: Done
+Test cases and per-AC results: [STORY-005-tests.md](STORY-005-tests.md) (TC-005-1 to TC-005-37).
+Builds/tests: `dotnet test backend/Qms.slnx -c Release` = 392 passed, 0 failed, 0 skipped (2 m 43 s). Live run against `postgres:18` + `dotnet run -c Release` (Development).
+AC results: AC-1 to AC-27 Pass (live API run, with Branch Manager, Counter Staff, Super Admin, anonymous and a Company 2 admin; SQL checks for audit rows, in-use references and unchanged data). AC-28 to AC-35 Pass (automated tests; AC-29, AC-32, AC-36 also touched live). AC-36 Pass (test + live: no `xmin` column). AC-37 Pass (live). Branch Manager of Branch 2 (BM-B2) and fault-injected audit failure: verified by automated tests only.
+Bugs: none
+Manual device checks pending: none (no web or Android change in this story)
+Follow-ups (not bugs): S-R1, S-R2, N3 to N6, N-R1, N-R2 from the code review; audit `data` keeps the raw command JSON (untrimmed prefix), as AC-26 states.
+
+### Stage 0 — Architecture review (review follow-up S-R2/S-R1) — project-architect — 2026-11-08
+Result: Done
+Changed: docs/adr/ADR-008-setup-api-conventions.md (Amendment 3), docs/work/BACKLOG.md (STORY-014, STORY-021 notes)
+Notes for next stage: S-R2 done (full-replacement PUT, post-commit actions, IAuditCompanyTarget, test pattern, permission coverage, raw PostgresException mapping recorded). S-R1 decided: a TransactionDecorator independent of auditing ([Transactional]); code work moved to STORY-014. The section 10 "error-code mismatch" question is resolved (codes per ADR-010). Open follow-ups: N-R1, N-R2, N4, N6.
+Open questions: none
+

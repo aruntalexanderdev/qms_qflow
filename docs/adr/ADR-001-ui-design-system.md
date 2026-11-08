@@ -1,6 +1,6 @@
 # ADR-001 — UI design system: teal theme, design tokens, Angular Material
 
-Status: Accepted
+Status: Accepted (fonts note amended by ADR-010, 2026-11-08)
 Date: 2026-11-07
 Story: —
 
@@ -12,7 +12,7 @@ The product owner supplied a reference UI: a dark teal sidebar, a teal primary c
 ## Decision
 1. **Design tokens are the source of truth:** `docs/design/tokens.json`, explained in `docs/design/DESIGN_SYSTEM.md`. Web and Android theme files mirror the tokens; no other place defines colours, fonts, spacing or radii.
 2. **Palette:** taken from the reference UI (primary `#0D7E8F`, sidebar `#0F262A`, page `#F4F6F6`, surface `#FFFFFF`), adjusted where needed to pass WCAG 2.1 AA. The adjustments are the nav section label (`#8AA3A7`) and the input border (`#8A9094`, 3:1 for form controls).
-3. **Fonts:** Instrument Sans (Latin) and IBM Plex Sans Arabic (Arabic), both OFL and bundled with the apps.
+3. **Fonts:** Instrument Sans (Latin) and IBM Plex Sans Arabic (Arabic script), both OFL and bundled with the apps. Amended by ADR-010 §12: Arabic is no longer a mandatory language; the Arabic font stays bundled for when an Arabic-script language is enabled, and the web font files use `unicode-range`, so a browser downloads them only when Arabic-script text is rendered. A language in another script needs a font added to the design system first.
 4. **Web UI library:** Angular Material 22 (Material 3), themed from the tokens. Material 3 colour roles match Jetpack Compose Material 3, so one token set covers both apps. It is maintained by the Angular team, and its CDK gives accessible overlays, tables and keyboard handling.
 5. **Displays** use a dark variant built from the sidebar colour (`[data-theme="display"]`).
 6. **Enforcement:** a project rule (common rules section 11), skill instructions, a code-review checklist item, and Stylelint (`color-no-hex`, `color-named: never`) in `frontend/`, excluding the token files.

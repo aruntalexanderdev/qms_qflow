@@ -27,7 +27,7 @@
 ## 5. Done checklist
 - [ ] Code follows common project rules
 - [ ] Tests added and passing (list them below)
-- [ ] Bilingual text added (en + ar) if user-facing
+- [ ] User-facing text localised (translation keys / translated fields; English required, ADR-010)
 - [ ] No business logic outside `Qms.Application`
 - [ ] Spec / ADR updated if behaviour changed
 - [ ] Handoff written in the story's Stage log

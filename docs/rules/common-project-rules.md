@@ -31,9 +31,9 @@ Company service mapping → Branch service mapping → Counter service mapping (
 
 ## 5. Coding standards
 - C#: .NET 10, nullable enabled, async all the way, `CancellationToken` on every async API, FluentValidation for every request, problem details (RFC 7807) for errors, no `DateTime.Now` (use an injected `TimeProvider`, store UTC).
-- Database: PostgreSQL, snake_case names, uuid keys, `created_at`/`updated_at`, `company_id` on tenant tables, `name_en` + `name_ar` for bilingual text.
+- Database: PostgreSQL, snake_case names, uuid keys, `created_at`/`updated_at`, `company_id` on tenant tables, translated text as `<field>` (default language, English, required) + `<field>_translations` (jsonb, language code → text) (ADR-010). Never add `_en` / `_ar` column pairs.
 - Angular: Angular 22 (latest stable; upgrade with `ng update` on each major), standalone components, signals, typed reactive forms, ngx-translate keys (no hard-coded UI text), RTL-safe CSS (logical properties: `margin-inline-start`, not `margin-left`).
-- Kotlin: Jetpack Compose, MVVM, coroutines + Flow, Retrofit/OkHttp, no blocking calls on the main thread, strings in `strings.xml` (en + ar).
+- Kotlin: Jetpack Compose, MVVM, coroutines + Flow, Retrofit/OkHttp, no blocking calls on the main thread, strings in `strings.xml` (English required; other languages per rules §7).
 - Names: English, descriptive, no abbreviations except agreed ones (Qms, Api, Id, Dto).
 
 ## 6. Security and privacy
@@ -42,8 +42,12 @@ Company service mapping → Branch service mapping → Counter service mapping (
 - Phone numbers are personal data: mask in UI (`+971 50 *** **67`) except at the serving counter; never log them.
 - Customer data stays in the deployment's own database; no calls to external CDNs or services from displays or dispensers.
 
-## 7. Bilingual
-Every user-facing text exists in English and Arabic: web (ngx-translate), Android (`values/` + `values-ar/`), tickets, displays, voice clips, database names (`name_en`, `name_ar`).
+## 7. Localisation
+English is the default language; other languages are configurable (ADR-010). Every user-facing text goes through translation keys or translated fields, never hard-coded:
+- Web: ngx-translate keys; every key in `en.json` (required); other `<code>.json` files are optional and fall back to English. Android: `values/strings.xml` (English, required); `values-<code>/` when a language ships. Tickets, displays and voice clips: per language, English required.
+- Master data: required English value + optional translations (`<field>_translations`), keys only from the company's enabled languages, English fallback.
+- Offer only enabled languages; hide the language switch when only one is enabled; layout direction (RTL) comes from the language's direction.
+- Phase 1 ships English only. Do not add Arabic (or other) texts as a requirement; the existing `ar.json` is kept but not offered.
 
 ## 8. Testing
 - Every rule in spec section 6 has a unit test in `Qms.Tests`.

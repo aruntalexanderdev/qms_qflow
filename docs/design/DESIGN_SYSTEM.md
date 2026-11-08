@@ -109,7 +109,7 @@ TVs use a dark theme built from the sidebar colour, so they are readable from ac
 
 Load fonts **from the app bundle only**, never from Google Fonts or another CDN (spec section 11: no external calls). On Android, put the `.ttf` files in `res/font/`.
 
-When Arabic is active (`dir="rtl"`), IBM Plex Sans Arabic comes first in the font stack. Token numbers (`VB0001`) always use Instrument Sans with `font-variant-numeric: tabular-nums`.
+When an Arabic-script language is active (`dir="rtl"`), IBM Plex Sans Arabic comes first in the font stack. Phase 1 ships English only (ADR-010); the Arabic font stays bundled and, being declared with `unicode-range`, is downloaded only when Arabic-script text is rendered. Token numbers (`VB0001`) always use Instrument Sans with `font-variant-numeric: tabular-nums`.
 
 | Role | Size / weight | Notes |
 | --- | --- | --- |
@@ -137,7 +137,7 @@ When Arabic is active (`dir="rtl"`), IBM Plex Sans Arabic comes first in the fon
 - **Shell:** a 280px dark sidebar (collapses to 72px icons, or to a drawer below `lg`) and a 64px white top bar with a bottom border. The top bar holds the menu toggle (start side), then the user avatar, name, role and a Sign out outline button (end side). The page sits on `neutral.bg`.
 - **Content:** max width 1200px. Forms sit in a white card, max width 848px, with two columns that become one below `md`.
 - **Page header:** title, a one-line muted description, then content.
-- **RTL:** the whole layout mirrors (the sidebar moves to the right). Use CSS logical properties only.
+- **RTL:** when the active language's direction is `rtl` (ADR-010), the whole layout mirrors (the sidebar moves to the right). Use CSS logical properties only.
 
 ## 6. Components
 

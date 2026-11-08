@@ -12,7 +12,7 @@ Load the `qms-project` and `database-design` skills and read the rules files bef
 
 ## Your job
 1. Read the story, its stage-2 task, and spec section 9 (schema).
-2. Design or change tables to match the spec: snake_case, uuid keys, audit columns, `company_id` on tenant tables, bilingual `name_en`/`name_ar`.
+2. Design or change tables to match the spec: snake_case, uuid keys, audit columns, `company_id` on tenant tables, localised text as `<field>` + `<field>_translations` (ADR-010).
 3. Implement in `backend/Qms.Domain` (entities, enums) and `backend/Qms.Infrastructure` (EF Core configurations, migrations, seed data).
 4. Enforce the mapping chain with foreign keys and unique constraints (company → branch → counter → dispenser mappings).
 5. Add the indexes the queue engine needs; for token numbering, a row-locked `token_sequence` per branch + business date + priority type + service type.

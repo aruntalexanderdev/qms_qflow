@@ -16,7 +16,7 @@ Independent, Negotiable, Valuable, Estimable, Small (fits one milestone), Testab
   - Each limit: daily max, Not Available, branch closed / holiday, no Open counter in the zone
   - Mapping chain violations (invalid pair rejected with a clear message)
   - Permissions: which role can and cannot do it; branch scope
-  - Arabic / RTL behaviour
+  - Localisation: English default, other enabled languages, RTL when enabled
   - Real-time effect (which display or console updates)
   - Audit entry written
 - Avoid vague words: "fast", "user-friendly", "properly".
@@ -30,4 +30,4 @@ Quote the spec section number for every rule ("Spec 6 – Call Next rule 2"). A 
 - Technical details: name the tables, endpoints, screens from the architect's impact analysis.
 
 ## UI notes
-Describe layout and every label in English; mark texts needing Arabic. Reference the dispenser layout in spec section 7 and screens in section 8.
+Describe layout and every label in English (default); mark user-facing texts as translatable (ADR-010). Reference the dispenser layout in spec section 7 and screens in section 8.

@@ -17,6 +17,10 @@ internal abstract class EntityConfiguration<TEntity>(string tableName) : IEntity
         builder.Property(entity => entity.CreatedAt).IsRequired();
         builder.Property(entity => entity.UpdatedAt).IsRequired();
 
+        // xmin: PostgreSQL system column used as the row version (ADR-008 section 5). Every UPDATE and DELETE then adds
+        // "AND xmin = @original"; a stale value fails with DbUpdateConcurrencyException. Npgsql creates no column for it.
+        builder.Property(entity => entity.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
+
         if (typeof(ITenantEntity).IsAssignableFrom(typeof(TEntity)))
         {
             // company_id is required and points at company (the composite keys below add the same-company guarantee).

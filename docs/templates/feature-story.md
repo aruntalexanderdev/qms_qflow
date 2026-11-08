@@ -43,7 +43,7 @@ so that **<business value>**.
 - Then …
 
 ## 6. UI / UX
-<Screens affected, layout notes, wireframe or link. Arabic + English, RTL.>
+<Screens affected, layout notes, wireframe or link. English default; localisation (translatable texts, RTL-safe) per ADR-010.>
 
 ## 7. Data and API impact
 <Tables, columns, endpoints, SignalR events. Filled by architect (stage 0), refined by BA (stage 1).>
@@ -61,7 +61,7 @@ so that **<business value>**.
 | 7 QA | Yes | — | |
 
 ## 9. Non-functional notes
-<Performance, security, audit, privacy, bilingual — anything beyond the common rules.>
+<Performance, security, audit, privacy, localisation — anything beyond the common rules.>
 
 ## 10. Open questions
 - [ ] …

@@ -13,7 +13,7 @@ For each request, answer in the story's section 7:
 - **Web:** screens/routes, roles that can see them.
 - **Android:** dispenser screens, config fields, printing.
 - **Displays:** zone/counter display changes, voice.
-- **Cross-cutting:** security (role + branch scope), audit log, bilingual, performance (token issue / Call Next < 300 ms), concurrency.
+- **Cross-cutting:** security (role + branch scope), audit log, localisation (ADR-010), performance (token issue / Call Next < 300 ms), concurrency.
 
 ## Stage plan rules
 - A stage applies if any file it owns must change. Otherwise N/A with a one-line reason.

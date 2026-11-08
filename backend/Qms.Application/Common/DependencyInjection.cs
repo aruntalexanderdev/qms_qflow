@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Qms.Application.Common;
 
@@ -21,6 +22,10 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(assembly);
+
+        // The queue the audit decorator runs after the commit (ADR-008 section 12); handlers use IPostCommitActions.
+        services.TryAddScoped<PostCommitActions>();
+        services.TryAddScoped<IPostCommitActions>(provider => provider.GetRequiredService<PostCommitActions>());
 
         services.AddValidatorsFromAssembly(
             assembly, ServiceLifetime.Scoped, filter: typeFilter is null ? null : result => typeFilter(result.ValidatorType), includeInternalTypes: true);
@@ -52,15 +57,24 @@ public static class DependencyInjection
             ? typeof(CrossTenantDecorator<,>).MakeGenericType(arguments)
             : typeof(CrossTenantQueryDecorator<,>).MakeGenericType(arguments);
         var isCrossTenant = implementation.IsDefined(typeof(CrossTenantAttribute), inherit: false);
+        var auditType = isCommand && AuditRules.AppliesTo(arguments[0])
+            ? typeof(AuditDecorator<,>).MakeGenericType(arguments)
+            : null;
 
         // The concrete handler is registered as itself; the interface resolves to the decorator chain around it:
-        // validation -> (cross-tenant check, only for [CrossTenant] handlers) -> handler (ADR-002, ADR-003 Amendment 1).
+        // validation -> (cross-tenant check, only for [CrossTenant] handlers) -> (audit, only for [Audited] commands) -> handler
+        // (ADR-002, ADR-003 Amendment 1, ADR-008 section 11).
         services.AddScoped(implementation);
         services.AddScoped(
             handlerInterface,
             provider =>
             {
                 var handler = provider.GetRequiredService(implementation);
+                if (auditType is not null)
+                {
+                    handler = ActivatorUtilities.CreateInstance(provider, auditType, handler);
+                }
+
                 if (isCrossTenant)
                 {
                     handler = ActivatorUtilities.CreateInstance(provider, crossTenantType, handler);

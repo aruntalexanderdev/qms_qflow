@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage;
 using Qms.Application.Common;
 using Qms.Domain.Entities;
 using Qms.Domain.Enums;
@@ -17,7 +18,7 @@ namespace Qms.Infrastructure.Persistence;
 /// <c>[CrossTenant]</c>, in the seeder, in system jobs, and for a user's own assignment lookups at sign-in.
 /// </summary>
 public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant currentTenant)
-    : IdentityDbContext<AppUser, AppRole, Guid>(options)
+    : IdentityDbContext<AppUser, AppRole, Guid>(options), IQmsDbContext
 {
     private static readonly MethodInfo ApplyTenantFilterMethod =
         typeof(QmsDbContext).GetMethod(nameof(ApplyTenantFilter), BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -78,6 +79,9 @@ public class QmsDbContext(DbContextOptions<QmsDbContext> options, ICurrentTenant
     public DbSet<UserBranch> UserBranches => Set<UserBranch>();
 
     public DbSet<UserCounter> UserCounters => Set<UserCounter>();
+
+    Task<IDbContextTransaction> IQmsDbContext.BeginTransactionAsync(CancellationToken cancellationToken) =>
+        Database.BeginTransactionAsync(cancellationToken);
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
