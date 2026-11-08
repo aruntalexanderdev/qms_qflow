@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | STORY-003 |
-| Status | QA |
+| Status | Done |
 | Priority | Must |
 | Milestone | M1 |
 | Spec sections | 2 (Auth), 8 (roles), 10 (`/auth/*`), 11 (Security) |
@@ -402,3 +402,47 @@ Notes for next stage (QA): start with the negative cases. These are: wrong and u
 Open questions: none
 
 Orchestrator note (2026-11-08) on review S4: the ADR-002/003/004 status lines and the ADR-004 spec-impact line were updated by the orchestrator, not by stage 3. The Phase 0 PR (aruntalexanderdev/qms_qflow#3) stated that merging it accepts ADR-002, ADR-003 and ADR-004, and the product owner approved the spec §9 additions on 2026-11-08. The "ADR-004 still Proposed" and "refresh_token blocks merge" remarks in the stage 3 handoff are superseded. Review N10 (run-on sentence in spec §9) fixed.
+
+### Stage 7 — QA — qa-tester — 2026-11-08
+Result: Done
+Environment: `dotnet run -c Release --project backend/Qms.Api` (Development, .NET SDK 10.0.114) against a throwaway `postgres:18` container; made-up signing key and seed passwords via env vars. Full suite: `dotnet test backend/Qms.slnx -c Release` Passed 246, Failed 0, Skipped 0 (1 m 41 s). Containers and processes removed afterwards.
+
+Test cases (TC-003-n | AC | steps | expected | result). "Live" = curl against the running API; "SQL" = psql against the migrated DB; "Test" = automated test class read and run.
+
+| TC | AC | Evidence | Result |
+|---|---|---|---|
+| TC-003-1 | AC-1 | Live: login Company Admin gives 200, `Cache-Control: no-store`, body `expiresIn` 900. JWT decoded: HS256, claims `sub`, `company_id`, `role`=CompanyAdmin, `name`, `lang`=en, `iss`/`aud`; `exp - nbf` = 900 s. `Set-Cookie: qms_refresh=...; path=/api/v1/auth; secure; samesite=strict; httponly` (7 days) | Pass |
+| TC-003-2 | AC-2 | Live: wrong password and unknown user both 401 `auth.invalid_credentials`, identical title/detail/problem shape. Empty body gives 400 | Pass |
+| TC-003-3 | AC-3 | Live: 5 wrong passwords (401), then correct password gives 401 `auth.locked_out`; DB `lockout_end` = now + 15 min | Pass |
+| TC-003-4 | AC-4 | Live: refresh with R1 gives 200, new access token and new cookie R2 (R2 != R1). SQL: R1 row `revoked_at` set and `replaced_by_id` set; only the token hash is stored (raw token not in DB) | Pass |
+| TC-003-5 | AC-5 | Live: refresh with R1 again gives 401 `auth.refresh_reused` with cookie cleared; R2 then also 401 `auth.refresh_reused`. SQL: both rows of the family revoked. Test: concurrent refresh test in `AuthEndpointsTests` | Pass |
+| TC-003-6 | AC-6 | Live: `/auth/me` without token 401 `auth.unauthorized` (`WWW-Authenticate: Bearer`); garbage token 401; expired token (signed with the test key, exp 10 min ago) 401; wrong issuer 401; payload tampered (role -> SuperAdmin, old signature) 401; `alg: none` 401; corrupted signature 401. Control: a freshly forged valid token with the same method gives 200, so the 401s are for the stated reason. Valid token gives 200 with company, role, language | Pass |
+| TC-003-7 | AC-7 | Live: logout gives 204 with cookie cleared (expired `qms_refresh`, same path/flags); refresh with the old cookie gives 401. Logout without a cookie gives 204 | Pass |
+| TC-003-8 | AC-8 | Live: `/swagger/index.html` 200; `/openapi/v1.json` lists `POST /api/v1/auth/login`, `/refresh`, `/logout`, `GET /api/v1/auth/me`, security scheme `Bearer` (http, bearer, JWT), applied globally | Pass |
+| TC-003-9 | AC-9 | Test: `TenantGuardTests` Ac9 x4 (branch add, counter modify and delete, company row: `NoTenant`, nothing stored; users, refresh tokens and lockout still save). Assertions match the AC | Pass |
+| TC-003-10 | AC-10 | Test: `TenantGuardTests` Ac10 x3 (seed creates 1 company, 1 branch, 2 zones, 4 counters, 7 counter mappings; second run identical; `Guid.Empty` inside a section rejected). Live: the API start-up seeded the same data in Development | Pass |
+| TC-003-11 | AC-11 | Test: `CrossTenantAndErrorMappingTests` Ac11 x3: Company Admin 403 `auth.forbidden`, `HandlerSpy.Runs` = 0, no section, no row stored; anonymous 401; Branch Manager 403 | Pass |
+| TC-003-12 | AC-12 | Test: Ac12 branch created for Company 2, section closed afterwards, follow-up tenant write fails `NoTenant`. Nested-scope unit test in `TokenAndScopeUnitTests` | Pass |
+| TC-003-13 | AC-13 | SQL: Company 2 user to Branch 1 with Company 1 rejected by `fk_user_branch_user_company`; with Company 2 rejected by `fk_user_branch_branch_company_id_branch_id`. Test: `UserAssignmentTests.Ac13` | Pass |
+| TC-003-14 | AC-14 | SQL: Company 2 user to Counter 2 with Company 1 rejected by `fk_user_counter_user_company`; with Company 2 by `fk_user_counter_counter_company_id_counter_id`. Test: `Ac14` | Pass |
+| TC-003-15 | AC-15 | SQL: live seeded Super Admin to Branch 1 / Counter 2 (company_id of Company 1) rejected by `fk_user_*_user_company`; with Company 2 rejected by the branch composite FK. Seeded DB has 0 `user_branch` and 0 `user_counter` rows. Test: `Ac15`, `The_seed_creates_no_assignments` | Pass |
+| TC-003-16 | AC-16 | SQL: Company 1 user to Branch 1 and Counter 2 accepted (INSERT 0 1 each); changing `company_id` to Company 2 rejected by `fk_user_branch_user_company` (also setting it to NULL); after deleting the assignments the change is allowed. Test: `Ac16` x2 | Pass |
+| TC-003-17 | AC-17 | Test: Ac17 x2: foreign and unknown user id both 404 `user.not_found` with identical title and detail; own user 200; `IsInCompanyAsync` true/false matrix. Independent: Company Admin `/auth/me` company = Company 1 | Pass |
+| TC-003-18 | AC-18 | Test: Ac18 `DbUpdateConcurrencyException` gives 409 `request.conflict`, no exception name in the body | Pass |
+| TC-003-19 | AC-19 | Test: Ac19 (OtherCompany, CompanyChanged) gives 404 `resource.not_found`, body has no company or branch ids, Warning logged without entity values and without exception, row unchanged | Pass |
+| TC-003-20 | AC-20 | Test: Ac20 gives 500 `server.unexpected_error`, body has no exception type, message, stack or ids; Error logged with `TenantViolationException`; nothing stored | Pass |
+| TC-003-21 | AC-21 | Test: Ac21 x2 (Company 1 token sees only Company 1 branches, Company 2 token only Company 2; `RequestTenantContext` registered, `NoCompanyCurrentTenant` absent, no `ICurrentTenant` in `ApplicationBuilderExtensions`). Live: Company Admin `/auth/me` `companyId` = 01930000-...-000100000001 | Pass |
+| TC-003-22 | AC-22 | Test: Ac22 (Super Admin plain list is empty, `[CrossTenant]` list has both companies). Live: Super Admin token has no `company_id` claim; `/auth/me` `companyId` = null | Pass |
+| TC-003-23 | AC-23 | SQL/CLI on a second database: at `InitialSchema` with 1 same-company and 1 cross-company `user_branch` row, `dotnet ef database update UserAssignmentCompany` fails with the named exception and history/columns are unchanged; after removing the bad row it applies and `company_id` is backfilled to Company 1; down to `InitialSchema` removes the column and constraints, branch and `user_branch` data intact. Live DB `__EFMigrationsHistory` has `20261108021220_InitialSchema` and `20261108025641_UserAssignmentCompany`. Test: `Ac23` x3 | Pass |
+
+Extra negative and NFR checks (no AC, all Pass):
+- TC-003-24 login rate limit: 10 requests 401, the 11th and 12th gave 429 `request.rate_limited` with `Retry-After: 60`.
+- TC-003-25 no secrets in logs: after all calls above (Debug level, 7,605 lines plus the rolling file under `backend/Qms.Api/logs`), `grep -F` found 0 matches for both seed passwords, a wrong password, refresh tokens R1/R2, any `eyJhbGci` string and the signing key.
+- TC-003-26 role seeding: DB has the 4 roles; Super Admin and Company Admin users exist with the right roles; refresh tokens are stored as hashes only.
+- Known review follow-ups S1 to S4 and N1 to N10 were not re-opened as defects; none breaks an AC. S2 (no automated log test) was covered here by the manual log grep.
+
+AC results: AC-1 Pass, AC-2 Pass, AC-3 Pass, AC-4 Pass, AC-5 Pass, AC-6 Pass, AC-7 Pass, AC-8 Pass, AC-9 Pass, AC-10 Pass, AC-11 Pass, AC-12 Pass, AC-13 Pass, AC-14 Pass, AC-15 Pass, AC-16 Pass, AC-17 Pass, AC-18 Pass, AC-19 Pass, AC-20 Pass, AC-21 Pass, AC-22 Pass, AC-23 Pass
+Bugs: none
+Manual device checks pending: none (no web, Android or device change; stages 4 and 5 were N/A)
+Sign-off: all 23 acceptance criteria pass, no open bugs, the suite is green. Story status set to Done.
+Open questions: none

@@ -21,8 +21,8 @@ Status: ✅ done · 🟡 ready (stages 0–1 done) · ⬜ not started
 | --- | --- | --- | --- |
 | STORY-001 | Backend solution, API host, logging, OpenAPI, health, Docker Compose | 3 | ✅ |
 | STORY-002 | Full database schema, migration and seed data (Company 1, Branch 1) | 2, 3 | ✅ |
-| STORY-003 | Sign-in: Identity, JWT, refresh token rotation, roles, seeded admin | 3 | 🟡 |
-| STORY-004 | Angular shell: theme, fonts, English/Arabic + RTL, layout, login page, web container | 4 | 🟡 |
+| STORY-003 | Sign-in: Identity, JWT, refresh token rotation, roles, seeded admin (+ STORY-002 follow-ups S2, S3, S5, N7) | 2, 3 | ✅ |
+| STORY-004 | Angular shell: theme, fonts, English/Arabic + RTL, layout, login page, web container (note STORY-003 review N2: coordinate token refresh across browser tabs) | 4 | 🟡 |
 
 Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an admin signs in through the web app, and Swagger lists the auth endpoints.
 
@@ -100,6 +100,7 @@ Order: 001 → 002 → 003 → 004. M1 is done when `docker compose up` runs, an
 | Story | Title |
 | --- | --- |
 | STORY-039 | Azure infrastructure in Bicep (dev, uat, prod), Key Vault, managed identities (ADR-006) |
+| — | **Before any deployment:** forwarded headers so the login rate limit sees real client IPs (STORY-003 review S1; consider per IP + username). Also HTTPS/forwarded headers from STORY-001 review N4 |
 | STORY-040 | CD pipeline: build images → ACR → Container Apps, migration bundle job, OIDC |
 | STORY-041 | Monitoring: OpenTelemetry → Application Insights, alerts |
 | STORY-042 | Security review (OWASP top 10), load test (token issue and Call Next < 300 ms), backup / restore drill |
